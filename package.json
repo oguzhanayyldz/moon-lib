@@ -1,0 +1,22 @@
+{
+  "name": "moon-lib",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/mongoose": "^5.11.96",
+    "@types/node": "^22.13.11",
+    "@xmoonx/common": "^1.1.33",
+    "moment-timezone": "^0.5.47",
+    "mongoose": "^8.12.2",
+    "mongoose-update-if-current": "^1.4.0",
+    "typescript": "^5.8.2",
+    "uuid": "^11.1.0"
+  }
+}
