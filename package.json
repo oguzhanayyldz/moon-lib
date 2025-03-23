@@ -6,8 +6,8 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "clean": "rm -rf ./dist && rm tsconfig.tsbuildinfo",
-    "build": "npm run clean && tsc",
-    "prepare": "npm run build"
+    "prebuild": "npm run clean",
+    "build": "tsc"
   },
   "files": [
     "dist"
