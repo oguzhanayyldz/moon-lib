@@ -10,9 +10,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventPublisherJob = void 0;
+const common_1 = require("@xmoonx/common");
 const outbox_schema_1 = require("../models/outbox.schema");
 const productCreated_publisher_1 = require("../events/publishers/productCreated.publisher");
-const common_1 = require("@xmoonx/common");
 const productUpdated_publisher_1 = require("../events/publishers/productUpdated.publisher");
 const packageProductLinkCreated_publisher_1 = require("../events/publishers/packageProductLinkCreated.publisher");
 const packageProductLinkUpdated_publisher_1 = require("../events/publishers/packageProductLinkUpdated.publisher");
@@ -20,6 +20,8 @@ const relationProductLinkCreated_publisher_1 = require("../events/publishers/rel
 const relationProductLinkUpdated_publisher_1 = require("../events/publishers/relationProductLinkUpdated.publisher");
 const combinationCreated_publisher_1 = require("../events/publishers/combinationCreated.publisher");
 const combinationUpdated_publisher_1 = require("../events/publishers/combinationUpdated.publisher");
+const userCreated_publisher_1 = require("../events/publishers/userCreated.publisher");
+const userUpdated_publisher_1 = require("../events/publishers/userUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -128,6 +130,14 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.RelationProductLinkUpdated:
                     yield new relationProductLinkUpdated_publisher_1.RelationProductLinkUpdatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.UserCreated:
+                    yield new userCreated_publisher_1.UserCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.UserUpdated:
+                    yield new userUpdated_publisher_1.UserUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

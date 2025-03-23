@@ -9,7 +9,9 @@ import {
     RelationProductLinkCreatedEvent,
     RelationProductLinkUpdatedEvent,
     CombinationCreatedEvent,
-    CombinationUpdatedEvent
+    CombinationUpdatedEvent,
+    UserCreatedEvent,
+    UserUpdatedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -22,6 +24,8 @@ interface EventPayloadMap {
     [Subjects.RelationProductLinkUpdated]: RelationProductLinkUpdatedEvent['data'];
     [Subjects.CombinationCreated]: CombinationCreatedEvent['data'];
     [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
+    [Subjects.UserCreated]: UserCreatedEvent['data'];
+    [Subjects.UserUpdated]: UserUpdatedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

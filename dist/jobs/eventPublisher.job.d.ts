@@ -1,5 +1,5 @@
-import { Stan } from 'node-nats-streaming';
 import mongoose from 'mongoose';
+import { Stan } from 'node-nats-streaming';
 export declare class EventPublisherJob {
     private natsClient;
     private connection;

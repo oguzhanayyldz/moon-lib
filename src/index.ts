@@ -10,6 +10,8 @@ export * from './services/tracer.service';
 export * from './jobs/eventPublisher.job';
 
 // Events
+export * from './events/publishers/userCreated.publisher';
+export * from './events/publishers/userUpdated.publisher';
 export * from './events/publishers/productCreated.publisher';
 export * from './events/publishers/productUpdated.publisher';
 export * from './events/publishers/combinationCreated.publisher';

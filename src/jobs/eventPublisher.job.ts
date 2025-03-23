@@ -1,7 +1,8 @@
+import mongoose from 'mongoose';
 import { Stan } from 'node-nats-streaming';
+import { Subjects } from '@xmoonx/common';
 import { createOutboxModel, OutboxModel } from '../models/outbox.schema';
 import { ProductCreatedPublisher } from '../events/publishers/productCreated.publisher';
-import { Subjects } from '@xmoonx/common';
 import { ProductUpdatedPublisher } from '../events/publishers/productUpdated.publisher';
 import { PackageProductLinkCreatedPublisher } from '../events/publishers/packageProductLinkCreated.publisher';
 import { PackageProductLinkUpdatedPublisher } from '../events/publishers/packageProductLinkUpdated.publisher';
@@ -9,7 +10,8 @@ import { RelationProductLinkCreatedPublisher } from '../events/publishers/relati
 import { RelationProductLinkUpdatedPublisher } from '../events/publishers/relationProductLinkUpdated.publisher';
 import { CombinationCreatedPublisher } from '../events/publishers/combinationCreated.publisher';
 import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpdated.publisher';
-import mongoose from 'mongoose';
+import { UserCreatedPublisher } from '../events/publishers/userCreated.publisher';
+import { UserUpdatedPublisher } from '../events/publishers/userUpdated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -122,6 +124,14 @@ export class EventPublisherJob {
                 break;
             case Subjects.RelationProductLinkUpdated:
                 await new RelationProductLinkUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.UserCreated:
+                await new UserCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.UserUpdated:
+                await new UserUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

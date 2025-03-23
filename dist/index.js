@@ -23,6 +23,8 @@ __exportStar(require("./services/tracer.service"), exports);
 // Jobs
 __exportStar(require("./jobs/eventPublisher.job"), exports);
 // Events
+__exportStar(require("./events/publishers/userCreated.publisher"), exports);
+__exportStar(require("./events/publishers/userUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/combinationCreated.publisher"), exports);
