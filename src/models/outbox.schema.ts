@@ -1,7 +1,18 @@
 import mongoose from "mongoose";
-import BaseSchema, { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { CombinationCreatedEvent, CombinationUpdatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, ProductCreatedEvent, ProductUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, Subjects } from "@xmoonx/common";
+import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
+import {
+    Subjects,
+    ProductCreatedEvent,
+    ProductUpdatedEvent,
+    PackageProductLinkCreatedEvent,
+    PackageProductLinkUpdatedEvent,
+    RelationProductLinkCreatedEvent,
+    RelationProductLinkUpdatedEvent,
+    CombinationCreatedEvent,
+    CombinationUpdatedEvent
+} from "@xmoonx/common";
 
+// Event tiplerini tanımla
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -11,7 +22,6 @@ interface EventPayloadMap {
     [Subjects.RelationProductLinkUpdated]: RelationProductLinkUpdatedEvent['data'];
     [Subjects.CombinationCreated]: CombinationCreatedEvent['data'];
     [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
-    // ... diğer event tipleri
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
@@ -22,9 +32,6 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     lastAttempt?: Date;
 }
 
-interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> {
-}
-
 export interface OutboxDoc extends BaseDoc {
     eventType: string;
     payload: any;
@@ -33,18 +40,28 @@ export interface OutboxDoc extends BaseDoc {
     lastAttempt?: Date;
 }
 
-const OutboxSchema = new mongoose.Schema({
+export interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> { }
+
+// Schema tanımı
+const outboxSchemaDefination = {
     eventType: { type: String, required: true },
     payload: { type: mongoose.Schema.Types.Mixed, required: true },
-    status: { type: String, required: true, default: 'pending', enmum: ['pending', 'published', 'failed'] },
+    status: {
+        type: String,
+        required: true,
+        default: 'pending',
+        enum: ['pending', 'published', 'failed']
+    },
     retryCount: { type: Number, default: 0 },
     lastAttempt: Date
-}, {
-    timestamps: true
-});
+};
 
-OutboxSchema.add(BaseSchema);
+const outboxSchema = createBaseSchema(outboxSchemaDefination);
 
-const Outbox = mongoose.model<OutboxDoc, OutboxModel>("Outbox", OutboxSchema);
-
-export { Outbox };
+export function createOutboxModel(connection: mongoose.Connection) {
+    try {
+        return connection.model<OutboxDoc, OutboxModel>('Outbox');
+    } catch {
+        return connection.model<OutboxDoc, OutboxModel>('Outbox', outboxSchema);
+    }
+}

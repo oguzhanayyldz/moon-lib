@@ -14,9 +14,15 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-__exportStar(require("./models/outbox.schema"), exports);
+// Models
 __exportStar(require("./models/base/base.schema"), exports);
+__exportStar(require("./models/outbox.schema"), exports);
+// Services
+__exportStar(require("./services/natsWrapper.service"), exports);
+__exportStar(require("./services/tracer.service"), exports);
+// Jobs
 __exportStar(require("./jobs/eventPublisher.job"), exports);
+// Events
 __exportStar(require("./events/publishers/productCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/combinationCreated.publisher"), exports);

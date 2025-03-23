@@ -21,10 +21,12 @@ const relationProductLinkUpdated_publisher_1 = require("../events/publishers/rel
 const combinationCreated_publisher_1 = require("../events/publishers/combinationCreated.publisher");
 const combinationUpdated_publisher_1 = require("../events/publishers/combinationUpdated.publisher");
 class EventPublisherJob {
-    constructor(natsClient) {
+    constructor(natsClient, connection) {
         this.natsClient = natsClient;
+        this.connection = connection;
         this.intervalId = null;
         this.monitoringId = null;
+        this.outboxModel = (0, outbox_schema_1.createOutboxModel)(connection);
     }
     start() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -49,7 +51,7 @@ class EventPublisherJob {
     processEvents() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const pendingEvents = yield outbox_schema_1.Outbox.find({
+                const pendingEvents = yield this.outboxModel.find({
                     status: 'pending',
                     retryCount: { $lt: 5 }
                 })
@@ -79,7 +81,7 @@ class EventPublisherJob {
     monitorFailedEvents() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const failedEvents = yield outbox_schema_1.Outbox.countDocuments({
+                const failedEvents = yield this.outboxModel.countDocuments({
                     status: 'failed',
                     retryCount: { $gte: 5 }
                 });

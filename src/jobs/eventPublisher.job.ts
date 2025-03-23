@@ -1,5 +1,5 @@
 import { Stan } from 'node-nats-streaming';
-import { Outbox } from '../models/outbox.schema';
+import { createOutboxModel, OutboxModel } from '../models/outbox.schema';
 import { ProductCreatedPublisher } from '../events/publishers/productCreated.publisher';
 import { Subjects } from '@xmoonx/common';
 import { ProductUpdatedPublisher } from '../events/publishers/productUpdated.publisher';
@@ -9,14 +9,21 @@ import { RelationProductLinkCreatedPublisher } from '../events/publishers/relati
 import { RelationProductLinkUpdatedPublisher } from '../events/publishers/relationProductLinkUpdated.publisher';
 import { CombinationCreatedPublisher } from '../events/publishers/combinationCreated.publisher';
 import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpdated.publisher';
+import mongoose from 'mongoose';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
     private intervalId: NodeJS.Timeout | null = null;
     private monitoringId: NodeJS.Timeout | null = null;
+    private readonly outboxModel: OutboxModel;
 
-    constructor(private natsClient: Stan) {}
+    constructor (
+        private natsClient: Stan,
+        private connection: mongoose.Connection
+    ) {
+        this.outboxModel = createOutboxModel(connection);
+    }
 
     async start() {
         // Event publishing job
@@ -40,12 +47,12 @@ export class EventPublisherJob {
 
     private async processEvents() {
         try {
-            const pendingEvents = await Outbox.find({ 
+            const pendingEvents = await this.outboxModel.find({
                 status: 'pending',
                 retryCount: { $lt: 5 }
             })
-            .sort({ createdAt: 1 })
-            .limit(10); // Batch processing
+                .sort({ createdAt: 1 })
+                .limit(10); // Batch processing
 
             for (const event of pendingEvents) {
                 try {
@@ -69,7 +76,7 @@ export class EventPublisherJob {
 
     private async monitorFailedEvents() {
         try {
-            const failedEvents = await Outbox.countDocuments({ 
+            const failedEvents = await this.outboxModel.countDocuments({
                 status: 'failed',
                 retryCount: { $gte: 5 }
             });
@@ -84,7 +91,7 @@ export class EventPublisherJob {
     }
 
     private async publishEvent(event: any) {
-        switch(event.eventType) {
+        switch (event.eventType) {
             case Subjects.ProductCreated:
                 await new ProductCreatedPublisher(this.natsClient)
                     .publish(event.payload);

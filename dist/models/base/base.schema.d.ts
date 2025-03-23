@@ -23,64 +23,60 @@ export interface BaseDoc extends Document {
     destroy(): Promise<void>;
 }
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
-    build(attrs: A, modelName: string): T;
-    findByCustom(id: string, modelName: string): Promise<T | null>;
-    filter(where: Partial<A>, modelName: string, limit?: number, offset?: number, order?: SortType): Promise<T[] | null>;
-    destroyMany(where: Partial<A>, modelName: string): Promise<{
+    build(attrs: A): T;
+    findByCustom(id: string): Promise<T | null>;
+    filter(where: Partial<A>, limit?: number, offset?: number, order?: SortType): Promise<T[] | null>;
+    destroyMany(where: Partial<A>): Promise<{
         matchedCount: number;
         modifiedCount: number;
     }>;
     findByEvent(event: {
         id: string;
         version: number;
-    }, modelName: string): Promise<T | null>;
+    }): Promise<T | null>;
 }
-declare const BaseSchema: mongoose.Schema<any, mongoose.Model<any, any, any, any, any, any>, {}, {}, {}, {}, {
+export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefinition): mongoose.Schema<any, mongoose.Model<any, any, any, any, any, any>, {}, {}, {}, {}, {
     toJSON: {
         transform(doc: mongoose.Document<unknown, {}, mongoose.FlatRecord<{
-            creationDate: NativeDate;
-            updatedOn: NativeDate;
-            uuid?: string | null | undefined;
-            deletionDate?: NativeDate | null | undefined;
-            deleted?: boolean | null | undefined;
-            uniqueCode?: string | null | undefined;
+            creationDate: Date;
+            updatedOn: Date;
+            uuid?: string | undefined;
+            deletionDate?: Date | undefined;
+            deleted?: boolean | undefined;
+            uniqueCode?: string | undefined;
         }>> & mongoose.FlatRecord<{
-            creationDate: NativeDate;
-            updatedOn: NativeDate;
-            uuid?: string | null | undefined;
-            deletionDate?: NativeDate | null | undefined;
-            deleted?: boolean | null | undefined;
-            uniqueCode?: string | null | undefined;
+            creationDate: Date;
+            updatedOn: Date;
+            uuid?: string | undefined;
+            deletionDate?: Date | undefined;
+            deleted?: boolean | undefined;
+            uniqueCode?: string | undefined;
         }> & {
             _id: mongoose.Types.ObjectId;
-        } & {
-            __v: number;
         }, ret: Record<string, any>): void;
     };
 }, {
-    creationDate: NativeDate;
-    updatedOn: NativeDate;
-    uuid?: string | null | undefined;
-    deletionDate?: NativeDate | null | undefined;
-    deleted?: boolean | null | undefined;
-    uniqueCode?: string | null | undefined;
+    creationDate: Date;
+    updatedOn: Date;
+    uuid?: string | undefined;
+    deletionDate?: Date | undefined;
+    deleted?: boolean | undefined;
+    uniqueCode?: string | undefined;
 }, mongoose.Document<unknown, {}, mongoose.FlatRecord<{
-    creationDate: NativeDate;
-    updatedOn: NativeDate;
-    uuid?: string | null | undefined;
-    deletionDate?: NativeDate | null | undefined;
-    deleted?: boolean | null | undefined;
-    uniqueCode?: string | null | undefined;
+    creationDate: Date;
+    updatedOn: Date;
+    uuid?: string | undefined;
+    deletionDate?: Date | undefined;
+    deleted?: boolean | undefined;
+    uniqueCode?: string | undefined;
 }>> & mongoose.FlatRecord<{
-    creationDate: NativeDate;
-    updatedOn: NativeDate;
-    uuid?: string | null | undefined;
-    deletionDate?: NativeDate | null | undefined;
-    deleted?: boolean | null | undefined;
-    uniqueCode?: string | null | undefined;
+    creationDate: Date;
+    updatedOn: Date;
+    uuid?: string | undefined;
+    deletionDate?: Date | undefined;
+    deleted?: boolean | undefined;
+    uniqueCode?: string | undefined;
 }> & {
     _id: mongoose.Types.ObjectId;
-} & {
-    __v: number;
 }>;
-export default BaseSchema;
+export default createBaseSchema;

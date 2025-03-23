@@ -1,5 +1,6 @@
+import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { CombinationCreatedEvent, CombinationUpdatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, ProductCreatedEvent, ProductUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, Subjects } from "@xmoonx/common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent } from "@xmoonx/common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -17,8 +18,6 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     retryCount?: number;
     lastAttempt?: Date;
 }
-interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> {
-}
 export interface OutboxDoc extends BaseDoc {
     eventType: string;
     payload: any;
@@ -26,5 +25,7 @@ export interface OutboxDoc extends BaseDoc {
     retryCount: number;
     lastAttempt?: Date;
 }
-declare const Outbox: OutboxModel;
-export { Outbox };
+export interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> {
+}
+export declare function createOutboxModel(connection: mongoose.Connection): OutboxModel;
+export {};
