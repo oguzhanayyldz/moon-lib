@@ -17,6 +17,8 @@ import { ProductStockCreatedPublisher } from '../events/publishers/productStockC
 import { ProductStockUpdatedPublisher } from '../events/publishers/productStockUpdated.publisher';
 import { StockCreatedPublisher } from '../events/publishers/stockCreated.publisher';
 import { StockUpdatedPublisher } from '../events/publishers/stockUpdated.publisher';
+import { OrderCreatedPublisher } from '../events/publishers/orderCreated.publisher';
+import { OrderUpdatedPublisher } from '../events/publishers/orderUpdated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -157,6 +159,14 @@ export class EventPublisherJob {
                 break;
             case Subjects.StockUpdated:
                 await new StockUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.OrderCreated:
+                await new OrderCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.OrderUpdated:
+                await new OrderUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

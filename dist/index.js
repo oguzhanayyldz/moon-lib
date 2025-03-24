@@ -38,3 +38,5 @@ __exportStar(require("./events/publishers/productStockCreated.publisher"), expor
 __exportStar(require("./events/publishers/productStockUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/stockCreated.publisher"), exports);
 __exportStar(require("./events/publishers/stockUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/orderCreated.publisher"), exports);
+__exportStar(require("./events/publishers/orderUpdated.publisher"), exports);

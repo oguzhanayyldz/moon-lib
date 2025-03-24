@@ -25,3 +25,5 @@ export * from './events/publishers/productStockCreated.publisher';
 export * from './events/publishers/productStockUpdated.publisher';
 export * from './events/publishers/stockCreated.publisher';
 export * from './events/publishers/stockUpdated.publisher';
+export * from './events/publishers/orderCreated.publisher';
+export * from './events/publishers/orderUpdated.publisher';
