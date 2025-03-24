@@ -13,6 +13,10 @@ import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpd
 import { UserCreatedPublisher } from '../events/publishers/userCreated.publisher';
 import { UserUpdatedPublisher } from '../events/publishers/userUpdated.publisher';
 import { IntegrationCommandPublisher } from '../events/publishers/integrationCommand.publisher';
+import { ProductStockCreatedPublisher } from 'events/publishers/productStockCreated.publisher';
+import { ProductStockUpdatedPublisher } from 'events/publishers/productStockUpdated.publisher';
+import { StockCreatedPublisher } from 'events/publishers/stockCreated.publisher';
+import { StockUpdatedPublisher } from 'events/publishers/stockUpdated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -137,6 +141,22 @@ export class EventPublisherJob {
                 break;
             case Subjects.IntegrationCommand:
                 await new IntegrationCommandPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ProductStockCreated:
+                await new ProductStockCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ProductStockUpdated:
+                await new ProductStockUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.StockCreated:
+                await new StockCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.StockUpdated:
+                await new StockUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:
