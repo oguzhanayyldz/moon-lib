@@ -11,7 +11,8 @@ import {
     CombinationCreatedEvent,
     CombinationUpdatedEvent,
     UserCreatedEvent,
-    UserUpdatedEvent
+    UserUpdatedEvent,
+    IntegrationCommandEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -26,6 +27,7 @@ interface EventPayloadMap {
     [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
+    [Subjects.IntegrationCommand]: IntegrationCommandEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

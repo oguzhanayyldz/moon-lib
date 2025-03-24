@@ -22,6 +22,7 @@ const combinationCreated_publisher_1 = require("../events/publishers/combination
 const combinationUpdated_publisher_1 = require("../events/publishers/combinationUpdated.publisher");
 const userCreated_publisher_1 = require("../events/publishers/userCreated.publisher");
 const userUpdated_publisher_1 = require("../events/publishers/userUpdated.publisher");
+const integrationCommand_publisher_1 = require("../events/publishers/integrationCommand.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -138,6 +139,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.UserUpdated:
                     yield new userUpdated_publisher_1.UserUpdatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.IntegrationCommand:
+                    yield new integrationCommand_publisher_1.IntegrationCommandPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

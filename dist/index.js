@@ -33,3 +33,4 @@ __exportStar(require("./events/publishers/packageProductLinkCreated.publisher"),
 __exportStar(require("./events/publishers/packageProductLinkUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/relationProductLinkCreated.publisher"), exports);
 __exportStar(require("./events/publishers/relationProductLinkUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/integrationCommand.publisher"), exports);

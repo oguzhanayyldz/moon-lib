@@ -12,6 +12,7 @@ import { CombinationCreatedPublisher } from '../events/publishers/combinationCre
 import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpdated.publisher';
 import { UserCreatedPublisher } from '../events/publishers/userCreated.publisher';
 import { UserUpdatedPublisher } from '../events/publishers/userUpdated.publisher';
+import { IntegrationCommandPublisher } from '../events/publishers/integrationCommand.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -132,6 +133,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.UserUpdated:
                 await new UserUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.IntegrationCommand:
+                await new IntegrationCommandPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

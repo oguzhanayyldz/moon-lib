@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent } from "@xmoonx/common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent } from "@xmoonx/common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -12,6 +12,7 @@ interface EventPayloadMap {
     [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
+    [Subjects.IntegrationCommand]: IntegrationCommandEvent['data'];
 }
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;

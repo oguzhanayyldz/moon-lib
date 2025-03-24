@@ -13,3 +13,4 @@ export * from './events/publishers/packageProductLinkCreated.publisher';
 export * from './events/publishers/packageProductLinkUpdated.publisher';
 export * from './events/publishers/relationProductLinkCreated.publisher';
 export * from './events/publishers/relationProductLinkUpdated.publisher';
+export * from './events/publishers/integrationCommand.publisher';
