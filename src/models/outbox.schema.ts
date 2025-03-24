@@ -12,7 +12,11 @@ import {
     CombinationUpdatedEvent,
     UserCreatedEvent,
     UserUpdatedEvent,
-    IntegrationCommandEvent
+    IntegrationCommandEvent,
+    ProductStockCreatedEvent,
+    ProductStockUpdatedEvent,
+    StockCreatedEvent,
+    StockUpdatedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -28,6 +32,10 @@ interface EventPayloadMap {
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
     [Subjects.IntegrationCommand]: IntegrationCommandEvent['data'];
+    [Subjects.ProductStockCreated]: ProductStockCreatedEvent['data'];
+    [Subjects.ProductStockUpdated]: ProductStockUpdatedEvent['data'];
+    [Subjects.StockCreated]: StockCreatedEvent['data'];
+    [Subjects.StockUpdated]: StockUpdatedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
