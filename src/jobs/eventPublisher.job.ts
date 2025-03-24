@@ -13,10 +13,10 @@ import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpd
 import { UserCreatedPublisher } from '../events/publishers/userCreated.publisher';
 import { UserUpdatedPublisher } from '../events/publishers/userUpdated.publisher';
 import { IntegrationCommandPublisher } from '../events/publishers/integrationCommand.publisher';
-import { ProductStockCreatedPublisher } from 'events/publishers/productStockCreated.publisher';
-import { ProductStockUpdatedPublisher } from 'events/publishers/productStockUpdated.publisher';
-import { StockCreatedPublisher } from 'events/publishers/stockCreated.publisher';
-import { StockUpdatedPublisher } from 'events/publishers/stockUpdated.publisher';
+import { ProductStockCreatedPublisher } from '../events/publishers/productStockCreated.publisher';
+import { ProductStockUpdatedPublisher } from '../events/publishers/productStockUpdated.publisher';
+import { StockCreatedPublisher } from '../events/publishers/stockCreated.publisher';
+import { StockUpdatedPublisher } from '../events/publishers/stockUpdated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye

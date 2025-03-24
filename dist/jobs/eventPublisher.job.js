@@ -23,6 +23,10 @@ const combinationUpdated_publisher_1 = require("../events/publishers/combination
 const userCreated_publisher_1 = require("../events/publishers/userCreated.publisher");
 const userUpdated_publisher_1 = require("../events/publishers/userUpdated.publisher");
 const integrationCommand_publisher_1 = require("../events/publishers/integrationCommand.publisher");
+const productStockCreated_publisher_1 = require("../events/publishers/productStockCreated.publisher");
+const productStockUpdated_publisher_1 = require("../events/publishers/productStockUpdated.publisher");
+const stockCreated_publisher_1 = require("../events/publishers/stockCreated.publisher");
+const stockUpdated_publisher_1 = require("../events/publishers/stockUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -143,6 +147,22 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.IntegrationCommand:
                     yield new integrationCommand_publisher_1.IntegrationCommandPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.ProductStockCreated:
+                    yield new productStockCreated_publisher_1.ProductStockCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.ProductStockUpdated:
+                    yield new productStockUpdated_publisher_1.ProductStockUpdatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.StockCreated:
+                    yield new stockCreated_publisher_1.StockCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.StockUpdated:
+                    yield new stockUpdated_publisher_1.StockUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:
