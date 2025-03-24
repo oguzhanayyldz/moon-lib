@@ -20,6 +20,7 @@ __exportStar(require("./models/outbox.schema"), exports);
 // Services
 __exportStar(require("./services/natsWrapper.service"), exports);
 __exportStar(require("./services/tracer.service"), exports);
+__exportStar(require("./services/redis.service"), exports);
 // Jobs
 __exportStar(require("./jobs/eventPublisher.job"), exports);
 // Events

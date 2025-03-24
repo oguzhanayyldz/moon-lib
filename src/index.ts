@@ -5,6 +5,7 @@ export * from './models/outbox.schema';
 // Services
 export * from './services/natsWrapper.service';
 export * from './services/tracer.service';
+export * from './services/redis.service';
 
 // Jobs
 export * from './jobs/eventPublisher.job';
