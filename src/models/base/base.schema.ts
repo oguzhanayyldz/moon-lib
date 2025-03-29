@@ -14,6 +14,7 @@ export interface BaseAttrs {
     deletionDate?: Date;
     deleted?: boolean;
     uniqueCode?: string | null;
+    isTemporary?:boolean
 }
 
 export interface BaseDoc extends Document {
@@ -25,6 +26,7 @@ export interface BaseDoc extends Document {
     deletionDate: Date;
     deleted: boolean;
     uniqueCode: string;
+    isTemporary?: boolean;
     destroy(): Promise<void>;
 }
 
@@ -60,6 +62,7 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         },
         deleted: { type: Boolean },
         uniqueCode: { type: String, unique: true },
+        isTemporary: { type: Boolean },
         ...schemaDefinition
     }, {
         toJSON: {

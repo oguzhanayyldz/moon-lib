@@ -10,6 +10,7 @@ export interface BaseAttrs {
     deletionDate?: Date;
     deleted?: boolean;
     uniqueCode?: string | null;
+    isTemporary?: boolean;
 }
 export interface BaseDoc extends Document {
     id: string;
@@ -20,6 +21,7 @@ export interface BaseDoc extends Document {
     deletionDate: Date;
     deleted: boolean;
     uniqueCode: string;
+    isTemporary?: boolean;
     destroy(): Promise<void>;
 }
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
@@ -44,6 +46,7 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             deletionDate?: Date | undefined;
             deleted?: boolean | undefined;
             uniqueCode?: string | undefined;
+            isTemporary?: boolean | undefined;
         }>> & mongoose.FlatRecord<{
             creationDate: Date;
             updatedOn: Date;
@@ -51,6 +54,7 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             deletionDate?: Date | undefined;
             deleted?: boolean | undefined;
             uniqueCode?: string | undefined;
+            isTemporary?: boolean | undefined;
         }> & {
             _id: mongoose.Types.ObjectId;
         }, ret: Record<string, any>): void;
@@ -62,6 +66,7 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     deletionDate?: Date | undefined;
     deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
+    isTemporary?: boolean | undefined;
 }, mongoose.Document<unknown, {}, mongoose.FlatRecord<{
     creationDate: Date;
     updatedOn: Date;
@@ -69,6 +74,7 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     deletionDate?: Date | undefined;
     deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
+    isTemporary?: boolean | undefined;
 }>> & mongoose.FlatRecord<{
     creationDate: Date;
     updatedOn: Date;
@@ -76,6 +82,7 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     deletionDate?: Date | undefined;
     deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
+    isTemporary?: boolean | undefined;
 }> & {
     _id: mongoose.Types.ObjectId;
 }>;

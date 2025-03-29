@@ -35,7 +35,7 @@ function createBaseSchema(schemaDefinition = {}) {
             type: Date,
             timezone: 'Europe/Istanbul',
             get: (val) => val ? (0, moment_timezone_1.default)(val).tz('Europe/Istanbul').format() : undefined
-        }, deleted: { type: Boolean }, uniqueCode: { type: String, unique: true } }, schemaDefinition), {
+        }, deleted: { type: Boolean }, uniqueCode: { type: String, unique: true }, isTemporary: { type: Boolean } }, schemaDefinition), {
         toJSON: {
             transform(doc, ret) {
                 ret.id = ret._id;
