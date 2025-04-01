@@ -140,7 +140,7 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
     baseSchema.pre<BaseDoc>('save', async function (next) {
         if (!this.uuid) this.uuid = uuidv4();
         if (!this.deleted && !this.deletionDate && !this.uniqueCode) {
-            this.uniqueCode = new Date().getTime().toString() + "-" + generateRandomString(6);
+            this.uniqueCode = "base-" + new Date().getTime().toString() + "-" + generateRandomString(6);
         }
         this.updatedOn = new Date();
         next();

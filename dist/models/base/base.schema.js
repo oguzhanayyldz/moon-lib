@@ -101,7 +101,7 @@ function createBaseSchema(schemaDefinition = {}) {
             if (!this.uuid)
                 this.uuid = (0, uuid_1.v4)();
             if (!this.deleted && !this.deletionDate && !this.uniqueCode) {
-                this.uniqueCode = new Date().getTime().toString() + "-" + (0, common_1.generateRandomString)(6);
+                this.uniqueCode = "base-" + new Date().getTime().toString() + "-" + (0, common_1.generateRandomString)(6);
             }
             this.updatedOn = new Date();
             next();
