@@ -70,9 +70,10 @@ function createBaseSchema(schemaDefinition = {}) {
                 deleted: { $exists: false }
             });
         },
-        filter: function (where, limit = 20, offset = 0, order) {
+        filter: function (where, limit = 20, offset = 0, order, populate) {
             return this.find()
                 .where(where)
+                .populate(populate)
                 .sort(order)
                 .skip(offset)
                 .limit(limit)

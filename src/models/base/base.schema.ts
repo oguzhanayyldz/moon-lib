@@ -33,7 +33,7 @@ export interface BaseDoc extends Document {
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
     build(attrs: A): T;
     findByCustom(id: string): Promise<T | null>;
-    filter(where: Partial<A>, limit?: number, offset?: number, order?: SortType): Promise<T[] | null>;
+    filter(where: Partial<A>, limit?: number, offset?: number, order?: SortType, populate?: any): Promise<T[] | null>;
     destroyMany(where: Partial<A>): Promise<{ matchedCount: number, modifiedCount: number }>;
     findByEvent(event: { id: string, version: number }): Promise<T | null>;
 }
@@ -108,10 +108,12 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
             where: any,
             limit = 20,
             offset = 0,
-            order?: SortType
+            order?: SortType,
+            populate?: any,
         ) {
             return this.find()
                 .where(where)
+                .populate(populate)
                 .sort(order)
                 .skip(offset)
                 .limit(limit)
