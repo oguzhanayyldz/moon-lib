@@ -19,6 +19,7 @@ import { StockCreatedPublisher } from '../events/publishers/stockCreated.publish
 import { StockUpdatedPublisher } from '../events/publishers/stockUpdated.publisher';
 import { OrderCreatedPublisher } from '../events/publishers/orderCreated.publisher';
 import { OrderUpdatedPublisher } from '../events/publishers/orderUpdated.publisher';
+import { EntityDeletedPublisher } from '../events/publishers/entityDeleted.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -167,6 +168,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.OrderUpdated:
                 await new OrderUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.EntityDeleted:
+                await new EntityDeletedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

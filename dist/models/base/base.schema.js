@@ -81,16 +81,30 @@ function createBaseSchema(schemaDefinition = {}) {
         },
         destroyMany: function (where) {
             return __awaiter(this, void 0, void 0, function* () {
-                const updateResult = yield this.updateMany(where, {
-                    $set: {
-                        deletionDate: new Date(),
-                        uniqueCode: new Date().getTime().toString() + "-" + (0, common_1.generateRandomString)(4),
-                        deleted: true
+                const docsToDelete = yield this.find(where).select('_id');
+                const docIds = docsToDelete.map((doc) => doc._id);
+                const entityType = this.collection.name.replace(/s$/, '');
+                const deletedEvents = [];
+                // Her kayıt için ayrı ayrı sil
+                for (const docId of docIds) {
+                    const doc = yield this.findById(docId);
+                    if (doc) {
+                        doc.deletionDate = new Date();
+                        doc.uniqueCode = `deleted-${(0, uuid_1.v4)()}`; // Her kayıt için benzersiz bir değer oluştur
+                        doc.deleted = true;
+                        yield doc.save();
+                        deletedEvents.push({
+                            id: doc.id,
+                            entity: entityType,
+                            timestamp: new Date().toISOString()
+                        });
                     }
-                });
+                }
+                // Silinen belgelerin bilgilerini döndür
                 return {
-                    matchedCount: updateResult.matchedCount,
-                    modifiedCount: updateResult.modifiedCount
+                    matchedCount: docsToDelete.length,
+                    modifiedCount: deletedEvents.length,
+                    events: deletedEvents
                 };
             });
         }
@@ -145,12 +159,22 @@ function createBaseSchema(schemaDefinition = {}) {
                 if (!instance.deletionDate) {
                     instance.deletionDate = new Date();
                 }
-                instance.uniqueCode = new Date().getTime().toString() + "-" + (0, common_1.generateRandomString)(6);
+                instance.uniqueCode = `deleted-${(0, uuid_1.v4)()}`; // Benzersiz değer için UUID kullan
                 instance.deleted = true;
                 yield instance.save();
+                // İşlem bilgisini ek veri olarak döndür (servisin erişebileceği)
+                const constructor = instance.constructor;
+                const entityType = constructor.collection ? constructor.collection.name.replace(/s$/, '') : '';
+                // Bir event nesnesi döndür, bunu servis katmanı işleyecek
+                return {
+                    id: instance.id,
+                    entity: entityType,
+                    timestamp: new Date().toISOString()
+                };
             }
             catch (err) {
                 console.error(err);
+                return undefined; // Ensure a return value in case of an error
             }
         });
     };

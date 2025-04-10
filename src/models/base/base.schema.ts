@@ -14,7 +14,7 @@ export interface BaseAttrs {
     deletionDate?: Date;
     deleted?: boolean;
     uniqueCode?: string | null;
-    isTemporary?:boolean
+    isTemporary?: boolean
 }
 
 export interface BaseDoc extends Document {
@@ -27,7 +27,13 @@ export interface BaseDoc extends Document {
     deleted: boolean;
     uniqueCode: string;
     isTemporary?: boolean;
-    destroy(): Promise<void>;
+    destroy(): Promise<EmitReturnConfig>;
+}
+
+export interface EmitReturnConfig {
+    id: string;
+    entity: string;
+    timestamp: string;
 }
 
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
@@ -63,6 +69,26 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         deleted: { type: Boolean },
         uniqueCode: { type: String, unique: true },
         isTemporary: { type: Boolean },
+        deletedBy: {
+            type: {
+                entity: {
+                    type: String,  // Hangi entity türü silmeyi gerçekleştirdi (Product, Combination, vs.)
+                    required: true
+                },
+                id: {
+                    type: mongoose.Schema.Types.ObjectId,  // Silinen entity'nin ID'si
+                    required: true
+                },
+                timestamp: {
+                    type: Date,
+                    default: Date.now,
+                    required: true
+                },
+                reason: {
+                    type: String  // Opsiyonel silme nedeni
+                }
+            }
+        },
         ...schemaDefinition
     }, {
         toJSON: {
@@ -121,17 +147,33 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         },
 
         destroyMany: async function (where: any) {
-            const updateResult = await this.updateMany(where, {
-                $set: {
-                    deletionDate: new Date(),
-                    uniqueCode: new Date().getTime().toString() + "-" + generateRandomString(4),
-                    deleted: true
+            const docsToDelete = await this.find(where).select('_id');
+            const docIds = docsToDelete.map((doc: any) => doc._id);
+            const entityType = this.collection.name.replace(/s$/, '');
+            const deletedEvents = [];
+            
+            // Her kayıt için ayrı ayrı sil
+            for (const docId of docIds) {
+                const doc = await this.findById(docId);
+                if (doc) {
+                    doc.deletionDate = new Date();
+                    doc.uniqueCode = `deleted-${uuidv4()}`; // Her kayıt için benzersiz bir değer oluştur
+                    doc.deleted = true;
+                    await doc.save();
+                    
+                    deletedEvents.push({
+                        id: doc.id,
+                        entity: entityType,
+                        timestamp: new Date().toISOString()
+                    });
                 }
-            });
-
+            }
+            
+            // Silinen belgelerin bilgilerini döndür
             return {
-                matchedCount: updateResult.matchedCount,
-                modifiedCount: updateResult.modifiedCount
+                matchedCount: docsToDelete.length,
+                modifiedCount: deletedEvents.length,
+                events: deletedEvents
             };
         }
     };
@@ -184,17 +226,29 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         next();
     });
 
-    baseSchema.methods.destroy = async function (): Promise<void> {
+    baseSchema.methods.destroy = async function (): Promise<EmitReturnConfig | undefined> {
         try {
-            const instance = this as BaseDoc;
+            const instance = this as any;
             if (!instance.deletionDate) {
                 instance.deletionDate = new Date();
             }
-            instance.uniqueCode = new Date().getTime().toString() + "-" + generateRandomString(6);
+            instance.uniqueCode = `deleted-${uuidv4()}`; // Benzersiz değer için UUID kullan
             instance.deleted = true;
             await instance.save();
+            
+            // İşlem bilgisini ek veri olarak döndür (servisin erişebileceği)
+            const constructor = instance.constructor as any;
+            const entityType = constructor.collection ? constructor.collection.name.replace(/s$/, '') : '';
+            
+            // Bir event nesnesi döndür, bunu servis katmanı işleyecek
+            return {
+                id: instance.id,
+                entity: entityType,
+                timestamp: new Date().toISOString()
+            };
         } catch (err) {
             console.error(err);
+            return undefined; // Ensure a return value in case of an error
         }
     };
     // ... Diğer middleware'ler aynı şekilde eklenecek

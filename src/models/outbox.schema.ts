@@ -18,7 +18,8 @@ import {
     StockCreatedEvent,
     StockUpdatedEvent,
     OrderCreatedEvent,
-    OrderUpdatedEvent
+    OrderUpdatedEvent,
+    EntityDeletedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -40,6 +41,7 @@ interface EventPayloadMap {
     [Subjects.StockUpdated]: StockUpdatedEvent['data'];
     [Subjects.OrderCreated]: OrderCreatedEvent['data'];
     [Subjects.OrderUpdated]: OrderUpdatedEvent['data'];
+    [Subjects.EntityDeleted]: EntityDeletedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

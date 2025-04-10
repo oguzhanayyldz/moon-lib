@@ -22,7 +22,12 @@ export interface BaseDoc extends Document {
     deleted: boolean;
     uniqueCode: string;
     isTemporary?: boolean;
-    destroy(): Promise<void>;
+    destroy(): Promise<EmitReturnConfig>;
+}
+export interface EmitReturnConfig {
+    id: string;
+    entity: string;
+    timestamp: string;
 }
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
     build(attrs: A): T;
