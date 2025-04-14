@@ -3,7 +3,6 @@ export * from './models/outbox.schema';
 export * from './services/natsWrapper.service';
 export * from './services/tracer.service';
 export * from './services/redisWrapper.service';
-export * from './services/event.service';
 export * from './jobs/eventPublisher.job';
 export * from './events/publishers/userCreated.publisher';
 export * from './events/publishers/userUpdated.publisher';

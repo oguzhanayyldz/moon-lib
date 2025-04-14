@@ -52,6 +52,12 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             deleted?: boolean | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
+            deletedBy?: {
+                id: mongoose.Types.ObjectId;
+                entity: string;
+                timestamp: Date;
+                reason?: string | undefined;
+            } | undefined;
         }>> & mongoose.FlatRecord<{
             creationDate: Date;
             updatedOn: Date;
@@ -60,6 +66,12 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             deleted?: boolean | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
+            deletedBy?: {
+                id: mongoose.Types.ObjectId;
+                entity: string;
+                timestamp: Date;
+                reason?: string | undefined;
+            } | undefined;
         }> & {
             _id: mongoose.Types.ObjectId;
         }, ret: Record<string, any>): void;
@@ -72,6 +84,12 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
+    deletedBy?: {
+        id: mongoose.Types.ObjectId;
+        entity: string;
+        timestamp: Date;
+        reason?: string | undefined;
+    } | undefined;
 }, mongoose.Document<unknown, {}, mongoose.FlatRecord<{
     creationDate: Date;
     updatedOn: Date;
@@ -80,6 +98,12 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
+    deletedBy?: {
+        id: mongoose.Types.ObjectId;
+        entity: string;
+        timestamp: Date;
+        reason?: string | undefined;
+    } | undefined;
 }>> & mongoose.FlatRecord<{
     creationDate: Date;
     updatedOn: Date;
@@ -88,6 +112,12 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
+    deletedBy?: {
+        id: mongoose.Types.ObjectId;
+        entity: string;
+        timestamp: Date;
+        reason?: string | undefined;
+    } | undefined;
 }> & {
     _id: mongoose.Types.ObjectId;
 }>;
