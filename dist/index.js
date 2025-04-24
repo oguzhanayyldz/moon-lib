@@ -41,3 +41,4 @@ __exportStar(require("./events/publishers/stockCreated.publisher"), exports);
 __exportStar(require("./events/publishers/stockUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/orderCreated.publisher"), exports);
 __exportStar(require("./events/publishers/orderUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/orderStatusUpdated.publisher"), exports);

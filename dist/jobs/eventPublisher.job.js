@@ -30,6 +30,7 @@ const stockUpdated_publisher_1 = require("../events/publishers/stockUpdated.publ
 const orderCreated_publisher_1 = require("../events/publishers/orderCreated.publisher");
 const orderUpdated_publisher_1 = require("../events/publishers/orderUpdated.publisher");
 const entityDeleted_publisher_1 = require("../events/publishers/entityDeleted.publisher");
+const orderStatusUpdated_publisher_1 = require("../events/publishers/orderStatusUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -174,6 +175,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.OrderUpdated:
                     yield new orderUpdated_publisher_1.OrderUpdatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.OrderStatusUpdated:
+                    yield new orderStatusUpdated_publisher_1.OrderStatusUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 case common_1.Subjects.EntityDeleted:
