@@ -20,7 +20,8 @@ import {
     OrderCreatedEvent,
     OrderUpdatedEvent,
     EntityDeletedEvent,
-    OrderStatusUpdatedEvent
+    OrderStatusUpdatedEvent,
+    IntegrationCommandResultEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -36,6 +37,7 @@ interface EventPayloadMap {
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
     [Subjects.IntegrationCommand]: IntegrationCommandEvent['data'];
+    [Subjects.IntegrationCommandResult]: IntegrationCommandResultEvent['data'];
     [Subjects.ProductStockCreated]: ProductStockCreatedEvent['data'];
     [Subjects.ProductStockUpdated]: ProductStockUpdatedEvent['data'];
     [Subjects.StockCreated]: StockCreatedEvent['data'];
@@ -49,17 +51,23 @@ interface EventPayloadMap {
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;
     payload: EventPayloadMap[T];
-    status: 'pending' | 'published' | 'failed';
+    status: 'pending' | 'published' | 'completed' | 'failed';
     retryCount?: number;
     lastAttempt?: Date;
+    error?: string;
+    result?: any;
+    processedAt?: Date;
 }
 
 export interface OutboxDoc extends BaseDoc {
     eventType: string;
     payload: any;
-    status: 'pending' | 'published' | 'failed';
+    status: 'pending' | 'published' | 'completed' | 'failed';
     retryCount: number;
     lastAttempt?: Date;
+    error?: string;
+    result?: any;
+    processedAt?: Date;
 }
 
 export interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> { }
@@ -72,10 +80,19 @@ const outboxSchemaDefination = {
         type: String,
         required: true,
         default: 'pending',
-        enum: ['pending', 'published', 'failed']
+        enum: ['pending', 'published', 'completed' , 'failed']
     },
     retryCount: { type: Number, default: 0 },
-    lastAttempt: Date
+    lastAttempt: Date,
+    error: {
+        type: String
+    },
+    result: {
+        type: mongoose.Schema.Types.Mixed
+    },
+    processedAt: {
+        type: Date
+    }
 };
 
 const outboxSchema = createBaseSchema(outboxSchemaDefination);

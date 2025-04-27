@@ -15,10 +15,19 @@ const outboxSchemaDefination = {
         type: String,
         required: true,
         default: 'pending',
-        enum: ['pending', 'published', 'failed']
+        enum: ['pending', 'published', 'completed', 'failed']
     },
     retryCount: { type: Number, default: 0 },
-    lastAttempt: Date
+    lastAttempt: Date,
+    error: {
+        type: String
+    },
+    result: {
+        type: mongoose_1.default.Schema.Types.Mixed
+    },
+    processedAt: {
+        type: Date
+    }
 };
 const outboxSchema = (0, base_schema_1.createBaseSchema)(outboxSchemaDefination);
 function createOutboxModel(connection) {

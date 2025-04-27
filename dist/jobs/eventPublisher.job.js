@@ -31,6 +31,7 @@ const orderCreated_publisher_1 = require("../events/publishers/orderCreated.publ
 const orderUpdated_publisher_1 = require("../events/publishers/orderUpdated.publisher");
 const entityDeleted_publisher_1 = require("../events/publishers/entityDeleted.publisher");
 const orderStatusUpdated_publisher_1 = require("../events/publishers/orderStatusUpdated.publisher");
+const integrationCommandResult_publisher_1 = require("../events/publishers/integrationCommandResult.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -151,6 +152,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.IntegrationCommand:
                     yield new integrationCommand_publisher_1.IntegrationCommandPublisher(this.natsClient)
+                        .publish(Object.assign({ requestId: event.id }, event.payload));
+                    break;
+                case common_1.Subjects.IntegrationCommandResult:
+                    yield new integrationCommandResult_publisher_1.IntegrationCommandResultPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 case common_1.Subjects.ProductStockCreated:
