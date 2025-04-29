@@ -28,6 +28,7 @@ __exportStar(require("./events/publishers/userCreated.publisher"), exports);
 __exportStar(require("./events/publishers/userUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/productIntegrationCreated.publisher"), exports);
 __exportStar(require("./events/publishers/combinationCreated.publisher"), exports);
 __exportStar(require("./events/publishers/combinationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/packageProductLinkCreated.publisher"), exports);

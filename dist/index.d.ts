@@ -8,6 +8,7 @@ export * from './events/publishers/userCreated.publisher';
 export * from './events/publishers/userUpdated.publisher';
 export * from './events/publishers/productCreated.publisher';
 export * from './events/publishers/productUpdated.publisher';
+export * from './events/publishers/productIntegrationCreated.publisher';
 export * from './events/publishers/combinationCreated.publisher';
 export * from './events/publishers/combinationUpdated.publisher';
 export * from './events/publishers/packageProductLinkCreated.publisher';

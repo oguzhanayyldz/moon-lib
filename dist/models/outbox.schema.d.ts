@@ -1,9 +1,10 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent } from "@xmoonx/common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent } from "@xmoonx/common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
+    [Subjects.ProductIntegrationCreated]: ProductIntegrationCreatedEvent['data'];
     [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
     [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];
     [Subjects.RelationProductLinkCreated]: RelationProductLinkCreatedEvent['data'];

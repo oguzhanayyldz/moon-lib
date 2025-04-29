@@ -4,6 +4,7 @@ import {
     Subjects,
     ProductCreatedEvent,
     ProductUpdatedEvent,
+    ProductIntegrationCreatedEvent,
     PackageProductLinkCreatedEvent,
     PackageProductLinkUpdatedEvent,
     RelationProductLinkCreatedEvent,
@@ -28,6 +29,7 @@ import {
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
+    [Subjects.ProductIntegrationCreated]: ProductIntegrationCreatedEvent['data'];
     [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
     [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];
     [Subjects.RelationProductLinkCreated]: RelationProductLinkCreatedEvent['data'];

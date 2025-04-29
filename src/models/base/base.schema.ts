@@ -34,13 +34,28 @@ export interface EmitReturnConfig {
     id: string;
     entity: string;
     timestamp: string;
+    userId?: string;
+    metadata?: any;
 }
+
+export type MongoQuery<T> = {
+    [P in keyof T]?: T[P] | { 
+        $in?: any[]; 
+        $nin?: any[];
+        $eq?: any;
+        $gt?: any;
+        $gte?: any;
+        $lt?: any;
+        $lte?: any;
+        // Diğer operatörler
+    };
+} & Record<string, any>;
 
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
     build(attrs: A): T;
     findByCustom(id: string): Promise<T | null>;
     filter(where: Partial<A>, limit?: number, offset?: number, order?: SortType, populate?: any): Promise<T[] | null>;
-    destroyMany(where: Partial<A>): Promise<{ matchedCount: number, modifiedCount: number }>;
+    destroyMany(where: MongoQuery<A>): Promise<{ matchedCount: number, modifiedCount: number, events: EmitReturnConfig[] }>;
     findByEvent(event: { id: string, version: number }): Promise<T | null>;
 }
 

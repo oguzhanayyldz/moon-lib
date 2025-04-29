@@ -22,6 +22,7 @@ import { OrderUpdatedPublisher } from '../events/publishers/orderUpdated.publish
 import { EntityDeletedPublisher } from '../events/publishers/entityDeleted.publisher';
 import { OrderStatusUpdatedPublisher } from '../events/publishers/orderStatusUpdated.publisher';
 import { IntegrationCommandResultPublisher } from '../events/publishers/integrationCommandResult.publisher';
+import { ProductIntegrationCreatedPublisher } from '../events/publishers/productIntegrationCreated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -182,6 +183,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.EntityDeleted:
                 await new EntityDeletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ProductIntegrationCreated:
+                await new ProductIntegrationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:
