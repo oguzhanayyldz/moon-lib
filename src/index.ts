@@ -1,14 +1,21 @@
+import mongoose from 'mongoose';
+import { createOutboxModel } from './models/outbox.schema';
+import { createDeadLetterModel } from './models/deadLetter.schema';
+
 // Models
 export * from './models/base/base.schema';
 export * from './models/outbox.schema';
+export * from './models/deadLetter.schema';
 
 // Services
 export * from './services/natsWrapper.service';
 export * from './services/tracer.service';
 export * from './services/redisWrapper.service';
+export * from './services/retryManager';
 
 // Jobs
 export * from './jobs/eventPublisher.job';
+export * from './jobs/deadLetterProcessor.job';
 
 // Events
 export * from './events/publishers/userCreated.publisher';
@@ -31,3 +38,10 @@ export * from './events/publishers/stockUpdated.publisher';
 export * from './events/publishers/orderCreated.publisher';
 export * from './events/publishers/orderUpdated.publisher';
 export * from './events/publishers/orderStatusUpdated.publisher';
+export * from './events/retryableListener';
+
+// Model başlatma fonksiyonu
+export const initializeModels = (connection: mongoose.Connection): void => {
+    createOutboxModel(connection);
+    createDeadLetterModel(connection);
+};
