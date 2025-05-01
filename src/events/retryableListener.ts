@@ -45,12 +45,10 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         const span = this.createTraceSpan(eventType, eventId);
 
         try {
-            // İşlemi, anlık retry ile gerçekleştir
-            await this.processWithImmediateRetries(data, msg, span);
-
-            // Başarılı olduysa Redis'teki retry sayacını sıfırla
+            await this.processEvent(data);
+            
+            // Başarılı işlemede retry sayacını sıfırla
             await this.retryManager.resetRetryCount(eventType, eventId);
-
             span.setTag('success', true);
             msg.ack();
         } catch (error) {
@@ -58,31 +56,42 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             span.setTag('error.message', (error as Error).message);
             console.error(`Error processing ${eventType}:${eventId}:`, error);
 
-            // Redis'e kayıtlı retry sayısını kontrol et ve artır
-            const retryCount = await this.retryManager.incrementRetryCount(eventType, eventId);
-            span.setTag('retry.count', retryCount);
-
-            // Hala denenmeli mi kontrol et
-            if (await this.retryManager.shouldRetry(eventType, eventId)) {
-                console.log(`Redis retry ${retryCount}/${this.options.maxRetries} for ${eventType}:${eventId}`);
-                span.setTag('retry.scheduled', true);
-                // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
-            } else {
-                console.log(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
-
-                // Dead letter kuyruğuna ekle
-                if (this.options.enableDeadLetter) {
-                    try {
-                        await this.moveToDeadLetterQueue(data, error as Error, retryCount);
-                        span.setTag('dead_letter.saved', true);
-                    } catch (dlqError) {
-                        console.error('Failed to save to dead letter queue:', dlqError);
-                        span.setTag('dead_letter.error', (dlqError as Error).message);
-                    }
-                }
-
-                // İşlem tamamlandı, başka deneme yapma
+            // MongoDB duplicate key hatası kontrolü
+            const isDuplicateKeyError = this.isDuplicateKeyError(error);
+            
+            if (isDuplicateKeyError) {
+                // Unique constraint hatası - retry yapmayacağız
+                console.log(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
+                span.setTag('error.retry_skipped', true);
+                span.setTag('error.duplicate_key', true);
+                
+                // Mesajı onaylayıp geçiyoruz
                 msg.ack();
+            } else {
+                // Diğer hatalar için normal retry işlemi
+                const retryCount = await this.retryManager.incrementRetryCount(eventType, eventId);
+                span.setTag('retry.count', retryCount);
+                
+                // Hala denenmeli mi kontrol et
+                if (await this.retryManager.shouldRetry(eventType, eventId)) {
+                    console.log(`Redis retry ${retryCount}/${this.options.maxRetries} for ${eventType}:${eventId}`);
+                    span.setTag('retry.scheduled', true);
+                    // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
+                } else {
+                    console.log(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
+                    
+                    if (this.options.enableDeadLetter) {
+                        try {
+                            await this.moveToDeadLetterQueue(data, error as Error, retryCount);
+                            span.setTag('dead_letter.saved', true);
+                        } catch (dlqError) {
+                            console.error('Failed to save to dead letter queue:', dlqError);
+                            span.setTag('dead_letter.error', (dlqError as Error).message);
+                        }
+                    }
+                    
+                    msg.ack();
+                }
             }
         } finally {
             span.finish();
@@ -200,5 +209,27 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             errorMessage.includes('unavailable') ||
             errorMessage.includes('temporarily')
         );
+    }
+
+    /**
+     * MongoDB duplicate key hatası olup olmadığını kontrol eder
+     */
+    private isDuplicateKeyError(error: unknown): boolean {
+        // MongoDB duplicate key hata mesajı kontrolü
+        if (error instanceof Error) {
+            // MongoDB hata kodu 11000 duplicate key hatası
+            if (error.name === 'MongoError' && (error as any).code === 11000) {
+                return true;
+            }
+            
+            // Hata mesajında duplicate key ifadesi var mı?
+            if (error.message.includes('duplicate key') || 
+                error.message.includes('E11000') || 
+                error.message.includes('duplicate') || 
+                error.message.includes('uniqueCode')) {
+                return true;
+            }
+        }
+        return false;
     }
 }

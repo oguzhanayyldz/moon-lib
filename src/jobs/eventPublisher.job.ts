@@ -191,7 +191,7 @@ export class EventPublisherJob {
                 break;
             case Subjects.ProductIntegrationCreated:
                 await new ProductIntegrationCreatedPublisher(this.natsClient)
-                    .publish(event.payload);
+                    .publish({ requestId: event.id, ...event.payload });
                 break;
             case Subjects.ImportImagesFromUrls:
                 await new ImportImagesFromUrlsPublisher(this.natsClient)

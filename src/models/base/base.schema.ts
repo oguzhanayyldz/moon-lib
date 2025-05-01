@@ -115,13 +115,6 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         }
     });
 
-    // Birleşik index oluştur - uniqueCode ve deleted alanlarını birlikte unique olarak işaretle
-    baseSchema.index({ uniqueCode: 1, deleted: 1 }, { 
-        unique: true,
-        // deleted değeri null veya false olan belgeler için uniqueCode benzersiz olmalı
-        partialFilterExpression: { $or: [{ deleted: { $exists: false } }, { deleted: false }] }
-    });
-
     baseSchema.set('versionKey', 'version');
     baseSchema.plugin(updateIfCurrentPlugin);
     baseSchema.set('toJSON', { getters: true });
@@ -183,7 +176,7 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
                         {
                             $set: {
                                 deletionDate: new Date(),
-                                uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                                uniqueCode: `deleted-${docId}`,
                                 deleted: true
                             }
                         },
@@ -270,7 +263,7 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
                 {
                     $set: {
                         deletionDate: new Date(),
-                        uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                        uniqueCode: `deleted-${instance.id}`,
                         deleted: true
                     }
                 },
