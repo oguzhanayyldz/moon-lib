@@ -2,7 +2,7 @@ import mongoose, { Document, Model, Query, Schema } from "mongoose";
 import { updateIfCurrentPlugin } from "mongoose-update-if-current";
 import { v4 as uuidv4 } from 'uuid';
 import moment from "moment-timezone";
-import { generateRandomString, SortType } from "@xmoonx/common";
+import { generateRandomString, SortType, getRefDataId } from '@xmoonx/common';
 
 export interface BaseAttrs {
     id?: string;
@@ -115,6 +115,13 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         }
     });
 
+    // Birleşik index oluştur - uniqueCode ve deleted alanlarını birlikte unique olarak işaretle
+    baseSchema.index({ uniqueCode: 1, deleted: 1 }, { 
+        unique: true,
+        // deleted değeri null veya false olan belgeler için uniqueCode benzersiz olmalı
+        partialFilterExpression: { $or: [{ deleted: { $exists: false } }, { deleted: false }] }
+    });
+
     baseSchema.set('versionKey', 'version');
     baseSchema.plugin(updateIfCurrentPlugin);
     baseSchema.set('toJSON', { getters: true });
@@ -167,20 +174,31 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
             const entityType = this.collection.name.replace(/s$/, '');
             const deletedEvents = [];
             
-            // Her kayıt için ayrı ayrı sil
+            // Her kayıt için versiyon kontrolünü bypass ederek silme işlemi
             for (const docId of docIds) {
-                const doc = await this.findById(docId);
-                if (doc) {
-                    doc.deletionDate = new Date();
-                    doc.uniqueCode = `deleted-${uuidv4()}`; // Her kayıt için benzersiz bir değer oluştur
-                    doc.deleted = true;
-                    await doc.save();
+                try {
+                    // findByIdAndUpdate ile versiyon kontrolünü bypass ederek güncelleme
+                    await this.findByIdAndUpdate(
+                        docId,
+                        {
+                            $set: {
+                                deletionDate: new Date(),
+                                uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                                deleted: true
+                            }
+                        },
+                        { new: true }
+                    );
                     
+                    // Silinen belgenin bilgilerini olaylar listesine ekle
                     deletedEvents.push({
-                        id: doc.id,
+                        id: docId.toString(),
                         entity: entityType,
                         timestamp: new Date().toISOString()
                     });
+                } catch (err) {
+                    console.error(`Error deleting document ${docId}:`, err);
+                    // Hata olsa bile diğer belgelerin silinmesine devam et
                 }
             }
             
@@ -241,29 +259,34 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         next();
     });
 
-    baseSchema.methods.destroy = async function (): Promise<EmitReturnConfig | undefined> {
+    baseSchema.methods.destroy = async function(): Promise<EmitReturnConfig | undefined> {
         try {
-            const instance = this as any;
-            if (!instance.deletionDate) {
-                instance.deletionDate = new Date();
-            }
-            instance.uniqueCode = `deleted-${uuidv4()}`; // Benzersiz değer için UUID kullan
-            instance.deleted = true;
-            await instance.save();
+            const instance = this as BaseDoc;
+            const Model = instance.constructor as any;
             
-            // İşlem bilgisini ek veri olarak döndür (servisin erişebileceği)
-            const constructor = instance.constructor as any;
-            const entityType = constructor.collection ? constructor.collection.name.replace(/s$/, '') : '';
+            // findByIdAndUpdate ile versiyon kontrolünü bypass ederek güncelleme yapar
+            await Model.findByIdAndUpdate(
+                instance.id,
+                {
+                    $set: {
+                        deletionDate: new Date(),
+                        uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                        deleted: true
+                    }
+                },
+                { new: true }
+            );
             
-            // Bir event nesnesi döndür, bunu servis katmanı işleyecek
+            // Emit config'i döndür
             return {
                 id: instance.id,
-                entity: entityType,
-                timestamp: new Date().toISOString()
+                entity: Model.modelName.toLowerCase(),
+                timestamp: new Date().toISOString(),
+                userId: (instance as any).user ? getRefDataId((instance as any).user) : undefined
             };
         } catch (err) {
-            console.error(err);
-            return undefined; // Ensure a return value in case of an error
+            console.error('Destroy error:', err);
+            throw err;
         }
     };
     // ... Diğer middleware'ler aynı şekilde eklenecek

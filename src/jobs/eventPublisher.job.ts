@@ -23,6 +23,10 @@ import { EntityDeletedPublisher } from '../events/publishers/entityDeleted.publi
 import { OrderStatusUpdatedPublisher } from '../events/publishers/orderStatusUpdated.publisher';
 import { IntegrationCommandResultPublisher } from '../events/publishers/integrationCommandResult.publisher';
 import { ProductIntegrationCreatedPublisher } from '../events/publishers/productIntegrationCreated.publisher';
+import { DeleteProductImagesCompletedPublisher } from '../events/publishers/deleteProductImagesCompletedPublisher.publisher';
+import { DeleteProductImagesPublisher } from '../events/publishers/deleteProductImagesPublisher.publisher';
+import { ImportImagesFromUrlsPublisher } from '../events/publishers/importImagesFromUrlsPublisher.publisher';
+import { ImportImagesFromUrlsCompletedPublisher } from '../events/publishers/importImagesFromUrlsCompletedPublisher.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -189,6 +193,22 @@ export class EventPublisherJob {
                 await new ProductIntegrationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            case Subjects.ImportImagesFromUrls:
+                await new ImportImagesFromUrlsPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
+            case Subjects.ImportImagesFromUrlsCompleted:
+                await new ImportImagesFromUrlsCompletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
+            case Subjects.DeleteProductImages:
+                await new DeleteProductImagesPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
+            case Subjects.DeleteProductImagesCompleted:
+                await new DeleteProductImagesCompletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
             default:
                 throw new Error(`Unknown event type: ${event.eventType}`);
         }

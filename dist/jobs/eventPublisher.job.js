@@ -33,6 +33,10 @@ const entityDeleted_publisher_1 = require("../events/publishers/entityDeleted.pu
 const orderStatusUpdated_publisher_1 = require("../events/publishers/orderStatusUpdated.publisher");
 const integrationCommandResult_publisher_1 = require("../events/publishers/integrationCommandResult.publisher");
 const productIntegrationCreated_publisher_1 = require("../events/publishers/productIntegrationCreated.publisher");
+const deleteProductImagesCompletedPublisher_publisher_1 = require("events/publishers/deleteProductImagesCompletedPublisher.publisher");
+const deleteProductImagesPublisher_publisher_1 = require("../events/publishers/deleteProductImagesPublisher.publisher");
+const importImagesFromUrlsPublisher_publisher_1 = require("events/publishers/importImagesFromUrlsPublisher.publisher");
+const importImagesFromUrlsCompletedPublisher_publisher_1 = require("events/publishers/importImagesFromUrlsCompletedPublisher.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -193,6 +197,22 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.ProductIntegrationCreated:
                     yield new productIntegrationCreated_publisher_1.ProductIntegrationCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.ImportImagesFromUrls:
+                    yield new importImagesFromUrlsPublisher_publisher_1.ImportImagesFromUrlsPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.ImportImagesFromUrlsCompleted:
+                    yield new importImagesFromUrlsCompletedPublisher_publisher_1.ImportImagesFromUrlsCompletedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.DeleteProductImages:
+                    yield new deleteProductImagesPublisher_publisher_1.DeleteProductImagesPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.DeleteProductImagesCompleted:
+                    yield new deleteProductImagesCompletedPublisher_publisher_1.DeleteProductImagesCompletedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

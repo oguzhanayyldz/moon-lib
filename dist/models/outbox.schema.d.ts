@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent } from "@xmoonx/common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent } from "@xmoonx/common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -23,11 +23,15 @@ interface EventPayloadMap {
     [Subjects.OrderUpdated]: OrderUpdatedEvent['data'];
     [Subjects.EntityDeleted]: EntityDeletedEvent['data'];
     [Subjects.OrderStatusUpdated]: OrderStatusUpdatedEvent['data'];
+    [Subjects.ImportImagesFromUrls]: ImportImagesFromUrlsEvent['data'];
+    [Subjects.ImportImagesFromUrlsCompleted]: ImportImagesFromUrlsCompletedEvent['data'];
+    [Subjects.DeleteProductImages]: DeleteProductImagesEvent['data'];
+    [Subjects.DeleteProductImagesCompleted]: DeleteProductImagesCompletedEvent['data'];
 }
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;
     payload: EventPayloadMap[T];
-    status: 'pending' | 'published' | 'completed' | 'failed';
+    status?: 'pending' | 'published' | 'completed' | 'failed';
     retryCount?: number;
     lastAttempt?: Date;
     error?: string;

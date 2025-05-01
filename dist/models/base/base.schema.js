@@ -96,6 +96,12 @@ function createBaseSchema(schemaDefinition = {}) {
             }
         }
     });
+    // Birleşik index oluştur - uniqueCode ve deleted alanlarını birlikte unique olarak işaretle
+    baseSchema.index({ uniqueCode: 1, deleted: 1 }, {
+        unique: true,
+        // deleted değeri null veya false olan belgeler için uniqueCode benzersiz olmalı
+        partialFilterExpression: { $or: [{ deleted: { $exists: false } }, { deleted: false }] }
+    });
     baseSchema.set('versionKey', 'version');
     baseSchema.plugin(mongoose_update_if_current_1.updateIfCurrentPlugin);
     baseSchema.set('toJSON', { getters: true });
@@ -137,19 +143,27 @@ function createBaseSchema(schemaDefinition = {}) {
                 const docIds = docsToDelete.map((doc) => doc._id);
                 const entityType = this.collection.name.replace(/s$/, '');
                 const deletedEvents = [];
-                // Her kayıt için ayrı ayrı sil
+                // Her kayıt için versiyon kontrolünü bypass ederek silme işlemi
                 for (const docId of docIds) {
-                    const doc = yield this.findById(docId);
-                    if (doc) {
-                        doc.deletionDate = new Date();
-                        doc.uniqueCode = `deleted-${(0, uuid_1.v4)()}`; // Her kayıt için benzersiz bir değer oluştur
-                        doc.deleted = true;
-                        yield doc.save();
+                    try {
+                        // findByIdAndUpdate ile versiyon kontrolünü bypass ederek güncelleme
+                        yield this.findByIdAndUpdate(docId, {
+                            $set: {
+                                deletionDate: new Date(),
+                                uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                                deleted: true
+                            }
+                        }, { new: true });
+                        // Silinen belgenin bilgilerini olaylar listesine ekle
                         deletedEvents.push({
-                            id: doc.id,
+                            id: docId.toString(),
                             entity: entityType,
                             timestamp: new Date().toISOString()
                         });
+                    }
+                    catch (err) {
+                        console.error(`Error deleting document ${docId}:`, err);
+                        // Hata olsa bile diğer belgelerin silinmesine devam et
                     }
                 }
                 // Silinen belgelerin bilgilerini döndür
@@ -208,25 +222,26 @@ function createBaseSchema(schemaDefinition = {}) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const instance = this;
-                if (!instance.deletionDate) {
-                    instance.deletionDate = new Date();
-                }
-                instance.uniqueCode = `deleted-${(0, uuid_1.v4)()}`; // Benzersiz değer için UUID kullan
-                instance.deleted = true;
-                yield instance.save();
-                // İşlem bilgisini ek veri olarak döndür (servisin erişebileceği)
-                const constructor = instance.constructor;
-                const entityType = constructor.collection ? constructor.collection.name.replace(/s$/, '') : '';
-                // Bir event nesnesi döndür, bunu servis katmanı işleyecek
+                const Model = instance.constructor;
+                // findByIdAndUpdate ile versiyon kontrolünü bypass ederek güncelleme yapar
+                yield Model.findByIdAndUpdate(instance.id, {
+                    $set: {
+                        deletionDate: new Date(),
+                        uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                        deleted: true
+                    }
+                }, { new: true });
+                // Emit config'i döndür
                 return {
                     id: instance.id,
-                    entity: entityType,
-                    timestamp: new Date().toISOString()
+                    entity: Model.modelName.toLowerCase(),
+                    timestamp: new Date().toISOString(),
+                    userId: instance.user ? (0, common_1.getRefDataId)(instance.user) : undefined
                 };
             }
             catch (err) {
-                console.error(err);
-                return undefined; // Ensure a return value in case of an error
+                console.error('Destroy error:', err);
+                throw err;
             }
         });
     };

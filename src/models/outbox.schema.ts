@@ -22,7 +22,11 @@ import {
     OrderUpdatedEvent,
     EntityDeletedEvent,
     OrderStatusUpdatedEvent,
-    IntegrationCommandResultEvent
+    IntegrationCommandResultEvent,
+    ImportImagesFromUrlsEvent,
+    ImportImagesFromUrlsCompletedEvent,
+    DeleteProductImagesEvent,
+    DeleteProductImagesCompletedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -48,12 +52,17 @@ interface EventPayloadMap {
     [Subjects.OrderUpdated]: OrderUpdatedEvent['data'];
     [Subjects.EntityDeleted]: EntityDeletedEvent['data'];
     [Subjects.OrderStatusUpdated]: OrderStatusUpdatedEvent['data'];
+    [Subjects.ImportImagesFromUrls]: ImportImagesFromUrlsEvent['data'];
+    [Subjects.ImportImagesFromUrlsCompleted]: ImportImagesFromUrlsCompletedEvent['data'];
+    [Subjects.DeleteProductImages]: DeleteProductImagesEvent['data'];
+    [Subjects.DeleteProductImagesCompleted]: DeleteProductImagesCompletedEvent['data'];
+    // Özel event için uygun bir tip belirleyin
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;
     payload: EventPayloadMap[T];
-    status: 'pending' | 'published' | 'completed' | 'failed';
+    status?: 'pending' | 'published' | 'completed' | 'failed';
     retryCount?: number;
     lastAttempt?: Date;
     error?: string;
