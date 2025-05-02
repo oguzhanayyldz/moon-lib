@@ -96,12 +96,6 @@ function createBaseSchema(schemaDefinition = {}) {
             }
         }
     });
-    // Birleşik index oluştur - uniqueCode ve deleted alanlarını birlikte unique olarak işaretle
-    baseSchema.index({ uniqueCode: 1, deleted: 1 }, {
-        unique: true,
-        // deleted değeri null veya false olan belgeler için uniqueCode benzersiz olmalı
-        partialFilterExpression: { $or: [{ deleted: { $exists: false } }, { deleted: false }] }
-    });
     baseSchema.set('versionKey', 'version');
     baseSchema.plugin(mongoose_update_if_current_1.updateIfCurrentPlugin);
     baseSchema.set('toJSON', { getters: true });
@@ -150,7 +144,7 @@ function createBaseSchema(schemaDefinition = {}) {
                         yield this.findByIdAndUpdate(docId, {
                             $set: {
                                 deletionDate: new Date(),
-                                uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                                uniqueCode: `deleted-${docId}`,
                                 deleted: true
                             }
                         }, { new: true });
@@ -227,7 +221,7 @@ function createBaseSchema(schemaDefinition = {}) {
                 yield Model.findByIdAndUpdate(instance.id, {
                     $set: {
                         deletionDate: new Date(),
-                        uniqueCode: `deleted-${new Date().getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+                        uniqueCode: `deleted-${instance.id}`,
                         deleted: true
                     }
                 }, { new: true });
