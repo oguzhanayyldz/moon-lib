@@ -27,6 +27,8 @@ import { DeleteProductImagesCompletedPublisher } from '../events/publishers/dele
 import { DeleteProductImagesPublisher } from '../events/publishers/deleteProductImagesPublisher.publisher';
 import { ImportImagesFromUrlsPublisher } from '../events/publishers/importImagesFromUrlsPublisher.publisher';
 import { ImportImagesFromUrlsCompletedPublisher } from '../events/publishers/importImagesFromUrlsCompletedPublisher.publisher';
+import { ProductPriceIntegrationUpdatedPublisher } from '../events/publishers/productPriceIntegrationUpdated.publisher';
+import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceUpdated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -207,6 +209,14 @@ export class EventPublisherJob {
                     break;
             case Subjects.DeleteProductImagesCompleted:
                 await new DeleteProductImagesCompletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
+            case Subjects.ProductPriceIntegrationUpdated:
+                await new ProductPriceIntegrationUpdatedPublisher(this.natsClient)
+                    .publish({ requestId: event.id, ...event.payload });
+                    break;
+            case Subjects.ProductPriceUpdated:
+                await new ProductPriceUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                     break;
             default:

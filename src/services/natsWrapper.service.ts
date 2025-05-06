@@ -1,4 +1,5 @@
-import nats, { Stan } from 'node-nats-streaming';
+import nats, { Stan, Subscription } from 'node-nats-streaming';
+import { v4 as uuidv4 } from 'uuid';
 
 export class NatsWrapper {
     private _client?: Stan;
@@ -46,6 +47,50 @@ export class NatsWrapper {
             console.log('Attempting to reconnect to NATS...');
             this.connect(clusterId, clientId, url);
         }, this._reconnectInterval);
+    }
+
+    /**
+     * Request-Reply pattern implementasyonu
+     * Stan üzerinde doğrudan request metodu olmadığı için manuel olarak implemente ediyoruz
+     */
+    async request<T = any>(subject: string, data: any, options: { timeout?: number; max?: number } = {}): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            const replyTo = `${subject}.reply.${uuidv4()}`;
+            const timeout = options.timeout || 10000;
+            
+            // NATS streaming için subscription
+            let subscription: Subscription;
+            
+            // Basit subscribe ile çalış, manuel olarak unsubscribe yap
+            subscription = this.client.subscribe(replyTo);
+            
+            // Timeout işlemi
+            const timeoutId = setTimeout(() => {
+                subscription.unsubscribe();
+                reject(new Error(`Request timeout after ${timeout}ms for ${subject}`));
+            }, timeout);
+            
+            // Mesaj alındığında
+            subscription.on('message', (msg) => {
+                clearTimeout(timeoutId);
+                
+                // Beklenilen cevap geldiğinde manuel unsubscribe
+                subscription.unsubscribe();
+                
+                try {
+                    const response = JSON.parse(msg.getData().toString());
+                    resolve(response);
+                } catch (err) {
+                    reject(err);
+                }
+            });
+            
+            // İsteği yayınla
+            this.client.publish(subject, JSON.stringify({
+                ...data,
+                replyTo
+            }));
+        });
     }
 }
 

@@ -43,6 +43,8 @@ export * from './events/publishers/deleteProductImagesCompletedPublisher.publish
 export * from './events/publishers/deleteProductImagesPublisher.publisher';
 export * from './events/publishers/importImagesFromUrlsCompletedPublisher.publisher';
 export * from './events/publishers/importImagesFromUrlsPublisher.publisher';
+export * from './events/publishers/productPriceIntegrationUpdated.publisher';
+export * from './events/publishers/productPriceUpdated.publisher';
 
 // Model başlatma fonksiyonu
 export const initializeModels = (connection: mongoose.Connection): void => {
