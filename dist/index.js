@@ -57,6 +57,7 @@ __exportStar(require("./events/publishers/importImagesFromUrlsCompletedPublisher
 __exportStar(require("./events/publishers/importImagesFromUrlsPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceIntegrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/productStockIntegrationUpdated.publisher"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);

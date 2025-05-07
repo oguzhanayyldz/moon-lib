@@ -29,6 +29,7 @@ import { ImportImagesFromUrlsPublisher } from '../events/publishers/importImages
 import { ImportImagesFromUrlsCompletedPublisher } from '../events/publishers/importImagesFromUrlsCompletedPublisher.publisher';
 import { ProductPriceIntegrationUpdatedPublisher } from '../events/publishers/productPriceIntegrationUpdated.publisher';
 import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceUpdated.publisher';
+import { ProductStockIntegrationUpdatedPublisher } from '../events/publishers/productStockIntegrationUpdated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -218,6 +219,10 @@ export class EventPublisherJob {
             case Subjects.ProductPriceUpdated:
                 await new ProductPriceUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
+                    break;
+            case Subjects.ProductStockIntegrationUpdated:
+                await new ProductStockIntegrationUpdatedPublisher(this.natsClient)
+                    .publish({ requestId: event.id, ...event.payload });
                     break;
             default:
                 throw new Error(`Unknown event type: ${event.eventType}`);

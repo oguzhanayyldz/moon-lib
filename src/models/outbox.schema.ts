@@ -28,7 +28,8 @@ import {
     DeleteProductImagesEvent,
     DeleteProductImagesCompletedEvent,
     ProductPriceIntegrationUpdatedEvent,
-    ProductPriceUpdatedEvent
+    ProductPriceUpdatedEvent,
+    ProductStockIntegrationUpdatedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -37,6 +38,7 @@ interface EventPayloadMap {
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
     [Subjects.ProductIntegrationCreated]: ProductIntegrationCreatedEvent['data'];
     [Subjects.ProductPriceIntegrationUpdated]: ProductPriceIntegrationUpdatedEvent['data'];
+    [Subjects.ProductStockIntegrationUpdated]: ProductStockIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
     [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
     [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];

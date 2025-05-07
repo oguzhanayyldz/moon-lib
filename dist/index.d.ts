@@ -35,4 +35,5 @@ export * from './events/publishers/importImagesFromUrlsCompletedPublisher.publis
 export * from './events/publishers/importImagesFromUrlsPublisher.publisher';
 export * from './events/publishers/productPriceIntegrationUpdated.publisher';
 export * from './events/publishers/productPriceUpdated.publisher';
+export * from './events/publishers/productStockIntegrationUpdated.publisher';
 export declare const initializeModels: (connection: mongoose.Connection) => void;
