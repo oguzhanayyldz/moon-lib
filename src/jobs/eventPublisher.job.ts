@@ -74,19 +74,49 @@ export class EventPublisherJob {
                 retryCount: { $lt: 5 }
             })
                 .sort({ createdAt: 1 })
-                .limit(10); // Batch processing
-
+                .limit(10);
+                
             for (const event of pendingEvents) {
                 try {
+                    // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
+                    // ve aynı zamanda versiyon kontrolü yap
+                    const updated = await this.outboxModel.updateOne(
+                        { 
+                            _id: event.id, 
+                            status: 'pending',
+                            retryCount: event.retryCount // Versiyon kontrolü sağlar
+                        },
+                        { 
+                            $set: { 
+                                status: 'processing',
+                                processingStartedAt: new Date()
+                            }
+                        }
+                    );
+                    
+                    // Event başka bir pod tarafından alınmış demektir, atla
+                    if (updated.modifiedCount === 0) {
+                        logger.info(`Event ${event.id} is already being processed by another publisher, skipping`);
+                        continue;
+                    }
+                    
                     await this.publishEvent(event);
-                    event.status = 'published';
-                    await event.save();
+                    
+                    // Başarılı olarak işaretle
+                    await this.outboxModel.updateOne(
+                        { _id: event.id, status: 'processing' },
+                        { $set: { status: 'published' } }
+                    );
+                    
                     logger.info(`Successfully published event ${event.id}`);
                 } catch (error) {
-                    event.status = 'failed';
-                    event.retryCount += 1;
-                    event.lastAttempt = new Date();
-                    await event.save();
+                    await this.outboxModel.updateOne(
+                        { _id: event.id, status: 'processing' },
+                        { 
+                            $set: { status: 'failed', lastAttempt: new Date() },
+                            $inc: { retryCount: 1 } 
+                        }
+                    );
                     logger.error(`Failed to publish event ${event.id}:`, error);
                 }
             }
@@ -95,9 +125,31 @@ export class EventPublisherJob {
         }
     }
 
-
     private async monitorFailedEvents() {
         try {
+            // Çok uzun süre processing durumunda kalan kayıtları kontrol et
+            const stuckEvents = await this.outboxModel.find({
+                status: 'processing',
+                processingStartedAt: { 
+                    $lt: new Date(Date.now() - 5 * 60 * 1000) // 5 dakikadan eski 
+                }
+            });
+            
+            if (stuckEvents.length > 0) {
+                logger.warn(`Found ${stuckEvents.length} stuck events in processing state`);
+                
+                for (const event of stuckEvents) {
+                    await this.outboxModel.updateOne(
+                        { _id: event.id, status: 'processing' },
+                        { 
+                            $set: { status: 'pending' }, 
+                            $unset: { processingStartedAt: 1 }
+                        }
+                    );
+                }
+            }
+            
+            // Diğer mevcut monitoring kodları...
             const failedEvents = await this.outboxModel.countDocuments({
                 status: 'failed',
                 retryCount: { $gte: 5 }

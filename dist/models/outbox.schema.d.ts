@@ -36,7 +36,7 @@ interface EventPayloadMap {
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;
     payload: EventPayloadMap[T];
-    status?: 'pending' | 'published' | 'completed' | 'failed';
+    status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount?: number;
     lastAttempt?: Date;
     error?: string;
@@ -46,7 +46,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
 export interface OutboxDoc extends BaseDoc {
     eventType: string;
     payload: any;
-    status: 'pending' | 'published' | 'completed' | 'failed';
+    status: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount: number;
     lastAttempt?: Date;
     error?: string;

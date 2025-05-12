@@ -15,7 +15,7 @@ const outboxSchemaDefination = {
         type: String,
         required: true,
         default: 'pending',
-        enum: ['pending', 'published', 'completed', 'failed']
+        enum: ['pending', 'processing', 'published', 'completed', 'failed']
     },
     retryCount: { type: Number, default: 0 },
     lastAttempt: Date,

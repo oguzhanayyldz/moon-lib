@@ -12,6 +12,9 @@ export interface DeadLetterAttrs extends BaseAttrs {
     service: string;
     nextRetryAt: Date;
     timestamp: Date;
+    processorId?: string;
+    processingStartedAt?: Date;
+    completedAt?: Date;
 }
 
 // Interface that describes the properties a Dead Letter Model has
@@ -30,6 +33,9 @@ export interface DeadLetterDoc extends BaseDoc {
     nextRetryAt: Date;
     timestamp: Date;
     status: 'pending' | 'processing' | 'completed' | 'failed';
+    processorId?: string;
+    processingStartedAt?: Date;
+    completedAt?: Date;
 }
 
 const deadLetterSchemaDefination = {
@@ -75,6 +81,15 @@ const deadLetterSchemaDefination = {
         type: String,
         enum: ['pending', 'processing', 'completed', 'failed'],
         default: 'pending'
+    },
+    processorId: {
+        type: String,
+    },
+    processingStartedAt: {
+        type: Date,
+    },
+    completedAt: {
+        type: Date,
     }
 };
 
