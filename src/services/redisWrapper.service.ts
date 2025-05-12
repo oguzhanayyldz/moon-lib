@@ -1,4 +1,6 @@
 import { createClient, RedisClientType } from 'redis';
+import { logger } from './logger.service';
+
 
 class RedisWrapper {
     private static instances: Map<string, RedisClientType> = new Map();
@@ -24,8 +26,8 @@ class RedisWrapper {
 
             // Yeni bağlantı oluştur
             const client: RedisClientType = createClient<{}, {}, {}>({ url })
-                .on('connect', () => console.log(`Redis Client Connected to ${url}`))
-                .on('error', (err) => console.error('Redis Client Error:', err));
+                .on('connect', () => logger.info(`Redis Client Connected to ${url}`))
+                .on('error', (err) => logger.error('Redis Client Error:', err));
 
             await client.connect();
             
@@ -35,7 +37,7 @@ class RedisWrapper {
             RedisWrapper.instances.set(url, client);
 
         } catch (error) {
-            console.error('Failed to connect to Redis:', error);
+            logger.error('Failed to connect to Redis:', error);
             throw error;
         }
     }
@@ -45,10 +47,10 @@ class RedisWrapper {
         const key = `user:${userId}:order:${purchaseNumber}:${platformNumber}`;
         const result = await this.client.del(key);
         if (result === 1) {
-            console.log(`${key} deleted.`);
+            logger.info(`${key} deleted.`);
             return true;
         }
-        console.log(`${key} not found for delete or deleted.`);
+        logger.info(`${key} not found for delete or deleted.`);
         return false;
     }
 
@@ -72,9 +74,9 @@ class RedisWrapper {
         const key = `user:${userId}:platform:${platform}:credentials`;
         const result = await this.client.del(key);
         if (result === 1) {
-            console.log(`${key} deleted.`);
+            logger.info(`${key} deleted.`);
         } else {
-            console.log(`${key} not found for delete or deleted.`);
+            logger.info(`${key} not found for delete or deleted.`);
         }
     }
 
@@ -93,6 +95,32 @@ class RedisWrapper {
     async updateCredentials(userId: string, platform: string, credentials: any) {
         await this.deleteCredentials(userId, platform);
         return this.setCredentials(userId, platform, credentials);
+    }
+
+    // Lua script çalıştırma metodu
+    async eval(script: string, params: { keys: string[], arguments: string[] }): Promise<any> {
+        if (!this.client) {
+            throw new Error('Redis client not connected');
+        }
+        
+        return this.client.EVAL(script, {
+            keys: params.keys,
+            arguments: params.arguments
+        });
+    }
+
+    // SET NX için ek parametre desteği
+    async setNX(key: string, value: string, expireSeconds: number): Promise<boolean> {
+        if (!this.client) {
+            throw new Error('Redis client not connected');
+        }
+        
+        const result = await this.client.set(key, value, {
+            NX: true,
+            EX: expireSeconds
+        });
+        
+        return result === 'OK';
     }
 
     // Uygulama kapanırken bağlantıyı kapat

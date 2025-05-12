@@ -40,6 +40,8 @@ const importImagesFromUrlsCompletedPublisher_publisher_1 = require("../events/pu
 const productPriceIntegrationUpdated_publisher_1 = require("../events/publishers/productPriceIntegrationUpdated.publisher");
 const productPriceUpdated_publisher_1 = require("../events/publishers/productPriceUpdated.publisher");
 const productStockIntegrationUpdated_publisher_1 = require("../events/publishers/productStockIntegrationUpdated.publisher");
+const productImageIntegrationUpdated_publisher_1 = require("../events/publishers/productImageIntegrationUpdated.publisher");
+const logger_service_1 = require("../services/logger.service");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -82,19 +84,19 @@ class EventPublisherJob {
                         yield this.publishEvent(event);
                         event.status = 'published';
                         yield event.save();
-                        console.log(`Successfully published event ${event.id}`);
+                        logger_service_1.logger.info(`Successfully published event ${event.id}`);
                     }
                     catch (error) {
                         event.status = 'failed';
                         event.retryCount += 1;
                         event.lastAttempt = new Date();
                         yield event.save();
-                        console.error(`Failed to publish event ${event.id}:`, error);
+                        logger_service_1.logger.error(`Failed to publish event ${event.id}:`, error);
                     }
                 }
             }
             catch (error) {
-                console.error('Event processing failed:', error);
+                logger_service_1.logger.error('Event processing failed:', error);
             }
         });
     }
@@ -106,12 +108,12 @@ class EventPublisherJob {
                     retryCount: { $gte: 5 }
                 });
                 if (failedEvents >= EventPublisherJob.ALERT_THRESHOLD) {
-                    console.error(`ALERT: ${failedEvents} events have failed permanently!`);
+                    logger_service_1.logger.error(`ALERT: ${failedEvents} events have failed permanently!`);
                     // Burada alert sisteminize bağlanabilirsiniz (Slack, Email, vs.)
                 }
             }
             catch (error) {
-                console.error('Monitoring failed:', error);
+                logger_service_1.logger.error('Monitoring failed:', error);
             }
         });
     }
@@ -228,6 +230,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.ProductStockIntegrationUpdated:
                     yield new productStockIntegrationUpdated_publisher_1.ProductStockIntegrationUpdatedPublisher(this.natsClient)
+                        .publish(Object.assign({ requestId: event.id }, event.payload));
+                    break;
+                case common_1.Subjects.ProductImageIntegrationUpdated:
+                    yield new productImageIntegrationUpdated_publisher_1.ProductImageIntegrationUpdatedPublisher(this.natsClient)
                         .publish(Object.assign({ requestId: event.id }, event.payload));
                     break;
                 default:

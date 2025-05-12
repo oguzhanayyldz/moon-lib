@@ -1,4 +1,5 @@
 import { Publisher, Subjects, DeleteProductImagesCompletedEvent } from '@xmoonx/common';
+import { logger } from '../../services/logger.service';
 
 export class DeleteProductImagesCompletedPublisher extends Publisher<DeleteProductImagesCompletedEvent> {
     subject: Subjects.DeleteProductImagesCompleted = Subjects.DeleteProductImagesCompleted;
@@ -14,7 +15,7 @@ export class DeleteProductImagesCompletedPublisher extends Publisher<DeleteProdu
             } catch (error) {
                 if (attempt === maxRetries) {
                     // Son denemede de başarısız olursa loglama yap
-                    console.error('Failed to publish event after retries:', error);
+                    logger.error('Failed to publish event after retries:', error);
                     throw error;
                 }
                 await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));

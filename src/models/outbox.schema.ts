@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
+import { ProductImageIntegrationUpdatedEvent } from '@xmoonx/common';
 import {
     Subjects,
     ProductCreatedEvent,
@@ -39,6 +40,7 @@ interface EventPayloadMap {
     [Subjects.ProductIntegrationCreated]: ProductIntegrationCreatedEvent['data'];
     [Subjects.ProductPriceIntegrationUpdated]: ProductPriceIntegrationUpdatedEvent['data'];
     [Subjects.ProductStockIntegrationUpdated]: ProductStockIntegrationUpdatedEvent['data'];
+    [Subjects.ProductImageIntegrationUpdated]: ProductImageIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
     [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
     [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];

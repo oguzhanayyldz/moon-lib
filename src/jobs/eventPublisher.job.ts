@@ -30,6 +30,8 @@ import { ImportImagesFromUrlsCompletedPublisher } from '../events/publishers/imp
 import { ProductPriceIntegrationUpdatedPublisher } from '../events/publishers/productPriceIntegrationUpdated.publisher';
 import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceUpdated.publisher';
 import { ProductStockIntegrationUpdatedPublisher } from '../events/publishers/productStockIntegrationUpdated.publisher';
+import { ProductImageIntegrationUpdatedPublisher } from '../events/publishers/productImageIntegrationUpdated.publisher';
+import { logger } from '../services/logger.service';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -79,17 +81,17 @@ export class EventPublisherJob {
                     await this.publishEvent(event);
                     event.status = 'published';
                     await event.save();
-                    console.log(`Successfully published event ${event.id}`);
+                    logger.info(`Successfully published event ${event.id}`);
                 } catch (error) {
                     event.status = 'failed';
                     event.retryCount += 1;
                     event.lastAttempt = new Date();
                     await event.save();
-                    console.error(`Failed to publish event ${event.id}:`, error);
+                    logger.error(`Failed to publish event ${event.id}:`, error);
                 }
             }
         } catch (error) {
-            console.error('Event processing failed:', error);
+            logger.error('Event processing failed:', error);
         }
     }
 
@@ -102,11 +104,11 @@ export class EventPublisherJob {
             });
 
             if (failedEvents >= EventPublisherJob.ALERT_THRESHOLD) {
-                console.error(`ALERT: ${failedEvents} events have failed permanently!`);
+                logger.error(`ALERT: ${failedEvents} events have failed permanently!`);
                 // Burada alert sisteminize bağlanabilirsiniz (Slack, Email, vs.)
             }
         } catch (error) {
-            console.error('Monitoring failed:', error);
+            logger.error('Monitoring failed:', error);
         }
     }
 
@@ -222,6 +224,10 @@ export class EventPublisherJob {
                     break;
             case Subjects.ProductStockIntegrationUpdated:
                 await new ProductStockIntegrationUpdatedPublisher(this.natsClient)
+                    .publish({ requestId: event.id, ...event.payload });
+                    break;
+            case Subjects.ProductImageIntegrationUpdated:
+                await new ProductImageIntegrationUpdatedPublisher(this.natsClient)
                     .publish({ requestId: event.id, ...event.payload });
                     break;
             default:

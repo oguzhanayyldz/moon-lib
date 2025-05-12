@@ -26,6 +26,7 @@ __exportStar(require("./services/natsWrapper.service"), exports);
 __exportStar(require("./services/tracer.service"), exports);
 __exportStar(require("./services/redisWrapper.service"), exports);
 __exportStar(require("./services/retryManager"), exports);
+__exportStar(require("./services/logger.service"), exports);
 // Jobs
 __exportStar(require("./jobs/eventPublisher.job"), exports);
 __exportStar(require("./jobs/deadLetterProcessor.job"), exports);
@@ -58,6 +59,8 @@ __exportStar(require("./events/publishers/importImagesFromUrlsPublisher.publishe
 __exportStar(require("./events/publishers/productPriceIntegrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockIntegrationUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/productImageIntegrationUpdated.publisher"), exports);
+__exportStar(require("./events/retryableListener"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);

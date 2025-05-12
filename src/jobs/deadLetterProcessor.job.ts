@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { createDeadLetterModel, DeadLetterDoc } from '../models/deadLetter.schema';
 import { Stan } from 'node-nats-streaming';
+import { logger } from '../services/logger.service';
 
 export class DeadLetterProcessorJob {
     private static readonly PROCESSOR_INTERVAL = 60000; // Her 1 dakikada bir çalış
@@ -19,11 +20,11 @@ export class DeadLetterProcessorJob {
             return;
         }
 
-        console.log('Dead letter processor job started');
+        logger.info('Dead letter processor job started');
 
         // İlk kez hemen çalıştır
         this.processPendingEvents().catch(error => {
-            console.error('Dead letter processor error:', error);
+            logger.error('Dead letter processor error:', error);
         });
 
         // Düzenli aralıklarla çalıştır
@@ -31,7 +32,7 @@ export class DeadLetterProcessorJob {
             try {
                 await this.processPendingEvents();
             } catch (error) {
-                console.error('Dead letter processor error:', error);
+                logger.error('Dead letter processor error:', error);
             }
         }, DeadLetterProcessorJob.PROCESSOR_INTERVAL);
     }
@@ -40,7 +41,7 @@ export class DeadLetterProcessorJob {
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
-            console.log('Dead letter processor job stopped');
+            logger.info('Dead letter processor job stopped');
         }
     }
 
@@ -48,8 +49,6 @@ export class DeadLetterProcessorJob {
      * Bekleyen dead letter olaylarını işle
      */
     private async processPendingEvents(): Promise<void> {
-        console.log('Processing pending dead letter events...');
-
         // İşlenecek olayları bul
         const pendingEvents = await this.deadLetterModel.find({
             status: 'pending',
@@ -61,7 +60,7 @@ export class DeadLetterProcessorJob {
             return;
         }
 
-        console.log(`Found ${pendingEvents.length} pending dead letter events`);
+        logger.info(`Found ${pendingEvents.length} pending dead letter events`);
 
         for (const event of pendingEvents) {
             await this.processEvent(event);
@@ -77,7 +76,7 @@ export class DeadLetterProcessorJob {
             event.status = 'processing';
             await event.save();
 
-            console.log(`Processing dead letter event ${event.id}: ${event.subject}`);
+            logger.info(`Processing dead letter event ${event.id}: ${event.subject}`);
 
             // NATS'e geri yayınla
             await this.publishToNats(event.subject, event.data);
@@ -86,23 +85,23 @@ export class DeadLetterProcessorJob {
             event.status = 'completed';
             await event.save();
 
-            console.log(`Successfully processed dead letter event ${event.id}`);
+            logger.info(`Successfully processed dead letter event ${event.id}`);
         } catch (error) {
-            console.error(`Error processing dead letter event ${event.id}:`, error);
+            logger.error(`Error processing dead letter event ${event.id}:`, error);
 
             // Retry sayısını artır
             event.retryCount += 1;
 
             if (event.retryCount >= event.maxRetries) {
                 event.status = 'failed';
-                console.error(`Dead letter event ${event.id} permanently failed after ${event.retryCount} attempts`);
+                logger.error(`Dead letter event ${event.id} permanently failed after ${event.retryCount} attempts`);
             } else {
                 event.status = 'pending';
 
                 // Exponential backoff ile bir sonraki denemeyi planla
                 const backoffMinutes = Math.pow(2, event.retryCount);
                 event.nextRetryAt = new Date(Date.now() + backoffMinutes * 60000);
-                console.log(`Rescheduled dead letter event ${event.id} for retry in ${backoffMinutes} minutes`);
+                logger.info(`Rescheduled dead letter event ${event.id} for retry in ${backoffMinutes} minutes`);
             }
 
             await event.save();

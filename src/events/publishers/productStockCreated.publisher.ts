@@ -1,4 +1,5 @@
 import { Publisher, Subjects, ProductStockCreatedEvent } from '@xmoonx/common';
+import { logger } from '../../services/logger.service';
 
 export class ProductStockCreatedPublisher extends Publisher<ProductStockCreatedEvent> {
     subject: Subjects.ProductStockCreated = Subjects.ProductStockCreated;
@@ -14,7 +15,7 @@ export class ProductStockCreatedPublisher extends Publisher<ProductStockCreatedE
             } catch (error) {
                 if (attempt === maxRetries) {
                     // Son denemede de başarısız olursa loglama yap
-                    console.error('Failed to publish event after retries:', error);
+                    logger.error('Failed to publish event after retries:', error);
                     throw error;
                 }
                 await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));

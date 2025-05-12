@@ -13,7 +13,7 @@
     "dist"
   ],
   "peerDependencies": {
-    "@xmoonx/common": "^1.1.118",
+    "@xmoonx/common": "^1.1.120",
     "jaeger-client": "^3.19.0",
     "moment-timezone": "^0.5.45",
     "mongoose": "^7.2.2",
@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "buffer-equal-constant-time": "^1.0.1",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "winston": "^3.17.0"
   }
 }

@@ -1,4 +1,5 @@
 import { Publisher, Subjects, RelationProductLinkUpdatedEvent } from '@xmoonx/common';
+import { logger } from '../../services/logger.service';
 
 export class RelationProductLinkUpdatedPublisher extends Publisher<RelationProductLinkUpdatedEvent> {
     subject: Subjects.RelationProductLinkUpdated = Subjects.RelationProductLinkUpdated;
@@ -14,7 +15,7 @@ export class RelationProductLinkUpdatedPublisher extends Publisher<RelationProdu
             } catch (error) {
                 if (attempt === maxRetries) {
                     // Son denemede de başarısız olursa loglama yap
-                    console.error('Failed to publish event after retries:', error);
+                    logger.error('Failed to publish event after retries:', error);
                     throw error;
                 }
                 await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));

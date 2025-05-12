@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductUpdatedPublisher = void 0;
 const common_1 = require("@xmoonx/common");
+const logger_service_1 = require("../../services/logger.service");
 class ProductUpdatedPublisher extends common_1.Publisher {
     constructor() {
         super(...arguments);
@@ -31,7 +32,7 @@ class ProductUpdatedPublisher extends common_1.Publisher {
                 catch (error) {
                     if (attempt === maxRetries) {
                         // Son denemede de başarısız olursa loglama yap
-                        console.error('Failed to publish event after retries:', error);
+                        logger_service_1.logger.error('Failed to publish event after retries:', error);
                         throw error;
                     }
                     yield new Promise(resolve => setTimeout(resolve, retryDelay * attempt));

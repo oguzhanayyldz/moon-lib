@@ -3,12 +3,17 @@ import { Event, Listener, Subjects } from '@xmoonx/common';
 import { RetryManager } from '../services/retryManager';
 import { createDeadLetterModel } from '../models/deadLetter.schema';
 import mongoose from 'mongoose';
+import { redisWrapper } from '../services/redisWrapper.service';
+import { logger } from '../services/logger.service';
 
+// Mevcut RetryOptions'a yeni özellikler ekle
 interface RetryOptions {
     immediateRetries?: number;
     enableDeadLetter?: boolean;
     maxRetries?: number;
     deadLetterMaxRetries?: number;
+    lockTimeoutSec?: number;      // Yeni: Distributed lock için timeout süresi
+    enableLock?: boolean;         // Yeni: Distributed lock'u etkinleştirme
 }
 
 /**
@@ -17,23 +22,98 @@ interface RetryOptions {
 export abstract class RetryableListener<T extends Event> extends Listener<T> {
     private retryManager: RetryManager;
     private options: Required<RetryOptions>;
+    private connection: mongoose.Connection;
 
-    // Varsayılan seçenekler  
+    // Varsayılan seçenekler - Lock eklendi
     private static readonly DEFAULT_OPTIONS: Required<RetryOptions> = {
         immediateRetries: 3,      // Anında tekrar deneme sayısı
         enableDeadLetter: true,   // Ölü mektup kuyruğunu etkinleştir
         maxRetries: 5,            // Redis'te izlenen toplam deneme sayısı
-        deadLetterMaxRetries: 5   // Ölü mektup kuyruğu için maksimum deneme
+        deadLetterMaxRetries: 5,  // Ölü mektup kuyruğu için maksimum deneme
+        lockTimeoutSec: 30,       // Lock için varsayılan timeout süresi (saniye)
+        enableLock: true          // Varsayılan olarak lock etkin
     };
 
-    constructor (client: Stan, options: RetryOptions = {}) {
+    constructor(client: Stan, options: RetryOptions = {}, connection: mongoose.Connection = mongoose.connection) {
         super(client);
-        this.options = { ...RetryableListener.DEFAULT_OPTIONS, ...options };
-        this.retryManager = new RetryManager({
-            maxRetries: this.options.maxRetries,
-            ttlSeconds: 86400, // 24 saat
-            backoffFactor: 2
+        this.options = {
+            ...RetryableListener.DEFAULT_OPTIONS,
+            ...options
+        };
+        this.retryManager = new RetryManager();
+        this.connection = connection;
+    }
+
+    /**
+     * Distributed lock ile işlem yapmak için yardımcı metod
+     */
+    protected async processWithLock<R>(
+        eventId: string,
+        callback: () => Promise<R>
+    ): Promise<R> {
+        const lockKey = `lock:${this.subject}:${eventId}`;
+        const lockValue = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
+        
+        // Log ekleniyor
+        logger.debug(`Attempting to acquire lock for ${this.subject}:${eventId}`);
+        
+        // Lock'ı almaya çalış - NX ile sadece key yoksa oluşturur
+        const lockAcquired = await this.tryAcquireLock(lockKey, lockValue, this.options.lockTimeoutSec);
+        
+        if (!lockAcquired) {
+            logger.info(`Lock acquisition failed for ${this.subject}:${eventId}`);
+            throw new Error(`Lock acquisition failed for ${this.subject}:${eventId}`);
+        }
+        
+        logger.debug(`Lock acquired for ${this.subject}:${eventId}`);
+        
+        try {
+            const result = await callback();
+            logger.debug(`Process completed with lock for ${this.subject}:${eventId}`);
+            return result;
+        } finally {
+            // İşlem tamamlandığında kilidi serbest bırak
+            await this.releaseLock(lockKey, lockValue);
+            logger.debug(`Lock released for ${this.subject}:${eventId}`);
+        }
+    }
+    
+    /**
+     * Redis'te lock almaya çalışır
+     */
+    private async tryAcquireLock(key: string, value: string, expirySeconds: number): Promise<boolean> {
+        // SET NX (only if not exists) with expiry
+        const redis = redisWrapper.client;
+        const result = await redis.set(key, value, {
+            NX: true,
+            EX: expirySeconds
         });
+        
+        return result === 'OK';
+    }
+    
+    /**
+     * Redis'teki lock'ı kaldırır (sadece kendimizin oluşturduğu kilidi)
+     */
+    private async releaseLock(key: string, expectedValue: string): Promise<void> {
+        const redis = redisWrapper.client;
+        
+        // Lua script to delete key only if it has the expected value
+        const script = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("del", KEYS[1])
+        else
+            return 0
+        end`;
+        
+        try {
+            await redis.eval(script, {
+                keys: [key],
+                arguments: [expectedValue]
+            });
+        } catch (error) {
+            logger.error(`Failed to release lock for key ${key}:`, error);
+        }
     }
 
     /**
@@ -45,6 +125,34 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         const span = this.createTraceSpan(eventType, eventId);
 
         try {
+            // Distributed lock ile işlemi gerçekleştir (etkinse)
+            if (this.options.enableLock) {
+                try {
+                    await this.processWithLock(eventId, async () => {
+                        await this.processEvent(data);
+                        return;
+                    });
+                    
+                    // Başarılı işlemede retry sayacını sıfırla
+                    await this.retryManager.resetRetryCount(eventType, eventId);
+                    span.setTag('success', true);
+                    span.setTag('lock.success', true);
+                    msg.ack();
+                    return;
+                } catch (lockError: any) {
+                    if (lockError.message?.includes('Lock acquisition failed')) {
+                        // Başka bir instance işlemi zaten yapıyor - log ve ack
+                        logger.info(`Event ${eventType}:${eventId} is being processed by another instance`);
+                        span.setTag('lock.conflict', true);
+                        msg.ack(); // Mesajı onaylayalım, başka instance işliyor zaten
+                        return;
+                    }
+                    // Diğer lock hataları için normal exception akışına devam et
+                    throw lockError;
+                }
+            }
+            
+            // Lock etkin değilse normal işleme devam et
             await this.processEvent(data);
             
             // Başarılı işlemede retry sayacını sıfırla
@@ -52,40 +160,41 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             span.setTag('success', true);
             msg.ack();
         } catch (error) {
+            // Mevcut hata işleme kodu...
             span.setTag('error', true);
             span.setTag('error.message', (error as Error).message);
-            console.error(`Error processing ${eventType}:${eventId}:`, error);
+            logger.error(`Error processing ${eventType}:${eventId}:`, error);
 
             // MongoDB duplicate key hatası kontrolü
             const isDuplicateKeyError = this.isDuplicateKeyError(error);
             
             if (isDuplicateKeyError) {
                 // Unique constraint hatası - retry yapmayacağız
-                console.log(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
+                logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
                 span.setTag('error.retry_skipped', true);
                 span.setTag('error.duplicate_key', true);
                 
                 // Mesajı onaylayıp geçiyoruz
                 msg.ack();
             } else {
-                // Diğer hatalar için normal retry işlemi
+                // Diğer hatalar için normal retry işlemi - mevcut kodunuzdaki gibi
                 const retryCount = await this.retryManager.incrementRetryCount(eventType, eventId);
                 span.setTag('retry.count', retryCount);
                 
                 // Hala denenmeli mi kontrol et
                 if (await this.retryManager.shouldRetry(eventType, eventId)) {
-                    console.log(`Redis retry ${retryCount}/${this.options.maxRetries} for ${eventType}:${eventId}`);
+                    logger.info(`Redis retry ${retryCount}/${this.options.maxRetries} for ${eventType}:${eventId}`);
                     span.setTag('retry.scheduled', true);
                     // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
                 } else {
-                    console.log(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
+                    logger.info(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
                     
                     if (this.options.enableDeadLetter) {
                         try {
                             await this.moveToDeadLetterQueue(data, error as Error, retryCount);
                             span.setTag('dead_letter.saved', true);
                         } catch (dlqError) {
-                            console.error('Failed to save to dead letter queue:', dlqError);
+                            logger.error('Failed to save to dead letter queue:', dlqError);
                             span.setTag('dead_letter.error', (dlqError as Error).message);
                         }
                     }
@@ -140,6 +249,12 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
      * İşlenemeyen olayı Dead Letter kuyruğuna taşı
      */
     private async moveToDeadLetterQueue(data: T['data'], error: Error, retryCount: number): Promise<void> {
+        // Bağlantı durumunu kontrol et
+        if (mongoose.connection.readyState !== 1) {
+            logger.error('MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi');
+            return;
+        }
+        
         const deadLetterModel = createDeadLetterModel(mongoose.connection);
         const eventId = this.getEventId(data);
 
@@ -155,7 +270,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             timestamp: new Date()
         }).save();
 
-        console.log(`Event moved to DLQ: ${this.subject}:${eventId}`);
+        logger.info(`Event moved to DLQ: ${this.subject}:${eventId}`);
     }
 
     /**

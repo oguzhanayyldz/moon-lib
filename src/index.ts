@@ -12,6 +12,7 @@ export * from './services/natsWrapper.service';
 export * from './services/tracer.service';
 export * from './services/redisWrapper.service';
 export * from './services/retryManager';
+export * from './services/logger.service';
 
 // Jobs
 export * from './jobs/eventPublisher.job';
@@ -46,6 +47,9 @@ export * from './events/publishers/importImagesFromUrlsPublisher.publisher';
 export * from './events/publishers/productPriceIntegrationUpdated.publisher';
 export * from './events/publishers/productPriceUpdated.publisher';
 export * from './events/publishers/productStockIntegrationUpdated.publisher';
+export * from './events/publishers/productImageIntegrationUpdated.publisher';
+
+export * from './events/retryableListener';
 
 // Model başlatma fonksiyonu
 export const initializeModels = (connection: mongoose.Connection): void => {

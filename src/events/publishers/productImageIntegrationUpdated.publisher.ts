@@ -1,10 +1,10 @@
-import { Publisher, Subjects, ImportImagesFromUrlsEvent } from '@xmoonx/common';
+import { Publisher, Subjects, ProductImageIntegrationUpdatedEvent } from '@xmoonx/common';
 import { logger } from '../../services/logger.service';
 
-export class ImportImagesFromUrlsPublisher extends Publisher<ImportImagesFromUrlsEvent> {
-    subject: Subjects.ImportImagesFromUrls = Subjects.ImportImagesFromUrls;
+export class ProductImageIntegrationUpdatedPublisher extends Publisher<ProductImageIntegrationUpdatedEvent> {
+    subject: Subjects.ProductImageIntegrationUpdated = Subjects.ProductImageIntegrationUpdated
 
-    async publish(data: ImportImagesFromUrlsEvent['data']): Promise<void> {
+    async publish(data: ProductImageIntegrationUpdatedEvent['data']): Promise<void> {
         const maxRetries = 5;
         const retryDelay = 1000; // 1 saniye
         

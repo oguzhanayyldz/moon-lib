@@ -1,5 +1,6 @@
 import nats, { Stan, Subscription } from 'node-nats-streaming';
 import { v4 as uuidv4 } from 'uuid';
+import { logger } from './logger.service';
 
 export class NatsWrapper {
     private _client?: Stan;
@@ -22,12 +23,12 @@ export class NatsWrapper {
             this._client = nats.connect(clusterId, clientId, { url });
 
             this._client.on('connect', () => {
-                console.log('Connected to NATS');
+                logger.info('Connected to NATS');
                 this._isConnected = true;
             });
 
             this._client.on('disconnect', () => {
-                console.log('Disconnected from NATS');
+                logger.info('Disconnected from NATS');
                 this._isConnected = false;
                 this.attemptReconnect(clusterId, clientId, url);
             });
@@ -37,14 +38,14 @@ export class NatsWrapper {
                 this.client!.on('error', (err) => reject(err));
             });
         } catch (error) {
-            console.error('Failed to connect to NATS:', error);
+            logger.error('Failed to connect to NATS:', error);
             this.attemptReconnect(clusterId, clientId, url);
         }
     }
 
     private attemptReconnect(clusterId: string, clientId: string, url: string) {
         setTimeout(() => {
-            console.log('Attempting to reconnect to NATS...');
+            logger.info('Attempting to reconnect to NATS...');
             this.connect(clusterId, clientId, url);
         }, this._reconnectInterval);
     }
