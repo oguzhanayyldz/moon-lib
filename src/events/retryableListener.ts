@@ -34,7 +34,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         enableLock: true          // Varsayılan olarak lock etkin
     };
 
-    constructor(client: Stan, options: RetryOptions = {}, connection: mongoose.Connection = mongoose.connection) {
+    constructor (client: Stan, options: RetryOptions = {}, connection: mongoose.Connection = mongoose.connection) {
         super(client);
         this.options = {
             ...RetryableListener.DEFAULT_OPTIONS,
@@ -53,20 +53,20 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     ): Promise<R> {
         const lockKey = `lock:${this.subject}:${eventId}`;
         const lockValue = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
-        
+
         // Log ekleniyor
         logger.debug(`Attempting to acquire lock for ${this.subject}:${eventId}`);
-        
+
         // Lock'ı almaya çalış - NX ile sadece key yoksa oluşturur
         const lockAcquired = await this.tryAcquireLock(lockKey, lockValue, this.options.lockTimeoutSec);
-        
+
         if (!lockAcquired) {
             logger.info(`Lock acquisition failed for ${this.subject}:${eventId}`);
             throw new Error(`Lock acquisition failed for ${this.subject}:${eventId}`);
         }
-        
+
         logger.debug(`Lock acquired for ${this.subject}:${eventId}`);
-        
+
         try {
             const result = await callback();
             logger.debug(`Process completed with lock for ${this.subject}:${eventId}`);
@@ -77,7 +77,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             logger.debug(`Lock released for ${this.subject}:${eventId}`);
         }
     }
-    
+
     /**
      * Redis'te lock almaya çalışır
      */
@@ -88,16 +88,16 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             NX: true,
             EX: expirySeconds
         });
-        
+
         return result === 'OK';
     }
-    
+
     /**
      * Redis'teki lock'ı kaldırır (sadece kendimizin oluşturduğu kilidi)
      */
     private async releaseLock(key: string, expectedValue: string): Promise<void> {
         const redis = redisWrapper.client;
-        
+
         // Lua script to delete key only if it has the expected value
         const script = `
         if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -105,7 +105,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         else
             return 0
         end`;
-        
+
         try {
             await redis.eval(script, {
                 keys: [key],
@@ -132,7 +132,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                         await this.processEvent(data);
                         return;
                     });
-                    
+
                     // Başarılı işlemede retry sayacını sıfırla
                     await this.retryManager.resetRetryCount(eventType, eventId);
                     span.setTag('success', true);
@@ -151,10 +151,10 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                     throw lockError;
                 }
             }
-            
+
             // Lock etkin değilse normal işleme devam et
             await this.processEvent(data);
-            
+
             // Başarılı işlemede retry sayacını sıfırla
             await this.retryManager.resetRetryCount(eventType, eventId);
             span.setTag('success', true);
@@ -167,20 +167,20 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
 
             // MongoDB duplicate key hatası kontrolü
             const isDuplicateKeyError = this.isDuplicateKeyError(error);
-            
+
             if (isDuplicateKeyError) {
                 // Unique constraint hatası - retry yapmayacağız
                 logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
                 span.setTag('error.retry_skipped', true);
                 span.setTag('error.duplicate_key', true);
-                
+
                 // Mesajı onaylayıp geçiyoruz
                 msg.ack();
             } else {
                 // Diğer hatalar için normal retry işlemi - mevcut kodunuzdaki gibi
                 const retryCount = await this.retryManager.incrementRetryCount(eventType, eventId);
                 span.setTag('retry.count', retryCount);
-                
+
                 // Hala denenmeli mi kontrol et
                 if (await this.retryManager.shouldRetry(eventType, eventId)) {
                     logger.info(`Redis retry ${retryCount}/${this.options.maxRetries} for ${eventType}:${eventId}`);
@@ -188,7 +188,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                     // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
                 } else {
                     logger.info(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
-                    
+
                     if (this.options.enableDeadLetter) {
                         try {
                             await this.moveToDeadLetterQueue(data, error as Error, retryCount);
@@ -198,7 +198,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                             span.setTag('dead_letter.error', (dlqError as Error).message);
                         }
                     }
-                    
+
                     msg.ack();
                 }
             }
@@ -254,7 +254,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             logger.error('MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi');
             return;
         }
-        
+
         const deadLetterModel = createDeadLetterModel(mongoose.connection);
         const eventId = this.getEventId(data);
 
@@ -311,19 +311,130 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     protected abstract processEvent(data: T['data']): Promise<void>;
 
     /**
-     * Hatanın geçici mi kalıcı mı olduğunu belirler
-     */
+ * Hatanın geçici mi kalıcı mı olduğunu belirler
+ * Geçici hatalar için retry yapılmalı, kalıcı hatalar için yapılmamalı
+ */
     protected isTransientError(error: any): boolean {
-        const errorMessage = error?.message?.toLowerCase() || '';
-        return (
-            errorMessage.includes('connection') ||
-            errorMessage.includes('timeout') ||
-            errorMessage.includes('network') ||
-            errorMessage.includes('econnrefused') ||
-            errorMessage.includes('econnreset') ||
-            errorMessage.includes('unavailable') ||
-            errorMessage.includes('temporarily')
-        );
+        try {
+            // Hata mesajı içeriği
+            const errorMessage = (error?.message || '').toLowerCase();
+
+            // HTTP durum kodu (varsa)
+            const statusCode = error?.statusCode || error?.status || error?.code || 0;
+
+            // 1. İstisnai durum kontrolü: İşlemin başarılı olduğu durumlar
+            if (statusCode >= 200 && statusCode < 300) {
+                return false; // Başarılı durum kodları için retry yapma
+            }
+
+            // 2. Kesin geçici hata durumları (retry yapılmalı)
+
+            // a) HTTP 5xx hatalarını geçici olarak değerlendir
+            if (statusCode >= 500 && statusCode < 600) {
+                return true;
+            }
+
+            // b) HTTP 429 (Too Many Requests) - Rate limit
+            if (statusCode === 429) {
+                return true;
+            }
+
+            // c) Bağlantı, timeout ve ağ hataları
+            const transientErrorPatterns = [
+                'connection', 'timeout', 'network', 'econnrefused', 'econnreset',
+                'unavailable', 'temporarily', 'socket hang up', 'ETIMEDOUT',
+                'ECONNABORTED', 'ENOTFOUND', 'request failed', 'failed to fetch',
+                'service unavailable', 'internal server error', 'bad gateway',
+                'gateway timeout', 'too many requests', 'request timeout',
+                'operation timed out', 'aborted', 'quota exceeded', 'try again later',
+                'try later', 'temporary failure', 'status 5', 'status code 5'
+            ];
+
+            if (transientErrorPatterns.some(pattern => errorMessage.includes(pattern))) {
+                return true;
+            }
+
+            // 3. Kesin kalıcı hata durumları (retry yapılmamalı)
+
+            // a) HTTP 4xx hatalarından 429 dışında olanlar kalıcı hatadır
+            if (statusCode >= 400 && statusCode < 500 && statusCode !== 429) {
+                return false;
+            }
+
+            // b) Doğrulama ve kimlik doğrulama hataları
+            const permanentErrorPatterns = [
+                'validation', 'invalid', 'bad request', 'not found', 'forbidden',
+                'unauthorized', 'permission', 'access denied', 'auth failed',
+                'authentication failed', 'expired token', 'invalid token',
+                'missing parameter', 'parameter missing', 'malformed', 'syntax error',
+                'payload too large', 'unprocessable entity', 'unsupported', 'not allowed'
+            ];
+
+            if (permanentErrorPatterns.some(pattern => errorMessage.includes(pattern))) {
+                return false;
+            }
+
+            // 4. Bilinen Error sınıfları için özel kontroller
+
+            // MongoDB bağlantı ve ağ hataları
+            if (error.name === 'MongoNetworkError' || error.name === 'MongoTimeoutError') {
+                return true;
+            }
+
+            // Duplicate key hataları kalıcıdır
+            if (error.name === 'MongoError' && (error.code === 11000 || errorMessage.includes('duplicate'))) {
+                return false;
+            }
+
+            // Axios/Fetch network hataları
+            if (error.name === 'AxiosError' && error.code === 'ECONNABORTED') {
+                return true;
+            }
+
+            // 5. Redis hatalarını değerlendir
+            const redisKeywords = ['redis', 'cache'];
+            if (redisKeywords.some(pattern => errorMessage.includes(pattern))) {
+                // Redis bağlantı hataları geçicidir
+                if (errorMessage.includes('connection') || errorMessage.includes('timeout')) {
+                    return true;
+                }
+            }
+
+            // 6. Beklenmedik hataları değerlendir
+
+            // JavaScript hatalarının çoğu uygulama kodundaki sorunlardır ve genelde kalıcıdır
+            const jsErrors = [
+                'TypeError', 'ReferenceError', 'SyntaxError', 'RangeError',
+                'EvalError', 'URIError'
+            ];
+
+            if (jsErrors.includes(error.name)) {
+                return false; // Kod hatalarını retry yaparak çözemeyiz
+            }
+
+            // Stack trace'de node_modules içerenler genelde uygulama hatalarıdır
+            if (error.stack && error.stack.includes('node_modules') &&
+                !error.stack.includes('node-fetch') &&
+                !error.stack.includes('axios') &&
+                !error.stack.includes('request')) {
+                return false;
+            }
+
+            // 7. Son çare: belirsiz hata
+            // Bilinmeyen veya tanımlanamayan hataları ne yapacağız?
+            // İki strateji olabilir:
+
+            // A) Varsayılan olarak geçici kabul et (daha agresif retry)
+            // return true; 
+
+            // B) Varsayılan olarak kalıcı kabul et (daha konservatif retry)
+            return false;
+
+        } catch (analyzeError) {
+            // Hata analizi sırasında bir hata olursa - en güvenli: retry yapma
+            console.error('Error while analyzing error type:', analyzeError);
+            return false;
+        }
     }
 
     /**
@@ -336,11 +447,11 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             if (error.name === 'MongoError' && (error as any).code === 11000) {
                 return true;
             }
-            
+
             // Hata mesajında duplicate key ifadesi var mı?
-            if (error.message.includes('duplicate key') || 
-                error.message.includes('E11000') || 
-                error.message.includes('duplicate') || 
+            if (error.message.includes('duplicate key') ||
+                error.message.includes('E11000') ||
+                error.message.includes('duplicate') ||
                 error.message.includes('uniqueCode')) {
                 return true;
             }
