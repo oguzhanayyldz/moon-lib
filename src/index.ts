@@ -48,7 +48,7 @@ export * from './events/publishers/productPriceIntegrationUpdated.publisher';
 export * from './events/publishers/productPriceUpdated.publisher';
 export * from './events/publishers/productStockIntegrationUpdated.publisher';
 export * from './events/publishers/productImageIntegrationUpdated.publisher';
-
+export * from './events/publishers/catalogMappingCreated.publisher';
 export * from './events/retryableListener';
 
 // Model başlatma fonksiyonu

@@ -60,6 +60,7 @@ __exportStar(require("./events/publishers/productPriceIntegrationUpdated.publish
 __exportStar(require("./events/publishers/productPriceUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockIntegrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productImageIntegrationUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/catalogMappingCreated.publisher"), exports);
 __exportStar(require("./events/retryableListener"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {

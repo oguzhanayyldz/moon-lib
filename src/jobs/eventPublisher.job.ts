@@ -31,6 +31,7 @@ import { ProductPriceIntegrationUpdatedPublisher } from '../events/publishers/pr
 import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceUpdated.publisher';
 import { ProductStockIntegrationUpdatedPublisher } from '../events/publishers/productStockIntegrationUpdated.publisher';
 import { ProductImageIntegrationUpdatedPublisher } from '../events/publishers/productImageIntegrationUpdated.publisher';
+import { CatalogMappingCreatedPublisher } from '../events/publishers/catalogMappingCreated.publisher';
 import { logger } from '../services/logger.service';
 
 export class EventPublisherJob {
@@ -281,6 +282,10 @@ export class EventPublisherJob {
             case Subjects.ProductImageIntegrationUpdated:
                 await new ProductImageIntegrationUpdatedPublisher(this.natsClient)
                     .publish({ requestId: event.id, ...event.payload });
+                    break;
+            case Subjects.CatalogMappingCreated:
+                await new CatalogMappingCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
                     break;
             default:
                 throw new Error(`Unknown event type: ${event.eventType}`);

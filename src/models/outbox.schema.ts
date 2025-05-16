@@ -30,7 +30,8 @@ import {
     DeleteProductImagesCompletedEvent,
     ProductPriceIntegrationUpdatedEvent,
     ProductPriceUpdatedEvent,
-    ProductStockIntegrationUpdatedEvent
+    ProductStockIntegrationUpdatedEvent,
+    CatalogMappingCreatedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -64,7 +65,7 @@ interface EventPayloadMap {
     [Subjects.ImportImagesFromUrlsCompleted]: ImportImagesFromUrlsCompletedEvent['data'];
     [Subjects.DeleteProductImages]: DeleteProductImagesEvent['data'];
     [Subjects.DeleteProductImagesCompleted]: DeleteProductImagesCompletedEvent['data'];
-    // Özel event için uygun bir tip belirleyin
+    [Subjects.CatalogMappingCreated]: CatalogMappingCreatedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

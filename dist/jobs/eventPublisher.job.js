@@ -41,6 +41,7 @@ const productPriceIntegrationUpdated_publisher_1 = require("../events/publishers
 const productPriceUpdated_publisher_1 = require("../events/publishers/productPriceUpdated.publisher");
 const productStockIntegrationUpdated_publisher_1 = require("../events/publishers/productStockIntegrationUpdated.publisher");
 const productImageIntegrationUpdated_publisher_1 = require("../events/publishers/productImageIntegrationUpdated.publisher");
+const catalogMappingCreated_publisher_1 = require("../events/publishers/catalogMappingCreated.publisher");
 const logger_service_1 = require("../services/logger.service");
 class EventPublisherJob {
     constructor(natsClient, connection) {
@@ -269,6 +270,10 @@ class EventPublisherJob {
                 case common_1.Subjects.ProductImageIntegrationUpdated:
                     yield new productImageIntegrationUpdated_publisher_1.ProductImageIntegrationUpdatedPublisher(this.natsClient)
                         .publish(Object.assign({ requestId: event.id }, event.payload));
+                    break;
+                case common_1.Subjects.CatalogMappingCreated:
+                    yield new catalogMappingCreated_publisher_1.CatalogMappingCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
                     break;
                 default:
                     throw new Error(`Unknown event type: ${event.eventType}`);
