@@ -1,11 +1,17 @@
 import mongoose from 'mongoose';
 import { createOutboxModel } from './models/outbox.schema';
 import { createDeadLetterModel } from './models/deadLetter.schema';
+import { createIntegrationCategoryModel } from './models/integrationCategory.schema';
+import { createIntegrationBrandModel } from './models/integrationBrand.schema';
+import { createIntegrationCategoryAttributesModel } from './models/integrationCategoryAttributes.schema';
 
 // Models
 export * from './models/base/base.schema';
 export * from './models/outbox.schema';
 export * from './models/deadLetter.schema';
+export * from './models/integrationCategory.schema';
+export * from './models/integrationBrand.schema';
+export * from './models/integrationCategoryAttributes.schema';
 
 // Services
 export * from './services/natsWrapper.service';
@@ -56,3 +62,11 @@ export const initializeModels = (connection: mongoose.Connection): void => {
     createOutboxModel(connection);
     createDeadLetterModel(connection);
 };
+
+export const initializeModelsForIntegration = (connection: mongoose.Connection): void => {
+    createOutboxModel(connection);
+    createDeadLetterModel(connection);
+    createIntegrationCategoryModel(connection);
+    createIntegrationBrandModel(connection);
+    createIntegrationCategoryAttributesModel(connection);
+}
