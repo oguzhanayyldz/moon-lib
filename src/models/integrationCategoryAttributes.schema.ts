@@ -5,6 +5,7 @@ import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.sch
 export interface IntegrationCategoryAttributesAttrs extends BaseAttrs {
     integrationName: ResourceName;
     categoryExternalId: string;
+    attributeId: string;
     name: string;
     displayName: string;
     type: string;
@@ -23,6 +24,7 @@ export interface IntegrationCategoryAttributesAttrs extends BaseAttrs {
 export interface IntegrationCategoryAttributesDoc extends BaseDoc {
     integrationName: ResourceName;
     categoryExternalId: string;
+    attributeId: string;
     name: string;
     displayName: string;
     type: string;
@@ -47,6 +49,10 @@ const integrationCategoryAttributesSchemaDefinition = {
         enum: Object.values(ResourceName)
     },
     categoryExternalId: {
+        type: String,
+        required: true
+    },
+    attributeId: {
         type: String,
         required: true
     },
@@ -94,9 +100,9 @@ const integrationCategoryAttributesSchema = createBaseSchema(integrationCategory
 integrationCategoryAttributesSchema.pre<IntegrationCategoryAttributesDoc>('save', async function (next) {
     const shouldUpdateUniqueCode = 
         (!this.deleted && !this.deletionDate && this.uniqueCode.indexOf("base-") !== -1) ||
-        (this.isModified('categoryExternalId') || this.isModified('integrationName') || this.isModified('name'));
+        (this.isModified('categoryExternalId') || this.isModified('integrationName') || this.isModified('attributeId'));
 
-    if (shouldUpdateUniqueCode) this.uniqueCode = createUniqueCode({ integrationName: this.integrationName, categoryExternalId: this.categoryExternalId, name: this.name});
+    if (shouldUpdateUniqueCode) this.uniqueCode = createUniqueCode({ integrationName: this.integrationName, categoryExternalId: this.categoryExternalId, attributeId: this.attributeId});
     next();
 });
 
