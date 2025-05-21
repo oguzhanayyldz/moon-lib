@@ -32,6 +32,7 @@ import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceU
 import { ProductStockIntegrationUpdatedPublisher } from '../events/publishers/productStockIntegrationUpdated.publisher';
 import { ProductImageIntegrationUpdatedPublisher } from '../events/publishers/productImageIntegrationUpdated.publisher';
 import { CatalogMappingCreatedPublisher } from '../events/publishers/catalogMappingCreated.publisher';
+import { ProductIntegrationSyncedPublisher } from '../events/publishers/productIntegrationSynced.publisher';
 import { logger } from '../services/logger.service';
 
 export class EventPublisherJob {
@@ -285,6 +286,10 @@ export class EventPublisherJob {
                     break;
             case Subjects.CatalogMappingCreated:
                 await new CatalogMappingCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
+            case Subjects.ProductIntegrationSynced:
+                await new ProductIntegrationSyncedPublisher(this.natsClient)
                     .publish(event.payload);
                     break;
             default:

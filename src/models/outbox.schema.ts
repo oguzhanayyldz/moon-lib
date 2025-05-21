@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
-import { ProductImageIntegrationUpdatedEvent } from '@xmoonx/common';
 import {
     Subjects,
     ProductCreatedEvent,
@@ -31,7 +30,9 @@ import {
     ProductPriceIntegrationUpdatedEvent,
     ProductPriceUpdatedEvent,
     ProductStockIntegrationUpdatedEvent,
-    CatalogMappingCreatedEvent
+    CatalogMappingCreatedEvent,
+    ProductImageIntegrationUpdatedEvent, 
+    ProductIntegrationSyncedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -66,6 +67,7 @@ interface EventPayloadMap {
     [Subjects.DeleteProductImages]: DeleteProductImagesEvent['data'];
     [Subjects.DeleteProductImagesCompleted]: DeleteProductImagesCompletedEvent['data'];
     [Subjects.CatalogMappingCreated]: CatalogMappingCreatedEvent['data'];
+    [Subjects.ProductIntegrationSynced]: ProductIntegrationSyncedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
