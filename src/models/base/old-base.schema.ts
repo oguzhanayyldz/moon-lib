@@ -43,21 +43,15 @@ const BaseSchema = new mongoose.Schema({
   creationDate: {
     type: Date,
     default: Date.now,
-    required: true,
-    timezone: 'Europe/Istanbul',
-    get: (val: any) => moment(val).tz('Europe/Istanbul').format()
+    required: true
   },
   updatedOn: {
     type: Date,
     default: Date.now,
-    required: true,
-    timezone: 'Europe/Istanbul',
-    get: (val: any) => moment(val).tz('Europe/Istanbul').format()
+    required: true
   },
   deletionDate: {
-    type: Date,
-    timezone: 'Europe/Istanbul',
-    get: (val: any) => val ? moment(val).tz('Europe/Istanbul').format(): undefined
+    type: Date
   },
   deleted: {
       type: Boolean,
