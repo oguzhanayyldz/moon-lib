@@ -32,7 +32,8 @@ import {
     ProductStockIntegrationUpdatedEvent,
     CatalogMappingCreatedEvent,
     ProductImageIntegrationUpdatedEvent, 
-    ProductIntegrationSyncedEvent
+    ProductIntegrationSyncedEvent,
+    OrderIntegrationCreatedEvent
 } from "@xmoonx/common";
 
 // Event tiplerini tanımla
@@ -68,6 +69,7 @@ interface EventPayloadMap {
     [Subjects.DeleteProductImagesCompleted]: DeleteProductImagesCompletedEvent['data'];
     [Subjects.CatalogMappingCreated]: CatalogMappingCreatedEvent['data'];
     [Subjects.ProductIntegrationSynced]: ProductIntegrationSyncedEvent['data'];
+    [Subjects.OrderIntegrationCreated]: OrderIntegrationCreatedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

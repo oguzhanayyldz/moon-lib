@@ -19,6 +19,7 @@ export * from './services/tracer.service';
 export * from './services/redisWrapper.service';
 export * from './services/retryManager';
 export * from './services/logger.service';
+export * from './services/integrationRouter.service';
 
 // Jobs
 export * from './jobs/eventPublisher.job';
@@ -56,6 +57,7 @@ export * from './events/publishers/productPriceUpdated.publisher';
 export * from './events/publishers/productStockIntegrationUpdated.publisher';
 export * from './events/publishers/productImageIntegrationUpdated.publisher';
 export * from './events/publishers/catalogMappingCreated.publisher';
+export * from './events/publishers/orderIntegrationCreated.publisher';
 export * from './events/retryableListener';
 
 // Model başlatma fonksiyonu
