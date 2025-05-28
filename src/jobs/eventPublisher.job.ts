@@ -35,6 +35,8 @@ import { CatalogMappingCreatedPublisher } from '../events/publishers/catalogMapp
 import { ProductIntegrationSyncedPublisher } from '../events/publishers/productIntegrationSynced.publisher';
 import { OrderIntegrationCreatedPublisher } from '../events/publishers/orderIntegrationCreated.publisher';
 import { logger } from '../services/logger.service';
+import { IntegrationCreatedPublisher } from '../events/publishers/integrationCreated.publisher';
+import { UserIntegrationSettingsPublisher } from '../events/publishers/userIntegrationSettings.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -297,6 +299,14 @@ export class EventPublisherJob {
                 await new OrderIntegrationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
                     break;
+            case Subjects.IntegrationCreated:
+                await new IntegrationCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.UserIntegrationSettings:
+                await new UserIntegrationSettingsPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
             default:
                 throw new Error(`Unknown event type: ${event.eventType}`);
         }

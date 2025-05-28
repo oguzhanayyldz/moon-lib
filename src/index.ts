@@ -59,6 +59,8 @@ export * from './events/publishers/productImageIntegrationUpdated.publisher';
 export * from './events/publishers/catalogMappingCreated.publisher';
 export * from './events/publishers/orderIntegrationCreated.publisher';
 export * from './events/retryableListener';
+export * from './events/publishers/integrationCreated.publisher';
+export * from './events/publishers/userIntegrationSettings.publisher';
 
 // Model başlatma fonksiyonu
 export const initializeModels = (connection: mongoose.Connection): void => {
