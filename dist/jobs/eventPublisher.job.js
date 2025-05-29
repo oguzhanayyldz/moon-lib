@@ -42,7 +42,11 @@ const productPriceUpdated_publisher_1 = require("../events/publishers/productPri
 const productStockIntegrationUpdated_publisher_1 = require("../events/publishers/productStockIntegrationUpdated.publisher");
 const productImageIntegrationUpdated_publisher_1 = require("../events/publishers/productImageIntegrationUpdated.publisher");
 const catalogMappingCreated_publisher_1 = require("../events/publishers/catalogMappingCreated.publisher");
+const productIntegrationSynced_publisher_1 = require("../events/publishers/productIntegrationSynced.publisher");
+const orderIntegrationCreated_publisher_1 = require("../events/publishers/orderIntegrationCreated.publisher");
 const logger_service_1 = require("../services/logger.service");
+const integrationCreated_publisher_1 = require("../events/publishers/integrationCreated.publisher");
+const userIntegrationSettings_publisher_1 = require("../events/publishers/userIntegrationSettings.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -273,6 +277,22 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.CatalogMappingCreated:
                     yield new catalogMappingCreated_publisher_1.CatalogMappingCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.ProductIntegrationSynced:
+                    yield new productIntegrationSynced_publisher_1.ProductIntegrationSyncedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.OrderIntegrationCreated:
+                    yield new orderIntegrationCreated_publisher_1.OrderIntegrationCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.IntegrationCreated:
+                    yield new integrationCreated_publisher_1.IntegrationCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.UserIntegrationSettings:
+                    yield new userIntegrationSettings_publisher_1.UserIntegrationSettingsPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

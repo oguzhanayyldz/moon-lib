@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { ProductImageIntegrationUpdatedEvent } from '@xmoonx/common';
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent } from "@xmoonx/common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, UserIntegrationSettingsEvent } from "@xmoonx/common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -33,6 +32,10 @@ interface EventPayloadMap {
     [Subjects.DeleteProductImages]: DeleteProductImagesEvent['data'];
     [Subjects.DeleteProductImagesCompleted]: DeleteProductImagesCompletedEvent['data'];
     [Subjects.CatalogMappingCreated]: CatalogMappingCreatedEvent['data'];
+    [Subjects.ProductIntegrationSynced]: ProductIntegrationSyncedEvent['data'];
+    [Subjects.OrderIntegrationCreated]: OrderIntegrationCreatedEvent['data'];
+    [Subjects.UserIntegrationSettings]: UserIntegrationSettingsEvent['data'];
+    [Subjects.IntegrationCreated]: IntegrationCreatedEvent['data'];
 }
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;

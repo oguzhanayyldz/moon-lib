@@ -41,33 +41,23 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createBaseSchema = createBaseSchema;
 const mongoose_1 = __importStar(require("mongoose"));
 const mongoose_update_if_current_1 = require("mongoose-update-if-current");
 const uuid_1 = require("uuid");
-const moment_timezone_1 = __importDefault(require("moment-timezone"));
 const common_1 = require("@xmoonx/common");
 function createBaseSchema(schemaDefinition = {}) {
     const baseSchema = new mongoose_1.Schema(Object.assign({ uuid: { type: String }, creationDate: {
             type: Date,
             default: Date.now,
-            required: true,
-            timezone: 'Europe/Istanbul',
-            get: (val) => (0, moment_timezone_1.default)(val).tz('Europe/Istanbul').format()
+            required: true
         }, updatedOn: {
             type: Date,
             default: Date.now,
-            required: true,
-            timezone: 'Europe/Istanbul',
-            get: (val) => (0, moment_timezone_1.default)(val).tz('Europe/Istanbul').format()
+            required: true
         }, deletionDate: {
-            type: Date,
-            timezone: 'Europe/Istanbul',
-            get: (val) => val ? (0, moment_timezone_1.default)(val).tz('Europe/Istanbul').format() : undefined
+            type: Date
         }, deleted: { type: Boolean }, uniqueCode: { type: String, unique: true }, isTemporary: { type: Boolean }, deletedBy: {
             type: {
                 entity: {
