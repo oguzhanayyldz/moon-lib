@@ -249,13 +249,13 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
      * İşlenemeyen olayı Dead Letter kuyruğuna taşı
      */
     private async moveToDeadLetterQueue(data: T['data'], error: Error, retryCount: number): Promise<void> {
-        // Bağlantı durumunu kontrol et
-        if (mongoose.connection.readyState !== 1) {
-            logger.error('MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi');
+        // Mikroservis özelinde bağlantı durumunu kontrol et
+        if (this.connection.readyState !== 1) {
+            logger.error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
             return;
         }
 
-        const deadLetterModel = createDeadLetterModel(mongoose.connection);
+        const deadLetterModel = createDeadLetterModel(this.connection);
         const eventId = this.getEventId(data);
 
         await deadLetterModel.build({
