@@ -37,6 +37,7 @@ import { OrderIntegrationCreatedPublisher } from '../events/publishers/orderInte
 import { logger } from '../services/logger.service';
 import { IntegrationCreatedPublisher } from '../events/publishers/integrationCreated.publisher';
 import { UserIntegrationSettingsPublisher } from '../events/publishers/userIntegrationSettings.publisher';
+import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/orderIntegrationStatusUpdated.publisher';
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye
@@ -297,7 +298,7 @@ export class EventPublisherJob {
                     break;
             case Subjects.OrderIntegrationCreated:
                 await new OrderIntegrationCreatedPublisher(this.natsClient)
-                    .publish(event.payload);
+                    .publish({ requestId: event.id, ...event.payload });
                     break;
             case Subjects.IntegrationCreated:
                 await new IntegrationCreatedPublisher(this.natsClient)
@@ -306,6 +307,10 @@ export class EventPublisherJob {
             case Subjects.UserIntegrationSettings:
                 await new UserIntegrationSettingsPublisher(this.natsClient)
                     .publish(event.payload);
+                break;
+            case Subjects.OrderIntegrationStatusUpdated:
+                await new OrderIntegrationStatusUpdatedPublisher(this.natsClient)
+                    .publish({ requestId: event.id, ...event.payload });
                 break;
             default:
                 throw new Error(`Unknown event type: ${event.eventType}`);
