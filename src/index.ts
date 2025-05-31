@@ -4,6 +4,7 @@ import { createDeadLetterModel } from './models/deadLetter.schema';
 import { createIntegrationCategoryModel } from './models/integrationCategory.schema';
 import { createIntegrationBrandModel } from './models/integrationBrand.schema';
 import { createIntegrationCategoryAttributesModel } from './models/integrationCategoryAttributes.schema';
+import { createIntegrationRequestLogModel } from './models/integrationRequestLog.schema';
 
 // Models
 export * from './models/base/base.schema';
@@ -12,6 +13,7 @@ export * from './models/deadLetter.schema';
 export * from './models/integrationCategory.schema';
 export * from './models/integrationBrand.schema';
 export * from './models/integrationCategoryAttributes.schema';
+export * from './models/integrationRequestLog.schema';
 
 // Services
 export * from './services/natsWrapper.service';
@@ -20,6 +22,7 @@ export * from './services/redisWrapper.service';
 export * from './services/retryManager';
 export * from './services/logger.service';
 export * from './services/integrationRouter.service';
+export * from './services/integrationRequestLog.service';
 
 // Jobs
 export * from './jobs/eventPublisher.job';
@@ -74,4 +77,5 @@ export const initializeModelsForIntegration = (connection: mongoose.Connection):
     createIntegrationCategoryModel(connection);
     createIntegrationBrandModel(connection);
     createIntegrationCategoryAttributesModel(connection);
+    createIntegrationRequestLogModel(connection);
 }
