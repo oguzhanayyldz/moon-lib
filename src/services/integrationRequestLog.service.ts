@@ -118,19 +118,53 @@ export class IntegrationRequestLogService {
         userId: string, 
         integrationName?: ResourceName,
         page: number = 1,
-        limit: number = 50
+        limit: number = 50,
+        sortField: string = 'requestTime',
+        sortOrder: string = 'desc',
+        filters?: {
+            method?: string;
+            success?: boolean;
+            search?: string;
+            startDate?: Date;
+            endDate?: Date;
+        }
     ) {
         try {
             const query: any = { userId };
+            
             if (integrationName) {
                 query.integrationName = integrationName;
             }
+            
+            if (filters?.method) {
+                query.method = filters.method;
+            }
+            
+            if (filters?.success !== undefined) {
+                query.success = filters.success;
+            }
+            
+            if (filters?.search) {
+                query.$or = [
+                    { endpoint: { $regex: filters.search, $options: 'i' } },
+                    { 'metadata.description': { $regex: filters.search, $options: 'i' } }
+                ];
+            }
+
+            // Tarih aralığı filtresi
+            if (filters?.startDate || filters?.endDate) {
+                query.requestTime = {};
+                if (filters.startDate) query.requestTime.$gte = filters.startDate;
+                if (filters.endDate) query.requestTime.$lte = filters.endDate;
+            }
 
             const skip = (page - 1) * limit;
+            const sortObj: any = {};
+            sortObj[sortField] = sortOrder === 'asc' ? 1 : -1;
             
             const [logs, total] = await Promise.all([
                 this.IntegrationRequestLogModel.find(query)
-                    .sort({ requestTime: -1 })
+                    .sort(sortObj)
                     .skip(skip)
                     .limit(limit)
                     .lean(),
@@ -426,6 +460,9 @@ export class IntegrationRequestLogService {
         oldestLog?: Date;
         newestLog?: Date;
         sizeEstimateKB: number;
+        totalSize: number;
+        averageResponseTime: number;
+        todayLogsCount: number;
     }> {
         try {
             const query: any = {};
@@ -433,11 +470,24 @@ export class IntegrationRequestLogService {
                 query.userId = userId;
             }
             
+            // Bugün için tarih aralığı oluştur (gün başlangıcından itibaren)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Bugünkü loglar için query
+            const todayQuery = {
+                ...query,
+                requestTime: { $gte: today }
+            };
+            
             const [
                 totalLogs,
                 byIntegrationStats,
                 oldestLog,
-                newestLog
+                newestLog,
+                sizeStats,
+                averageResponseTimeStats,
+                todayLogsCount
             ] = await Promise.all([
                 this.IntegrationRequestLogModel.countDocuments(query),
                 this.IntegrationRequestLogModel.aggregate([
@@ -447,7 +497,44 @@ export class IntegrationRequestLogService {
                 this.IntegrationRequestLogModel.findOne(query, { requestTime: 1 })
                     .sort({ requestTime: 1 }).lean(),
                 this.IntegrationRequestLogModel.findOne(query, { requestTime: 1 })
-                    .sort({ requestTime: -1 }).lean()
+                    .sort({ requestTime: -1 }).lean(),
+                this.IntegrationRequestLogModel.aggregate([
+                    { $match: query },
+                    { 
+                        $project: {
+                            requestSize: { 
+                                $cond: [
+                                    '$requestBody',
+                                    { $bsonSize: '$requestBody' },
+                                    0
+                                ] 
+                            },
+                            responseSize: { 
+                                $cond: [
+                                    '$responseBody',
+                                    { $bsonSize: '$responseBody' },
+                                    0
+                                ] 
+                            }
+                        } 
+                    },
+                    { 
+                        $group: { 
+                            _id: null, 
+                            totalSize: { $sum: { $add: ['$requestSize', '$responseSize'] } } 
+                        } 
+                    }
+                ]),
+                this.IntegrationRequestLogModel.aggregate([
+                    { $match: { ...query, duration: { $exists: true, $ne: null } } },
+                    { 
+                        $group: { 
+                            _id: null, 
+                            averageDuration: { $avg: '$duration' } 
+                        } 
+                    }
+                ]),
+                this.IntegrationRequestLogModel.countDocuments(todayQuery)
             ]);
             
             const byIntegration: Record<string, number> = {};
@@ -455,15 +542,26 @@ export class IntegrationRequestLogService {
                 byIntegration[stat._id] = stat.count;
             });
             
+            // Gerçek toplam boyutu hesapla, yoksa tahmin et
+            const totalSize = sizeStats && sizeStats[0] ? sizeStats[0].totalSize : 0;
+            
             // Rough size estimate (each document ~2-5KB average)
-            const sizeEstimateKB = totalLogs * 3;
+            const sizeEstimateKB = totalSize > 0 ? Math.round(totalSize / 1024) : totalLogs * 3;
+            
+            // Ortalama yanıt süresini hesapla
+            const averageResponseTime = averageResponseTimeStats && averageResponseTimeStats[0] 
+                ? Math.round(averageResponseTimeStats[0].averageDuration)
+                : 0;
             
             return {
                 totalLogs,
                 byIntegration,
                 oldestLog: oldestLog?.requestTime,
                 newestLog: newestLog?.requestTime,
-                sizeEstimateKB
+                sizeEstimateKB,
+                totalSize,
+                averageResponseTime,
+                todayLogsCount
             };
         } catch (error) {
             logger.error('Error fetching integration log statistics:', error);

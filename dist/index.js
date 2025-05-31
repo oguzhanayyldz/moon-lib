@@ -20,6 +20,7 @@ const deadLetter_schema_1 = require("./models/deadLetter.schema");
 const integrationCategory_schema_1 = require("./models/integrationCategory.schema");
 const integrationBrand_schema_1 = require("./models/integrationBrand.schema");
 const integrationCategoryAttributes_schema_1 = require("./models/integrationCategoryAttributes.schema");
+const integrationRequestLog_schema_1 = require("./models/integrationRequestLog.schema");
 // Models
 __exportStar(require("./models/base/base.schema"), exports);
 __exportStar(require("./models/outbox.schema"), exports);
@@ -27,6 +28,7 @@ __exportStar(require("./models/deadLetter.schema"), exports);
 __exportStar(require("./models/integrationCategory.schema"), exports);
 __exportStar(require("./models/integrationBrand.schema"), exports);
 __exportStar(require("./models/integrationCategoryAttributes.schema"), exports);
+__exportStar(require("./models/integrationRequestLog.schema"), exports);
 // Services
 __exportStar(require("./services/natsWrapper.service"), exports);
 __exportStar(require("./services/tracer.service"), exports);
@@ -34,6 +36,7 @@ __exportStar(require("./services/redisWrapper.service"), exports);
 __exportStar(require("./services/retryManager"), exports);
 __exportStar(require("./services/logger.service"), exports);
 __exportStar(require("./services/integrationRouter.service"), exports);
+__exportStar(require("./services/integrationRequestLog.service"), exports);
 // Jobs
 __exportStar(require("./jobs/eventPublisher.job"), exports);
 __exportStar(require("./jobs/deadLetterProcessor.job"), exports);
@@ -85,5 +88,6 @@ const initializeModelsForIntegration = (connection) => {
     (0, integrationCategory_schema_1.createIntegrationCategoryModel)(connection);
     (0, integrationBrand_schema_1.createIntegrationBrandModel)(connection);
     (0, integrationCategoryAttributes_schema_1.createIntegrationCategoryAttributesModel)(connection);
+    (0, integrationRequestLog_schema_1.createIntegrationRequestLogModel)(connection);
 };
 exports.initializeModelsForIntegration = initializeModelsForIntegration;
