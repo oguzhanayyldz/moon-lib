@@ -47,6 +47,7 @@ const orderIntegrationCreated_publisher_1 = require("../events/publishers/orderI
 const logger_service_1 = require("../services/logger.service");
 const integrationCreated_publisher_1 = require("../events/publishers/integrationCreated.publisher");
 const userIntegrationSettings_publisher_1 = require("../events/publishers/userIntegrationSettings.publisher");
+const orderIntegrationStatusUpdated_publisher_1 = require("../events/publishers/orderIntegrationStatusUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -285,7 +286,7 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.OrderIntegrationCreated:
                     yield new orderIntegrationCreated_publisher_1.OrderIntegrationCreatedPublisher(this.natsClient)
-                        .publish(event.payload);
+                        .publish(Object.assign({ requestId: event.id }, event.payload));
                     break;
                 case common_1.Subjects.IntegrationCreated:
                     yield new integrationCreated_publisher_1.IntegrationCreatedPublisher(this.natsClient)
@@ -294,6 +295,10 @@ class EventPublisherJob {
                 case common_1.Subjects.UserIntegrationSettings:
                     yield new userIntegrationSettings_publisher_1.UserIntegrationSettingsPublisher(this.natsClient)
                         .publish(event.payload);
+                    break;
+                case common_1.Subjects.OrderIntegrationStatusUpdated:
+                    yield new orderIntegrationStatusUpdated_publisher_1.OrderIntegrationStatusUpdatedPublisher(this.natsClient)
+                        .publish(Object.assign({ requestId: event.id }, event.payload));
                     break;
                 default:
                     throw new Error(`Unknown event type: ${event.eventType}`);

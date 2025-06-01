@@ -76,6 +76,7 @@ __exportStar(require("./events/publishers/orderIntegrationCreated.publisher"), e
 __exportStar(require("./events/retryableListener"), exports);
 __exportStar(require("./events/publishers/integrationCreated.publisher"), exports);
 __exportStar(require("./events/publishers/userIntegrationSettings.publisher"), exports);
+__exportStar(require("./events/publishers/orderIntegrationStatusUpdated.publisher"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);
