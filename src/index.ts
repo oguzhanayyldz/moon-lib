@@ -24,6 +24,9 @@ export * from './services/logger.service';
 export * from './services/integrationRouter.service';
 export * from './services/integrationRequestLog.service';
 
+// Utils
+export * from './utils/optimisticLocking.util';
+
 // Jobs
 export * from './jobs/eventPublisher.job';
 export * from './jobs/deadLetterProcessor.job';
