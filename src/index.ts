@@ -26,6 +26,7 @@ export * from './services/integrationRequestLog.service';
 
 // Utils
 export * from './utils/optimisticLocking.util';
+export * from './utils/typeGuards.util';
 
 // Jobs
 export * from './jobs/eventPublisher.job';

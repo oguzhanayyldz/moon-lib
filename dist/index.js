@@ -39,6 +39,7 @@ __exportStar(require("./services/integrationRouter.service"), exports);
 __exportStar(require("./services/integrationRequestLog.service"), exports);
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
+__exportStar(require("./utils/typeGuards.util"), exports);
 // Jobs
 __exportStar(require("./jobs/eventPublisher.job"), exports);
 __exportStar(require("./jobs/deadLetterProcessor.job"), exports);

@@ -14,6 +14,7 @@ export * from './services/logger.service';
 export * from './services/integrationRouter.service';
 export * from './services/integrationRequestLog.service';
 export * from './utils/optimisticLocking.util';
+export * from './utils/typeGuards.util';
 export * from './jobs/eventPublisher.job';
 export * from './jobs/deadLetterProcessor.job';
 export * from './events/publishers/userCreated.publisher';
