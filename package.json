@@ -6,19 +6,23 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "test": "./dist/index.test.js",
+      "test": "./dist-test/index.test.js",
       "types": "./dist/index.d.ts", 
       "default": "./dist/index.js"
     }
   },
   "scripts": {
     "clean": "rm -rf ./dist && rm -f tsconfig.tsbuildinfo",
+    "clean:test": "rm -rf ./dist-test && rm -f tsconfig.test.tsbuildinfo",
     "prebuild": "npm run clean",
+    "prebuild:test": "npm run clean:test",
     "build": "tsc",
-    "build:test": "tsc --project tsconfig.test.json"
+    "build:test": "tsc --project tsconfig.test.json",
+    "build:all": "npm run build && npm run build:test"
   },
   "files": [
-    "dist"
+    "dist",
+    "dist-test"
   ],
   "peerDependencies": {
     "jaeger-client": "^3.19.0",

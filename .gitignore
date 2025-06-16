@@ -1,5 +1,8 @@
 node_modules
 dist
 ./dist
+dist-test
+./dist-test
 tsconfig.tsbuildinfo
+tsconfig.test.tsbuildinfo
 .DS_Store
