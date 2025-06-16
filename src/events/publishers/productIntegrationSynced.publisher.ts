@@ -1,4 +1,4 @@
-import { Publisher, Subjects, ProductIntegrationSyncedEvent } from '@xmoonx/common';
+import { Publisher, Subjects, ProductIntegrationSyncedEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class ProductIntegrationSyncedPublisher extends Publisher<ProductIntegrationSyncedEvent> {

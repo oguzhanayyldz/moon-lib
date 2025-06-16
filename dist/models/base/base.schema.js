@@ -46,7 +46,7 @@ exports.createBaseSchema = createBaseSchema;
 const mongoose_1 = __importStar(require("mongoose"));
 const mongoose_update_if_current_1 = require("mongoose-update-if-current");
 const uuid_1 = require("uuid");
-const common_1 = require("@xmoonx/common");
+const common_1 = require("../../common");
 function createBaseSchema(schemaDefinition = {}) {
     const baseSchema = new mongoose_1.Schema(Object.assign({ uuid: { type: String }, creationDate: {
             type: Date,

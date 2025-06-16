@@ -1,5 +1,5 @@
 import mongoose, { Document, Model } from "mongoose";
-import { SortType } from '@xmoonx/common';
+import { SortType } from '../../common';
 export interface BaseAttrs {
     id?: string;
     _id?: string;
@@ -61,9 +61,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
         transform(doc: mongoose.Document<unknown, {}, mongoose.FlatRecord<{
             creationDate: Date;
             updatedOn: Date;
+            deleted?: boolean | undefined;
             uuid?: string | undefined;
             deletionDate?: Date | undefined;
-            deleted?: boolean | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
@@ -75,9 +75,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
         }>> & mongoose.FlatRecord<{
             creationDate: Date;
             updatedOn: Date;
+            deleted?: boolean | undefined;
             uuid?: string | undefined;
             deletionDate?: Date | undefined;
-            deleted?: boolean | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
@@ -93,9 +93,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
 }, {
     creationDate: Date;
     updatedOn: Date;
+    deleted?: boolean | undefined;
     uuid?: string | undefined;
     deletionDate?: Date | undefined;
-    deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
@@ -107,9 +107,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
 }, mongoose.Document<unknown, {}, mongoose.FlatRecord<{
     creationDate: Date;
     updatedOn: Date;
+    deleted?: boolean | undefined;
     uuid?: string | undefined;
     deletionDate?: Date | undefined;
-    deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
@@ -121,9 +121,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
 }>> & mongoose.FlatRecord<{
     creationDate: Date;
     updatedOn: Date;
+    deleted?: boolean | undefined;
     uuid?: string | undefined;
     deletionDate?: Date | undefined;
-    deleted?: boolean | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {

@@ -2,7 +2,7 @@ import mongoose, { Document, Model, Query, Schema } from "mongoose";
 import { updateIfCurrentPlugin } from "mongoose-update-if-current";
 import { v4 as uuidv4 } from 'uuid';
 import moment from "moment-timezone";
-import { generateRandomString, SortType, getRefDataId } from '@xmoonx/common';
+import { generateRandomString, SortType, getRefDataId } from '../../common';
 
 export interface BaseAttrs {
     id?: string;

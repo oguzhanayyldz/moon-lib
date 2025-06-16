@@ -1,4 +1,4 @@
-import { Publisher, Subjects, CombinationUpdatedEvent } from '@xmoonx/common';
+import { Publisher, Subjects, CombinationUpdatedEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class CombinationUpdatedPublisher extends Publisher<CombinationUpdatedEvent> {

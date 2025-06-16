@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { createUniqueCode, ResourceName } from '@xmoonx/common';
+import { createUniqueCode, ResourceName } from '../common';
 import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
 
 export interface IntegrationCategoryAttributesAttrs extends BaseAttrs {

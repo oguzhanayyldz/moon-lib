@@ -1,5 +1,5 @@
 import { IntegrationRequestLogAttrs, IntegrationRequestLogDoc, IntegrationRequestLogModel } from '../models/integrationRequestLog.schema';
-import { ResourceName } from '@xmoonx/common';
+import { ResourceName } from '../common';
 import { logger } from './logger.service';
 import mongoose from 'mongoose';
 

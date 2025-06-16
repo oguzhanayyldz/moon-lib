@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createOutboxModel = createOutboxModel;
 const mongoose_1 = __importDefault(require("mongoose"));
 const base_schema_1 = require("./base/base.schema");
-const common_1 = require("@xmoonx/common");
+const common_1 = require("../common");
 // Schema tanımı
 const outboxSchemaDefination = {
     eventType: { type: String, required: true },

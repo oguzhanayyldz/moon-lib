@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { Stan } from 'node-nats-streaming';
-import { Subjects } from '@xmoonx/common';
+import { Subjects } from '../common/';
 import { createOutboxModel, OutboxModel } from '../models/outbox.schema';
 import { ProductCreatedPublisher } from '../events/publishers/productCreated.publisher';
 import { ProductUpdatedPublisher } from '../events/publishers/productUpdated.publisher';
@@ -38,6 +38,7 @@ import { logger } from '../services/logger.service';
 import { IntegrationCreatedPublisher } from '../events/publishers/integrationCreated.publisher';
 import { UserIntegrationSettingsPublisher } from '../events/publishers/userIntegrationSettings.publisher';
 import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/orderIntegrationStatusUpdated.publisher';
+
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 5000; // 5 saniye

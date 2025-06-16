@@ -1,5 +1,5 @@
 import { Message, Stan } from 'node-nats-streaming';
-import { Event, Listener, Subjects } from '@xmoonx/common';
+import { Event, Listener } from '../common';
 import { RetryManager } from '../services/retryManager';
 import { createDeadLetterModel } from '../models/deadLetter.schema';
 import mongoose from 'mongoose';

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { ResourceName } from '@xmoonx/common';
+import { ResourceName } from '../common';
 import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
 
 export interface IntegrationRequestLogAttrs extends BaseAttrs {

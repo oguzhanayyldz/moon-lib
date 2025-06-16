@@ -1,4 +1,4 @@
-import { Publisher, Subjects, CatalogMappingCreatedEvent } from '@xmoonx/common';
+import { Publisher, Subjects, CatalogMappingCreatedEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class CatalogMappingCreatedPublisher extends Publisher<CatalogMappingCreatedEvent> {

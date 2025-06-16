@@ -1,4 +1,4 @@
-import { Publisher, Subjects, OrderCreatedEvent } from '@xmoonx/common';
+import { Publisher, Subjects, OrderCreatedEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class OrderCreatedPublisher extends Publisher<OrderCreatedEvent> {

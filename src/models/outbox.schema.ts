@@ -37,7 +37,7 @@ import {
     IntegrationCreatedEvent,
     UserIntegrationSettingsEvent,
     OrderIntegrationStatusUpdatedEvent
-} from "@xmoonx/common";
+} from "../common";
 
 // Event tiplerini tanımla
 interface EventPayloadMap {

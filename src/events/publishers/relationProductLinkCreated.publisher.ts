@@ -1,4 +1,4 @@
-import { Publisher, Subjects, RelationProductLinkCreatedEvent } from '@xmoonx/common';
+import { Publisher, Subjects, RelationProductLinkCreatedEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class RelationProductLinkCreatedPublisher extends Publisher<RelationProductLinkCreatedEvent> {

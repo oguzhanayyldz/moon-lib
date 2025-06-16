@@ -1,4 +1,4 @@
-import { IntegrationCommandEvent, Publisher, Subjects } from '@xmoonx/common';
+import { IntegrationCommandEvent, Publisher, Subjects } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class IntegrationCommandPublisher extends Publisher<IntegrationCommandEvent> {

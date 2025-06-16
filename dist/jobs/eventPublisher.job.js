@@ -10,7 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventPublisherJob = void 0;
-const common_1 = require("@xmoonx/common");
+const common_1 = require("../common/");
 const outbox_schema_1 = require("../models/outbox.schema");
 const productCreated_publisher_1 = require("../events/publishers/productCreated.publisher");
 const productUpdated_publisher_1 = require("../events/publishers/productUpdated.publisher");

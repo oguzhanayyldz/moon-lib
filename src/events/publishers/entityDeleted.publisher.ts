@@ -1,4 +1,4 @@
-import { Publisher, Subjects, EntityDeletedEvent } from '@xmoonx/common';
+import { Publisher, Subjects, EntityDeletedEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class EntityDeletedPublisher extends Publisher<EntityDeletedEvent> {

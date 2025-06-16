@@ -1,4 +1,4 @@
-import { Publisher, Subjects, ImportImagesFromUrlsEvent } from '@xmoonx/common';
+import { Publisher, Subjects, ImportImagesFromUrlsEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class ImportImagesFromUrlsPublisher extends Publisher<ImportImagesFromUrlsEvent> {

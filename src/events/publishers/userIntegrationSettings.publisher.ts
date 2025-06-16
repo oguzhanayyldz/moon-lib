@@ -1,4 +1,4 @@
-import { Publisher, Subjects, UserIntegrationSettingsEvent } from '@xmoonx/common';
+import { Publisher, Subjects, UserIntegrationSettingsEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class UserIntegrationSettingsPublisher extends Publisher<UserIntegrationSettingsEvent> {

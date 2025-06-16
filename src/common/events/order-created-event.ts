@@ -1,0 +1,172 @@
+import { CurrencyCode } from "../types/currency-code";
+import { ResourceName } from "../types/resourceName";
+import { Subjects } from "./subjects";
+import { OrderStatus } from "./types/order-status";
+import { OrderType } from "./types/order-type";
+import { PaymentType } from "./types/payment-type";
+import { ReturnStatus } from "./types/return-status";
+
+export interface OrderCreatedEvent {
+    subject: Subjects.OrderCreated;
+    data: {
+        list: OrderCreated[];
+    };
+}
+
+export interface OrderCreated {
+    id: string;
+    uuid: string;
+    user: string;
+    version: number;
+    customer?: {
+        id: string;
+        uuid: string;
+        version: number;
+        name: string;
+        surname: string;
+        code?: string;
+        email: string;
+        gender?: string;
+        disctrict?: string;
+        country?: string;
+        postalCode?: string;
+        identityNumber?: string;
+        taxNumber?: string;
+        taxOffice?: string;
+        fields?: Record<string, any>;
+    };
+    payment?: {
+        id: string;
+        uuid: string;
+        version: number;
+        bankName?: string;
+        bankCode?: string;
+        paymentCode?: string;
+        paymentType?: PaymentType;
+        date?: Date;
+        fields?: Record<string, any>;
+    };
+    orderCargo?: {
+        id: string;
+        uuid: string;
+        version: number;
+        name: string;
+        shippingNumber?: string;
+        trackingNumber?: string;
+        printLink?: string;
+        trackingLink?: string;
+        senderNumber?: string;
+        sentDate?: Date;
+        shippedDate?: Date;
+        deliveredDate?: Date;
+        fields?: Record<string, any>;
+    };
+    billingAddress: {
+        id: string;
+        uuid: string;
+        version: number;
+        name: string;
+        surname: string;
+        country: string;
+        city: string;
+        district?: string;
+        addressLine1: string;
+        addressLine2?: string;
+        postalCode?: string;
+        phone?: string;
+        email?: string;
+        identityNumber?: string;
+        taxNumber?: string;
+        taxOffice?: string;
+        companyName?: string;
+        fields?: Record<string, any>;
+    };
+    shippingAddress: {
+        id: string;
+        uuid: string;
+        version: number;
+        name: string;
+        surname: string;
+        country: string;
+        city: string;
+        district?: string;
+        addressLine1: string;
+        addressLine2?: string;
+        postalCode?: string;
+        phone?: string;
+        email?: string;
+        identityNumber?: string;
+        taxNumber?: string;
+        taxOffice?: string;
+        companyName?: string;
+        fields?: Record<string, any>;
+    };
+    purchaseNumber: string;
+    platformNumber: string;
+    platform: ResourceName;
+    docSerial?: string;
+    type?: OrderType;
+    status?: OrderStatus;
+    total: number;
+    totalWithOutTax?: number;
+    taxTotal?: number;
+    costTotal?: number;
+    commissionTotal?: number;
+    discountTotal?: number;
+    invoiceTotal?: number;
+    creditTotal?: number;
+    shippingTotal?: number;
+    shippingTaxRate?: number;
+    note?: string;
+    date: Date;
+    currency: CurrencyCode;
+    uniqueCode?: string | null;
+    orderProducts?: OrderProductCretedEvent[];
+    fields?: Record<string, any>;
+}
+
+export interface OrderProductCretedEvent {
+    id: string;
+    uuid: string;
+    version: number;
+    product?: string;
+    combination?: string;
+    packageProduct?: string;
+    quantity: number;
+    exQuantity?: number;
+    name: string;
+    sku: string;
+    barcode: string;
+    code?: string;
+    price: number;
+    priceWithoutTax: number;
+    taxPrice: number;
+    tax: number;
+    priceTotal: number;
+    taxTotal: number;
+    discount?: number;
+    discountTotal?: number;
+    commissionPrice?: number;
+    commissionTotal?: number;
+    costPrice?: number;
+    costTotal?: number;
+    cancelled?: boolean;
+    cancelledQuantity?: number;
+    cancelledDate?: Date;
+    returned?: boolean;
+    returnedQuantity?: number;
+    uniqueCode?: string | null;
+    currency: CurrencyCode;
+    returnStatus?: ReturnStatus;
+    returnTrackingNumber?: string;
+    returnNotes?: string;
+    returnId?: string;
+    returnItemId?: string;
+    originalOrderProduct?: string;
+    isDuplicated?: boolean;
+    fields?: Record<string, any>;
+    isMainPackageProduct?: boolean;
+    isSubPackageProduct?: boolean;
+    // Ürün görsel URL'i
+    image?: string;
+}

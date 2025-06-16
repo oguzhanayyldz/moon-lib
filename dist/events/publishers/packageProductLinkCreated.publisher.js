@@ -10,7 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PackageProductLinkCreatedPublisher = void 0;
-const common_1 = require("@xmoonx/common");
+const common_1 = require("../../common");
 const logger_service_1 = require("../../services/logger.service");
 class PackageProductLinkCreatedPublisher extends common_1.Publisher {
     constructor() {

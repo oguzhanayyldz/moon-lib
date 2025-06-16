@@ -1,4 +1,4 @@
-import { Publisher, Subjects, PackageProductLinkUpdatedEvent } from '@xmoonx/common';
+import { Publisher, Subjects, PackageProductLinkUpdatedEvent } from '../../common';
 import { logger } from '../../services/logger.service';
 
 export class PackageProductLinkUpdatedPublisher extends Publisher<PackageProductLinkUpdatedEvent> {
