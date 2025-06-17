@@ -2,6 +2,7 @@ export * from "./address-type";
 export * from './attributes-type';
 export * from './common.types';
 export * from './credential-type';
+export * from './credential-group';
 export * from './currency-code';
 export * from './currency-symbol';
 export * from './fix-status';
