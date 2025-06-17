@@ -1,1 +1,0 @@
-{"fileNames":[],"fileInfos":[],"root":[],"options":{"composite":true,"declaration":true,"declarationMap":true,"esModuleInterop":true,"module":1,"outDir":"./dist-test","rootDir":"./src","skipLibCheck":true,"strict":true,"target":3},"latestChangedDtsFile":"./dist-test/test/mocks/tracer.mock.d.ts","errors":true,"version":"5.8.3"}
