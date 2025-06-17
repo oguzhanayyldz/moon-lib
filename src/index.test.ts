@@ -176,7 +176,10 @@ export const createRedisWrapper = () => {
             on: jest.fn((event: string, handler: Function) => { }) // Add event listener mock
         },
         connect: jest.fn().mockResolvedValue(undefined),
-        disconnect: jest.fn().mockResolvedValue(undefined)
+        disconnect: jest.fn().mockResolvedValue(undefined),
+        getOrder: jest.fn().mockResolvedValue(null),
+        setOrder: jest.fn().mockResolvedValue('OK'),
+        delOrder: jest.fn().mockResolvedValue(1),
     };
 };
 
