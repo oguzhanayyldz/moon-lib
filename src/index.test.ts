@@ -407,3 +407,23 @@ export const RetryableListener = class MockRetryableListener {
         return 'mock-id';
     }
 }
+
+// Model Creation Functions - Test-friendly versions
+export const createOutboxModel = jest.fn(() => ({
+    build: jest.fn().mockReturnValue({
+        save: jest.fn().mockResolvedValue({
+            _id: 'mock-outbox-id',
+            __v: 0
+        })
+    }),
+    create: jest.fn().mockResolvedValue({
+        _id: 'mock-outbox-id',
+        __v: 0
+    }),
+    findById: jest.fn(),
+    findByIdAndUpdate: jest.fn(),
+    findOne: jest.fn(),
+    find: jest.fn(),
+    deleteOne: jest.fn(),
+    updateOne: jest.fn()
+}));
