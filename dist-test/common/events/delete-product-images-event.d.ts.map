@@ -1,0 +1,1 @@
+{"version":3,"file":"delete-product-images-event.d.ts","sourceRoot":"","sources":["../../../src/common/events/delete-product-images-event.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,MAAM,YAAY,CAAC;AAEtC,MAAM,WAAW,wBAAwB;IACrC,OAAO,EAAE,QAAQ,CAAC,mBAAmB,CAAC;IACtC,IAAI,EAAE;QACF,SAAS,EAAE,MAAM,CAAC;QAClB,MAAM,EAAE,MAAM,CAAC;QACf,SAAS,EAAE,MAAM,CAAC;KACrB,CAAC;CACL"}

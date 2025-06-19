@@ -1,0 +1,1 @@
+{"version":3,"file":"ecommerce-integration.js","sourceRoot":"","sources":["../../../src/common/core/ecommerce-integration.ts"],"names":[],"mappings":";;;AAAA,gEAA4D;AAC5D,yDAAqD;AAErD,MAAsB,oBAAqB,SAAQ,kCAAe;IAC9D;QACI,KAAK,EAAE,CAAC;QACR,IAAI,CAAC,IAAI,GAAG,kCAAe,CAAC,SAAS,CAAC;IAC1C,CAAC;CAOJ;AAXD,oDAWC"}

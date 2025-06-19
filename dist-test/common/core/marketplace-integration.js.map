@@ -1,0 +1,1 @@
+{"version":3,"file":"marketplace-integration.js","sourceRoot":"","sources":["../../../src/common/core/marketplace-integration.ts"],"names":[],"mappings":";;;AAAA,gEAA4D;AAC5D,yDAAqD;AAErD,MAAsB,sBAAuB,SAAQ,kCAAe;IAChE;QACI,KAAK,EAAE,CAAC;QACR,IAAI,CAAC,IAAI,GAAG,kCAAe,CAAC,WAAW,CAAC;IAC5C,CAAC;CAOJ;AAXD,wDAWC"}

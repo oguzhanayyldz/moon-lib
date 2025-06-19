@@ -1,0 +1,1 @@
+{"version":3,"file":"validate-body.d.ts","sourceRoot":"","sources":["../../../src/common/middlewares/validate-body.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,YAAY,EAAE,MAAM,SAAS,CAAC;AAC1D,OAAO,EAAE,MAAM,EAAiC,MAAM,mBAAmB,CAAC;AAG1E,eAAO,MAAM,YAAY,GAAI,QAAQ,MAAM,MAK/B,KAAK,OAAO,EAAE,KAAK,QAAQ,EAAE,MAAM,YAAY,SA0C1D,CAAC"}
