@@ -1,5 +1,11 @@
 // 🎯 Test-Friendly Export for moon-lib
 // This file provides test-optimized versions of moon-lib exports
+//
+// 🚀 SIMPLIFIED USAGE (Updated June 2025):
+// - After git pull: Only `npm i` required, no build needed
+// - Build ONLY when this file (index.test.ts) changes
+// - Use: `npm run build:test` to build after modifying this file
+// - Agent script automatically detects if build is needed
 
 import { Subjects } from './index';
 
