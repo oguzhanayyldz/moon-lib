@@ -22,7 +22,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = void 0;
+exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = void 0;
 const index_1 = require("./index");
 // Re-export everything from main index
 __exportStar(require("./index"), exports);
@@ -422,4 +422,110 @@ exports.createOutboxModel = jest.fn(() => ({
     deleteOne: jest.fn(),
     updateOne: jest.fn()
 }));
+// Outbox Mock - Universal mock for all services
+const createOutboxMock = () => {
+    const mockOutboxConstructor = jest.fn().mockImplementation(() => ({
+        save: jest.fn().mockResolvedValue({
+            _id: 'mock-outbox-id',
+            __v: 0
+        })
+    }));
+    // Static methods - All Mongoose model methods
+    mockOutboxConstructor.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 0 });
+    mockOutboxConstructor.findOne = jest.fn().mockResolvedValue(null);
+    mockOutboxConstructor.find = jest.fn().mockResolvedValue([]);
+    mockOutboxConstructor.create = jest.fn().mockResolvedValue({
+        _id: 'mock-outbox-id',
+        __v: 0
+    });
+    mockOutboxConstructor.updateOne = jest.fn().mockResolvedValue({ nModified: 1 });
+    mockOutboxConstructor.updateMany = jest.fn().mockResolvedValue({ nModified: 0 });
+    mockOutboxConstructor.findById = jest.fn().mockResolvedValue(null);
+    mockOutboxConstructor.findByIdAndUpdate = jest.fn().mockResolvedValue(null);
+    mockOutboxConstructor.findByIdAndDelete = jest.fn().mockResolvedValue(null);
+    mockOutboxConstructor.countDocuments = jest.fn().mockResolvedValue(0);
+    mockOutboxConstructor.aggregate = jest.fn().mockResolvedValue([]);
+    return {
+        Outbox: mockOutboxConstructor
+    };
+};
+exports.createOutboxMock = createOutboxMock;
+// Global Test Setup Helper - All services can use this
+const setupTestEnvironment = () => {
+    // Clear all mocks before each test
+    jest.clearAllMocks();
+    // Reset OptimisticLockingUtil to default behavior
+    exports.OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(async (doc, operationName) => {
+        if (doc && typeof doc.save === 'function') {
+            return await doc.save();
+        }
+        return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
+    });
+    // Reset NATS publish mock
+    exports.natsWrapper.client.publish = jest.fn().mockImplementation((subject, data, callback) => {
+        if (callback)
+            callback();
+        return 'mock-guid-' + Math.random().toString(36).substr(2, 9);
+    });
+    // Reset logger
+    Object.keys(exports.logger).forEach(key => {
+        exports.logger[key] = jest.fn();
+    });
+    // Reset Redis wrapper
+    const mockStorage = {};
+    exports.redisWrapper.client.set = jest.fn((key, value) => {
+        mockStorage[key] = value;
+        return Promise.resolve('OK');
+    });
+    exports.redisWrapper.client.get = jest.fn((key) => Promise.resolve(mockStorage[key] || null));
+    exports.redisWrapper.client.del = jest.fn((key) => {
+        if (Array.isArray(key)) {
+            key.forEach(k => delete mockStorage[k]);
+            return Promise.resolve(key.length);
+        }
+        else {
+            delete mockStorage[key];
+            return Promise.resolve(1);
+        }
+    });
+};
+exports.setupTestEnvironment = setupTestEnvironment;
+// Test Mock Verification Helpers
+const expectOutboxEventCreated = (mockOutboxConstructor, expectedEventType, expectedPayloadProps = {}) => {
+    expect(mockOutboxConstructor).toHaveBeenCalledWith(expect.objectContaining({
+        eventType: expectedEventType,
+        payload: expect.objectContaining(expectedPayloadProps),
+        status: 'pending'
+    }));
+};
+exports.expectOutboxEventCreated = expectOutboxEventCreated;
+const expectOptimisticLockingSaved = (times = 1) => {
+    expect(exports.OptimisticLockingUtil.saveWithRetry).toHaveBeenCalledTimes(times);
+};
+exports.expectOptimisticLockingSaved = expectOptimisticLockingSaved;
+// Common Test Patterns
+exports.commonTestPatterns = {
+    // Event creation test helper
+    expectEventPublished: (mockOutboxConstructor, eventType, payloadCheck = {}) => {
+        expect(exports.OptimisticLockingUtil.saveWithRetry).toHaveBeenCalled();
+        (0, exports.expectOutboxEventCreated)(mockOutboxConstructor, eventType, payloadCheck);
+    },
+    // Authentication test helper
+    expectUnauthorized: (response) => {
+        expect(response.status).toBe(401);
+    },
+    // Not found test helper
+    expectNotFound: (response) => {
+        expect(response.status).toBe(404);
+    },
+    // Bad request test helper
+    expectBadRequest: (response) => {
+        expect(response.status).toBe(400);
+    },
+    // Success test helper
+    expectSuccess: (response, expectedStatus = 200) => {
+        expect(response.status).toBe(expectedStatus);
+        expect(response.body).toBeDefined();
+    }
+};
 //# sourceMappingURL=index.test.js.map

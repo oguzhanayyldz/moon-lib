@@ -194,4 +194,17 @@ export declare const createOutboxModel: jest.Mock<{
     deleteOne: jest.Mock<any, any, any>;
     updateOne: jest.Mock<any, any, any>;
 }, [], any>;
+export declare const createOutboxMock: () => {
+    Outbox: jest.Mock<any, any, any>;
+};
+export declare const setupTestEnvironment: () => void;
+export declare const expectOutboxEventCreated: (mockOutboxConstructor: any, expectedEventType: string, expectedPayloadProps?: any) => void;
+export declare const expectOptimisticLockingSaved: (times?: number) => void;
+export declare const commonTestPatterns: {
+    expectEventPublished: (mockOutboxConstructor: any, eventType: string, payloadCheck?: any) => void;
+    expectUnauthorized: (response: any) => void;
+    expectNotFound: (response: any) => void;
+    expectBadRequest: (response: any) => void;
+    expectSuccess: (response: any, expectedStatus?: number) => void;
+};
 //# sourceMappingURL=index.test.d.ts.map
