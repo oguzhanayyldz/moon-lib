@@ -207,4 +207,14 @@ export declare const commonTestPatterns: {
     expectBadRequest: (response: any) => void;
     expectSuccess: (response: any, expectedStatus?: number) => void;
 };
+export declare const SecurityValidator: jest.Mock<any, any, any>;
+export declare const RateLimiter: jest.Mock<any, any, any>;
+export declare const BruteForceProtection: jest.Mock<any, any, any>;
+export declare const SecurityHeaders: jest.Mock<any, any, any>;
+export declare const SecurityManager: jest.Mock<any, any, any>;
+export declare const createSecurityValidator: jest.Mock<any, any, any>;
+export declare const createRateLimiter: jest.Mock<any, any, any>;
+export declare const createBruteForceProtection: jest.Mock<any, any, any>;
+export declare const createSecurityHeaders: jest.Mock<any, any, any>;
+export declare const createSecurityManager: jest.Mock<any, any, any>;
 //# sourceMappingURL=index.test.d.ts.map

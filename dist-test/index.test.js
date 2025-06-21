@@ -22,7 +22,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = void 0;
+exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = void 0;
 const index_1 = require("./index");
 // Re-export everything from main index
 __exportStar(require("./index"), exports);
@@ -528,4 +528,83 @@ exports.commonTestPatterns = {
         expect(response.body).toBeDefined();
     }
 };
+// Security Module Mocks - Constructor mockları ekliyoruz
+exports.SecurityValidator = jest.fn().mockImplementation((config) => ({
+    validateRequest: jest.fn().mockImplementation((req, res, next) => {
+        // Mock validation - always pass
+        next();
+    }),
+    validateInput: jest.fn().mockReturnValue({ isValid: true, errors: [] }),
+    sanitizeInput: jest.fn().mockImplementation((input) => input),
+    validatePassword: jest.fn().mockReturnValue({ isValid: true, score: 4 }),
+    validateEmail: jest.fn().mockReturnValue(true),
+    validateSecurityHeaders: jest.fn().mockReturnValue(true),
+    config
+}));
+exports.RateLimiter = jest.fn().mockImplementation((redisClient, config) => ({
+    checkRateLimit: jest.fn().mockResolvedValue({
+        allowed: true,
+        remaining: 10,
+        resetTime: Date.now() + 60000
+    }),
+    getRateLimitStatus: jest.fn().mockResolvedValue({
+        remaining: 10,
+        resetTime: Date.now() + 60000,
+        limit: 100
+    }),
+    redisClient,
+    config
+}));
+exports.BruteForceProtection = jest.fn().mockImplementation((redisClient, config) => ({
+    checkAttempt: jest.fn().mockResolvedValue({
+        allowed: true,
+        remainingAttempts: 5,
+        lockoutTime: null
+    }),
+    recordAttempt: jest.fn().mockResolvedValue(undefined),
+    resetAttempts: jest.fn().mockResolvedValue(undefined),
+    getAttemptStatus: jest.fn().mockResolvedValue({
+        attempts: 0,
+        remainingAttempts: 5,
+        isLocked: false,
+        lockoutTime: null
+    }),
+    redisClient,
+    config
+}));
+exports.SecurityHeaders = jest.fn().mockImplementation((config) => ({
+    setSecurityHeaders: jest.fn().mockImplementation((req, res, next) => {
+        // Mock security headers middleware
+        res.set({
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'X-XSS-Protection': '1; mode=block',
+            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+            'Content-Security-Policy': "default-src 'self'"
+        });
+        next();
+    }),
+    config
+}));
+exports.SecurityManager = jest.fn().mockImplementation((config, modules) => ({
+    initializeMiddleware: jest.fn().mockImplementation((app) => {
+        // Mock middleware initialization
+        return app;
+    }),
+    validateSecurityConfig: jest.fn().mockReturnValue(true),
+    getSecurityStatus: jest.fn().mockReturnValue({
+        validator: 'active',
+        rateLimiter: 'active',
+        bruteForceProtection: 'active',
+        securityHeaders: 'active'
+    }),
+    modules,
+    config
+}));
+// Factory functions for security modules (yeni pattern için)
+exports.createSecurityValidator = jest.fn().mockImplementation((config) => new exports.SecurityValidator(config));
+exports.createRateLimiter = jest.fn().mockImplementation((redisClient, config) => new exports.RateLimiter(redisClient, config));
+exports.createBruteForceProtection = jest.fn().mockImplementation((redisClient, config) => new exports.BruteForceProtection(redisClient, config));
+exports.createSecurityHeaders = jest.fn().mockImplementation((config) => new exports.SecurityHeaders(config));
+exports.createSecurityManager = jest.fn().mockImplementation((config, modules) => new exports.SecurityManager(config, modules));
 //# sourceMappingURL=index.test.js.map

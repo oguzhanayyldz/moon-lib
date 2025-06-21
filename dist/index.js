@@ -37,6 +37,12 @@ __exportStar(require("./services/retryManager"), exports);
 __exportStar(require("./services/logger.service"), exports);
 __exportStar(require("./services/integrationRouter.service"), exports);
 __exportStar(require("./services/integrationRequestLog.service"), exports);
+// Security
+__exportStar(require("./security/SecurityValidator"), exports);
+__exportStar(require("./security/RateLimiter"), exports);
+__exportStar(require("./security/BruteForceProtection"), exports);
+__exportStar(require("./security/SecurityHeaders"), exports);
+__exportStar(require("./security/SecurityManager"), exports);
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);

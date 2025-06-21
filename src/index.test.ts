@@ -433,3 +433,219 @@ export const createOutboxModel = jest.fn(() => ({
     deleteOne: jest.fn(),
     updateOne: jest.fn()
 }));
+
+// Outbox Mock - Universal mock for all services
+export const createOutboxMock = () => {
+    const mockOutboxConstructor = jest.fn().mockImplementation(() => ({
+        save: jest.fn().mockResolvedValue({
+            _id: 'mock-outbox-id',
+            __v: 0
+        })
+    }));
+    
+    // Static methods - All Mongoose model methods
+    (mockOutboxConstructor as any).deleteMany = jest.fn().mockResolvedValue({ deletedCount: 0 });
+    (mockOutboxConstructor as any).findOne = jest.fn().mockResolvedValue(null);
+    (mockOutboxConstructor as any).find = jest.fn().mockResolvedValue([]);
+    (mockOutboxConstructor as any).create = jest.fn().mockResolvedValue({
+        _id: 'mock-outbox-id',
+        __v: 0
+    });
+    (mockOutboxConstructor as any).updateOne = jest.fn().mockResolvedValue({ nModified: 1 });
+    (mockOutboxConstructor as any).updateMany = jest.fn().mockResolvedValue({ nModified: 0 });
+    (mockOutboxConstructor as any).findById = jest.fn().mockResolvedValue(null);
+    (mockOutboxConstructor as any).findByIdAndUpdate = jest.fn().mockResolvedValue(null);
+    (mockOutboxConstructor as any).findByIdAndDelete = jest.fn().mockResolvedValue(null);
+    (mockOutboxConstructor as any).countDocuments = jest.fn().mockResolvedValue(0);
+    (mockOutboxConstructor as any).aggregate = jest.fn().mockResolvedValue([]);
+    
+    return {
+        Outbox: mockOutboxConstructor
+    };
+};
+
+// Global Test Setup Helper - All services can use this
+export const setupTestEnvironment = () => {
+    // Clear all mocks before each test
+    jest.clearAllMocks();
+    
+    // Reset OptimisticLockingUtil to default behavior
+    OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(async (doc, operationName) => {
+        if (doc && typeof doc.save === 'function') {
+            return await doc.save();
+        }
+        return { ...doc, _id: doc.id || 'mock-id' };
+    });
+    
+    // Reset NATS publish mock
+    natsWrapper.client.publish = jest.fn().mockImplementation((subject: string, data: string, callback: () => void) => {
+        if (callback) callback();
+        return 'mock-guid-' + Math.random().toString(36).substr(2, 9);
+    });
+    
+    // Reset logger
+    Object.keys(logger).forEach(key => {
+        (logger as any)[key] = jest.fn();
+    });
+    
+    // Reset Redis wrapper
+    const mockStorage: Record<string, any> = {};
+    redisWrapper.client.set = jest.fn((key: string, value: any) => {
+        mockStorage[key] = value;
+        return Promise.resolve('OK');
+    });
+    redisWrapper.client.get = jest.fn((key: string) => Promise.resolve(mockStorage[key] || null));
+    redisWrapper.client.del = jest.fn((key: string | string[]) => {
+        if (Array.isArray(key)) {
+            key.forEach(k => delete mockStorage[k]);
+            return Promise.resolve(key.length);
+        } else {
+            delete mockStorage[key];
+            return Promise.resolve(1);
+        }
+    });
+};
+
+// Test Mock Verification Helpers
+export const expectOutboxEventCreated = (mockOutboxConstructor: any, expectedEventType: string, expectedPayloadProps: any = {}) => {
+    expect(mockOutboxConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+            eventType: expectedEventType,
+            payload: expect.objectContaining(expectedPayloadProps),
+            status: 'pending'
+        })
+    );
+};
+
+export const expectOptimisticLockingSaved = (times: number = 1) => {
+    expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalledTimes(times);
+};
+
+// Common Test Patterns
+export const commonTestPatterns = {
+    // Event creation test helper
+    expectEventPublished: (mockOutboxConstructor: any, eventType: string, payloadCheck: any = {}) => {
+        expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalled();
+        expectOutboxEventCreated(mockOutboxConstructor, eventType, payloadCheck);
+    },
+    
+    // Authentication test helper
+    expectUnauthorized: (response: any) => {
+        expect(response.status).toBe(401);
+    },
+    
+    // Not found test helper
+    expectNotFound: (response: any) => {
+        expect(response.status).toBe(404);
+    },
+    
+    // Bad request test helper
+    expectBadRequest: (response: any) => {
+        expect(response.status).toBe(400);
+    },
+    
+    // Success test helper
+    expectSuccess: (response: any, expectedStatus: number = 200) => {
+        expect(response.status).toBe(expectedStatus);
+        expect(response.body).toBeDefined();
+    }
+};
+
+// Security Module Mocks - Constructor mockları ekliyoruz
+export const SecurityValidator = jest.fn().mockImplementation((config: any) => ({
+    validateRequest: jest.fn().mockImplementation((req: any, res: any, next: any) => {
+        // Mock validation - always pass
+        next();
+    }),
+    validateInput: jest.fn().mockReturnValue({ isValid: true, errors: [] }),
+    sanitizeInput: jest.fn().mockImplementation((input: any) => input),
+    validatePassword: jest.fn().mockReturnValue({ isValid: true, score: 4 }),
+    validateEmail: jest.fn().mockReturnValue(true),
+    validateSecurityHeaders: jest.fn().mockReturnValue(true),
+    config
+}));
+
+export const RateLimiter = jest.fn().mockImplementation((redisClient: any, config: any) => ({
+    checkRateLimit: jest.fn().mockResolvedValue({ 
+        allowed: true, 
+        remaining: 10, 
+        resetTime: Date.now() + 60000 
+    }),
+    getRateLimitStatus: jest.fn().mockResolvedValue({
+        remaining: 10,
+        resetTime: Date.now() + 60000,
+        limit: 100
+    }),
+    redisClient,
+    config
+}));
+
+export const BruteForceProtection = jest.fn().mockImplementation((redisClient: any, config: any) => ({
+    checkAttempt: jest.fn().mockResolvedValue({ 
+        allowed: true, 
+        remainingAttempts: 5,
+        lockoutTime: null 
+    }),
+    recordAttempt: jest.fn().mockResolvedValue(undefined),
+    resetAttempts: jest.fn().mockResolvedValue(undefined),
+    getAttemptStatus: jest.fn().mockResolvedValue({
+        attempts: 0,
+        remainingAttempts: 5,
+        isLocked: false,
+        lockoutTime: null
+    }),
+    redisClient,
+    config
+}));
+
+export const SecurityHeaders = jest.fn().mockImplementation((config: any) => ({
+    setSecurityHeaders: jest.fn().mockImplementation((req: any, res: any, next: any) => {
+        // Mock security headers middleware
+        res.set({
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'X-XSS-Protection': '1; mode=block',
+            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+            'Content-Security-Policy': "default-src 'self'"
+        });
+        next();
+    }),
+    config
+}));
+
+export const SecurityManager = jest.fn().mockImplementation((config: any, modules: any) => ({
+    initializeMiddleware: jest.fn().mockImplementation((app: any) => {
+        // Mock middleware initialization
+        return app;
+    }),
+    validateSecurityConfig: jest.fn().mockReturnValue(true),
+    getSecurityStatus: jest.fn().mockReturnValue({
+        validator: 'active',
+        rateLimiter: 'active',
+        bruteForceProtection: 'active',
+        securityHeaders: 'active'
+    }),
+    modules,
+    config
+}));
+
+// Factory functions for security modules (yeni pattern için)
+export const createSecurityValidator = jest.fn().mockImplementation((config: any) => 
+    new SecurityValidator(config)
+);
+
+export const createRateLimiter = jest.fn().mockImplementation((redisClient: any, config: any) => 
+    new RateLimiter(redisClient, config)
+);
+
+export const createBruteForceProtection = jest.fn().mockImplementation((redisClient: any, config: any) => 
+    new BruteForceProtection(redisClient, config)
+);
+
+export const createSecurityHeaders = jest.fn().mockImplementation((config: any) => 
+    new SecurityHeaders(config)
+);
+
+export const createSecurityManager = jest.fn().mockImplementation((config: any, modules: any) => 
+    new SecurityManager(config, modules)
+);

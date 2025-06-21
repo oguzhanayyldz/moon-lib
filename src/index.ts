@@ -24,6 +24,13 @@ export * from './services/logger.service';
 export * from './services/integrationRouter.service';
 export * from './services/integrationRequestLog.service';
 
+// Security
+export * from './security/SecurityValidator';
+export * from './security/RateLimiter';
+export * from './security/BruteForceProtection';
+export * from './security/SecurityHeaders';
+export * from './security/SecurityManager';
+
 // Utils
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
