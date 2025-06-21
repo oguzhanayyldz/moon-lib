@@ -22,7 +22,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = void 0;
+exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = void 0;
 const index_1 = require("./index");
 // Re-export everything from main index
 __exportStar(require("./index"), exports);
@@ -211,6 +211,152 @@ const createRedisWrapper = () => {
 exports.createRedisWrapper = createRedisWrapper;
 // Export redisWrapper instance for direct usage
 exports.redisWrapper = (0, exports.createRedisWrapper)();
+// Security Services - Test-friendly version
+const createMicroserviceSecurityService = (config = {}) => {
+    const defaultConfig = {
+        serviceName: 'test-service',
+        requestWindowMs: 15 * 60 * 1000,
+        maxRequestsPerWindow: 100,
+        maxLoginAttempts: 5,
+        lockoutTimeMinutes: 15,
+        apiPathRegex: /\/api\/.*/,
+        enableXSSProtection: true,
+        enableSQLInjectionProtection: true,
+        enableFileUploadValidation: true,
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        allowedFileTypes: ['jpg', 'jpeg', 'png', 'pdf'],
+        enableCSP: true,
+        enableHSTS: true,
+        enableXFrameOptions: true,
+        enableXContentTypeOptions: true,
+        jwtKey: 'test-jwt-key-for-tests-only'
+    };
+    const mockConfig = Object.assign(Object.assign({}, defaultConfig), config);
+    // Mock validation result
+    const mockValidationResult = { isValid: true, errors: [] };
+    // Create mock for basic middleware structure
+    const createMockMiddleware = () => jest.fn().mockImplementation((req, res, next) => {
+        // Cookie ayarlama fonksiyonalitesini ekle
+        const originalSend = res.send;
+        res.send = function (body) {
+            // Eğer session ve JWT varsa cookie'yi ayarla
+            if (req.session && req.session.jwt) {
+                if (!res.getHeader('Set-Cookie')) {
+                    res.setHeader('Set-Cookie', [`session=${req.session.jwt}; path=/; httpOnly`]);
+                }
+            }
+            return originalSend.call(this, body);
+        };
+        next();
+    });
+    // JWT oluşturma ve cookie yardımcı fonksiyonu
+    const createSessionJWT = (user) => {
+        try {
+            // Test ortamında doğru bir JWT oluştur
+            const jwt = require('jsonwebtoken');
+            const payload = {
+                id: user.id || '123-test-id',
+                email: user.email || 'test@example.com',
+                name: user.name || 'Test User',
+                sessionId: user.sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            };
+            // JWT KEY'i test ortamından veya tanımlı değerden al
+            const jwtKey = process.env.JWT_KEY || mockConfig.jwtKey;
+            return jwt.sign(payload, jwtKey);
+        }
+        catch (error) {
+            console.error('JWT Token oluşturma hatası:', error);
+            return 'mock-jwt-test-token';
+        }
+    };
+    // Cookie ayarlama işlemi için yardımcı fonksiyon
+    const setSessionCookie = (req, res, jwt) => {
+        if (req && req.session) {
+            req.session.jwt = jwt;
+        }
+        // Cookie header'larını ekle
+        res.cookie = res.cookie || function (name, value, options) {
+            const cookieHeader = `${name}=${value}; path=${(options === null || options === void 0 ? void 0 : options.path) || '/'}${(options === null || options === void 0 ? void 0 : options.httpOnly) ? '; httpOnly' : ''}`;
+            if (!res.getHeader('Set-Cookie')) {
+                res.setHeader('Set-Cookie', [cookieHeader]);
+            }
+            else {
+                const existingCookies = res.getHeader('Set-Cookie');
+                if (Array.isArray(existingCookies)) {
+                    res.setHeader('Set-Cookie', [...existingCookies, cookieHeader]);
+                }
+                else {
+                    res.setHeader('Set-Cookie', [existingCookies, cookieHeader]);
+                }
+            }
+            return res;
+        };
+        return res.cookie('session', jwt, { httpOnly: true, path: '/' });
+    };
+    return {
+        config: mockConfig,
+        createSessionJWT,
+        setSessionCookie,
+        // Validator mock
+        validator: {
+            validateInput: jest.fn().mockResolvedValue(mockValidationResult),
+            validateFileUpload: jest.fn().mockResolvedValue({
+                isValid: true,
+                errors: []
+            }),
+            sanitizeInput: jest.fn(input => input),
+            detectSQLInjection: jest.fn().mockReturnValue(false),
+            detectNoSQLInjection: jest.fn().mockReturnValue(false)
+        },
+        // Rate limiter mock
+        rateLimiter: {
+            middleware: createMockMiddleware(),
+            reset: jest.fn().mockResolvedValue(undefined)
+        },
+        // Brute force protection mock
+        bruteForceProtection: {
+            loginProtection: createMockMiddleware(),
+            handleFailedLogin: jest.fn().mockReturnValue(createMockMiddleware()),
+            recordFailedAttempt: jest.fn().mockResolvedValue(undefined),
+            getStatus: jest.fn().mockResolvedValue({
+                allowed: true,
+                remainingTime: 0
+            }),
+            isBlocked: jest.fn().mockResolvedValue(false),
+            getAttemptCount: jest.fn().mockResolvedValue(0)
+        },
+        // Security headers mock
+        securityHeaders: {
+            middleware: createMockMiddleware()
+        },
+        // Security manager mock
+        securityManager: {},
+        // Core middleware methods
+        getRateLimitMiddleware: createMockMiddleware,
+        getBruteForceMiddleware: createMockMiddleware,
+        getSecurityHeadersMiddleware: createMockMiddleware,
+        getFailedLoginHandlerMiddleware: createMockMiddleware,
+        getUserRateLimitMiddleware: createMockMiddleware,
+        getFileUploadValidationMiddleware: createMockMiddleware,
+        // Core validation methods
+        validateInput: jest.fn().mockResolvedValue(mockValidationResult),
+        validateFileUpload: jest.fn().mockResolvedValue({
+            isValid: true,
+            errors: []
+        }),
+        // Status and tracking methods
+        getStatus: jest.fn().mockResolvedValue({
+            allowed: true,
+            remainingTime: 0
+        }),
+        recordFailedAttempt: jest.fn().mockResolvedValue(undefined),
+        isBlocked: jest.fn().mockResolvedValue(false),
+        getAttemptCount: jest.fn().mockResolvedValue(0)
+    };
+};
+exports.createMicroserviceSecurityService = createMicroserviceSecurityService;
+// Export mock security service instances for direct usage in tests
+exports.microserviceSecurityService = (0, exports.createMicroserviceSecurityService)();
 exports.tracer = {
     startSpan: jest.fn().mockReturnValue({
         setTag: jest.fn().mockReturnThis(),

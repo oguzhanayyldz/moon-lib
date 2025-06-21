@@ -123,6 +123,86 @@ export declare const redisWrapper: {
     setOrder: jest.Mock<any, any, any>;
     delOrder: jest.Mock<any, any, any>;
 };
+export declare const createMicroserviceSecurityService: (config?: any) => {
+    config: any;
+    createSessionJWT: (user: any) => any;
+    setSessionCookie: (req: any, res: any, jwt: string) => any;
+    validator: {
+        validateInput: jest.Mock<any, any, any>;
+        validateFileUpload: jest.Mock<any, any, any>;
+        sanitizeInput: jest.Mock<any, [input: any], any>;
+        detectSQLInjection: jest.Mock<any, any, any>;
+        detectNoSQLInjection: jest.Mock<any, any, any>;
+    };
+    rateLimiter: {
+        middleware: jest.Mock<any, any, any>;
+        reset: jest.Mock<any, any, any>;
+    };
+    bruteForceProtection: {
+        loginProtection: jest.Mock<any, any, any>;
+        handleFailedLogin: jest.Mock<any, any, any>;
+        recordFailedAttempt: jest.Mock<any, any, any>;
+        getStatus: jest.Mock<any, any, any>;
+        isBlocked: jest.Mock<any, any, any>;
+        getAttemptCount: jest.Mock<any, any, any>;
+    };
+    securityHeaders: {
+        middleware: jest.Mock<any, any, any>;
+    };
+    securityManager: {};
+    getRateLimitMiddleware: () => jest.Mock<any, any, any>;
+    getBruteForceMiddleware: () => jest.Mock<any, any, any>;
+    getSecurityHeadersMiddleware: () => jest.Mock<any, any, any>;
+    getFailedLoginHandlerMiddleware: () => jest.Mock<any, any, any>;
+    getUserRateLimitMiddleware: () => jest.Mock<any, any, any>;
+    getFileUploadValidationMiddleware: () => jest.Mock<any, any, any>;
+    validateInput: jest.Mock<any, any, any>;
+    validateFileUpload: jest.Mock<any, any, any>;
+    getStatus: jest.Mock<any, any, any>;
+    recordFailedAttempt: jest.Mock<any, any, any>;
+    isBlocked: jest.Mock<any, any, any>;
+    getAttemptCount: jest.Mock<any, any, any>;
+};
+export declare const microserviceSecurityService: {
+    config: any;
+    createSessionJWT: (user: any) => any;
+    setSessionCookie: (req: any, res: any, jwt: string) => any;
+    validator: {
+        validateInput: jest.Mock<any, any, any>;
+        validateFileUpload: jest.Mock<any, any, any>;
+        sanitizeInput: jest.Mock<any, [input: any], any>;
+        detectSQLInjection: jest.Mock<any, any, any>;
+        detectNoSQLInjection: jest.Mock<any, any, any>;
+    };
+    rateLimiter: {
+        middleware: jest.Mock<any, any, any>;
+        reset: jest.Mock<any, any, any>;
+    };
+    bruteForceProtection: {
+        loginProtection: jest.Mock<any, any, any>;
+        handleFailedLogin: jest.Mock<any, any, any>;
+        recordFailedAttempt: jest.Mock<any, any, any>;
+        getStatus: jest.Mock<any, any, any>;
+        isBlocked: jest.Mock<any, any, any>;
+        getAttemptCount: jest.Mock<any, any, any>;
+    };
+    securityHeaders: {
+        middleware: jest.Mock<any, any, any>;
+    };
+    securityManager: {};
+    getRateLimitMiddleware: () => jest.Mock<any, any, any>;
+    getBruteForceMiddleware: () => jest.Mock<any, any, any>;
+    getSecurityHeadersMiddleware: () => jest.Mock<any, any, any>;
+    getFailedLoginHandlerMiddleware: () => jest.Mock<any, any, any>;
+    getUserRateLimitMiddleware: () => jest.Mock<any, any, any>;
+    getFileUploadValidationMiddleware: () => jest.Mock<any, any, any>;
+    validateInput: jest.Mock<any, any, any>;
+    validateFileUpload: jest.Mock<any, any, any>;
+    getStatus: jest.Mock<any, any, any>;
+    recordFailedAttempt: jest.Mock<any, any, any>;
+    isBlocked: jest.Mock<any, any, any>;
+    getAttemptCount: jest.Mock<any, any, any>;
+};
 export declare const tracer: {
     startSpan: jest.Mock<any, any, any>;
     inject: jest.Mock<any, any, any>;
