@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserRole } from '../types/user-role';
-interface UserPayload {
+export interface UserPayload {
     id: string;
     email: string;
     name: string;
@@ -18,5 +18,4 @@ declare global {
     }
 }
 export declare const currentUser: (req: Request, res: Response, next: NextFunction) => void;
-export {};
 //# sourceMappingURL=current-user.d.ts.map

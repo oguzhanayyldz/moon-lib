@@ -43,6 +43,7 @@ __exportStar(require("./security/RateLimiter"), exports);
 __exportStar(require("./security/BruteForceProtection"), exports);
 __exportStar(require("./security/SecurityHeaders"), exports);
 __exportStar(require("./security/SecurityManager"), exports);
+__exportStar(require("./security/MicroserviceSecurityService"), exports);
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);

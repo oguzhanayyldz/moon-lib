@@ -30,6 +30,7 @@ export * from './security/RateLimiter';
 export * from './security/BruteForceProtection';
 export * from './security/SecurityHeaders';
 export * from './security/SecurityManager';
+export * from './security/MicroserviceSecurityService';
 
 // Utils
 export * from './utils/optimisticLocking.util';

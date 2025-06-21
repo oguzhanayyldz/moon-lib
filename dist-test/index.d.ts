@@ -18,6 +18,7 @@ export * from './security/RateLimiter';
 export * from './security/BruteForceProtection';
 export * from './security/SecurityHeaders';
 export * from './security/SecurityManager';
+export * from './security/MicroserviceSecurityService';
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
 export * from './jobs/eventPublisher.job';
