@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createStrictRateLimiter = exports.createAPIRateLimiter = exports.createUserRateLimiter = exports.createIPRateLimiter = exports.RateLimiter = void 0;
 const logger_service_1 = require("../services/logger.service");
+const SecurityMonitor_1 = require("./SecurityMonitor");
 /**
  * Rate limiting service for controlling request frequency.
  *
@@ -154,7 +155,7 @@ class RateLimiter {
     middleware(options) {
         const config = Object.assign(Object.assign({}, this.config), options);
         return async (req, res, next) => {
-            var _a;
+            var _a, _b;
             if (!config.enabled) {
                 return next();
             }
@@ -172,6 +173,24 @@ class RateLimiter {
                     'X-RateLimit-RetryAfter': Math.ceil(result.timeUntilReset / 1000).toString()
                 });
                 if (!result.allowed) {
+                    // Record security event
+                    SecurityMonitor_1.globalSecurityMonitor.recordEvent({
+                        type: SecurityMonitor_1.SecurityEventType.RATE_LIMIT_EXCEEDED,
+                        severity: 'medium',
+                        ip,
+                        userAgent: req.headers['user-agent'],
+                        userId: (_b = req.user) === null || _b === void 0 ? void 0 : _b.id,
+                        endpoint: `${req.method}:${endpoint}`,
+                        method: req.method,
+                        serviceName: req.serviceName || 'unknown',
+                        blocked: true,
+                        details: {
+                            totalHits: result.totalHits,
+                            limit: config.maxRequests,
+                            windowMs: config.windowMs,
+                            keyType: config.keyGenerator !== this.config.keyGenerator ? 'custom' : 'ip'
+                        }
+                    });
                     logger_service_1.logger.warn('Rate limit exceeded:', {
                         ip,
                         endpoint,

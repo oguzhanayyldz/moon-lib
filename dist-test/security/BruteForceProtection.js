@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createLenientBruteForceProtection = exports.createStrictBruteForceProtection = exports.createBruteForceProtection = exports.BruteForceProtection = void 0;
 const logger_service_1 = require("../services/logger.service");
+const SecurityMonitor_1 = require("./SecurityMonitor");
 /**
  * Brute force protection service for preventing automated attacks.
  *
@@ -78,6 +79,22 @@ class BruteForceProtection {
                 await this.redisClient.setEx(blockKey, Math.ceil(this.config.blockDurationMs / 1000), 'blocked');
                 // Clear attempt count
                 await this.redisClient.del(attemptKey);
+                // Record security event
+                SecurityMonitor_1.globalSecurityMonitor.recordEvent({
+                    type: SecurityMonitor_1.SecurityEventType.BRUTE_FORCE_ATTEMPT,
+                    severity: 'high',
+                    ip,
+                    endpoint: 'brute_force_block',
+                    method: 'BLOCK',
+                    serviceName: 'security',
+                    blocked: true,
+                    details: {
+                        attempts,
+                        maxAttempts: this.config.maxAttempts,
+                        blockDuration: this.config.blockDurationMs,
+                        windowMs: this.config.windowMs
+                    }
+                });
                 logger_service_1.logger.warn('IP blocked due to brute force attempts:', {
                     ip,
                     attempts,

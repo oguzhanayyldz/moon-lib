@@ -67,12 +67,67 @@ class SecurityValidator {
         return sqlPatterns.some(pattern => pattern.test(input));
     }
     /**
-     * NoSQL Injection tespiti
+     * NoSQL Injection tespiti (Enhanced)
      */
     detectNoSQLInjection(input) {
         if (typeof input === 'object' && input !== null) {
-            const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin'];
-            return Object.keys(input).some(key => dangerousKeys.includes(key));
+            // MongoDB operatör tespiti
+            const dangerousKeys = [
+                '$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin',
+                '$or', '$and', '$not', '$nor', '$exists', '$type', '$mod', '$size',
+                '$all', '$elemMatch', '$slice', '$push', '$pull', '$pop', '$unset',
+                '$rename', '$inc', '$mul', '$min', '$max', '$currentDate',
+                '$eval', '$function', '$accumulator', '$expr'
+            ];
+            // Recursive object scanning
+            const checkObject = (obj) => {
+                if (typeof obj !== 'object' || obj === null) {
+                    return false;
+                }
+                for (const key of Object.keys(obj)) {
+                    // Direct dangerous key check
+                    if (dangerousKeys.includes(key)) {
+                        logger_service_1.logger.warn('NoSQL injection attempt detected:', {
+                            dangerousKey: key,
+                            inputType: typeof obj[key]
+                        });
+                        return true;
+                    }
+                    // JavaScript execution patterns
+                    if (key === '$where' && typeof obj[key] === 'string') {
+                        const jsPatterns = [
+                            /function\s*\(/i,
+                            /return\s+/i,
+                            /eval\s*\(/i,
+                            /this\./i,
+                            /sleep\s*\(/i,
+                            /while\s*\(/i
+                        ];
+                        if (jsPatterns.some(pattern => pattern.test(obj[key]))) {
+                            return true;
+                        }
+                    }
+                    // Recursive check for nested objects
+                    if (typeof obj[key] === 'object' && obj[key] !== null) {
+                        if (checkObject(obj[key])) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            return checkObject(input);
+        }
+        // String-based NoSQL injection patterns
+        if (typeof input === 'string') {
+            const nosqlStringPatterns = [
+                /\$where.*function/i,
+                /\$regex.*[\|\&\$]/i,
+                /javascript:/i,
+                /sleep\s*\(/i,
+                /this\..*=/i
+            ];
+            return nosqlStringPatterns.some(pattern => pattern.test(input));
         }
         return false;
     }

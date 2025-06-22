@@ -3,6 +3,7 @@ import { RateLimiter } from './RateLimiter';
 import { BruteForceProtection } from './BruteForceProtection';
 import { SecurityHeaders } from './SecurityHeaders';
 import { SecurityManager } from './SecurityManager';
+import { CSRFService } from './CSRFService';
 import { Request, Response, NextFunction } from 'express';
 /**
  * MicroserviceSecurityService Configuration Interface
@@ -25,6 +26,11 @@ export interface MicroserviceSecurityConfig {
     enableXFrameOptions: boolean;
     enableXContentTypeOptions: boolean;
     maxInputLength: number;
+    environment?: 'development' | 'staging' | 'production';
+    enableApiKeyRateLimit?: boolean;
+    apiKeyMaxRequests?: number;
+    enableSecurityMonitoring?: boolean;
+    securityLogLevel?: 'error' | 'warn' | 'info' | 'debug';
 }
 /**
  * Merkezi Mikroservis Güvenlik Servisi
@@ -39,6 +45,7 @@ export declare class MicroserviceSecurityService {
     readonly bruteForceProtection: BruteForceProtection;
     readonly securityHeaders: SecurityHeaders;
     readonly securityManager: SecurityManager;
+    readonly csrfService: CSRFService;
     private readonly config;
     /**
      * Mikroservis Güvenlik Servisi oluşturur
@@ -114,5 +121,52 @@ export declare class MicroserviceSecurityService {
      * Belirtilen API yolu için brute force koruması middleware'i uygular
      */
     applyBruteForceProtectionForPath(): (req: any, res: any, next: any) => void;
+    /**
+     * API Key based rate limiting middleware
+     */
+    getApiKeyRateLimitMiddleware(): (_req: Request, _res: Response, next: NextFunction) => void;
+    /**
+     * Combined security middleware with API key support
+     */
+    getEnhancedSecurityMiddleware(): ((req: Request, res: Response, next: NextFunction) => void)[];
+    /**
+     * CSRF protection middleware - uses enhanced CSRFService
+     */
+    getCSRFProtectionMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
+    /**
+     * Generate CSRF token for requests
+     */
+    generateCSRFToken(req: Request): Promise<string>;
+    /**
+     * CSRF token generation endpoint
+     */
+    getCSRFTokenEndpoint(): (req: Request, res: Response) => Promise<void>;
+    /**
+     * CSRF token refresh endpoint
+     */
+    getCSRFRefreshEndpoint(): (req: Request, res: Response) => Promise<void>;
+    /**
+     * Cross-service CSRF token validation endpoint
+     */
+    getCSRFValidateEndpoint(): (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+    /**
+     * Enhanced security middleware stack with CSRF protection
+     */
+    getFullSecurityMiddleware(options?: {
+        enableCSRF?: boolean;
+    }): ((req: Request, res: Response, next: NextFunction) => void)[];
+}
+/**
+ * Environment-based Security Configuration Factory
+ */
+export declare class SecurityConfigFactory {
+    /**
+     * Creates security configuration based on environment variables and service type
+     */
+    static createConfig(serviceName: string, environment?: string): Partial<MicroserviceSecurityConfig>;
+    /**
+     * Creates service-specific configuration with environment overrides
+     */
+    static createServiceConfig(serviceName: string): MicroserviceSecurityConfig;
 }
 //# sourceMappingURL=MicroserviceSecurityService.d.ts.map
