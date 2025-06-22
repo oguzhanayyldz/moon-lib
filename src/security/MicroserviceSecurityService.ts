@@ -5,12 +5,14 @@ import { BruteForceProtection } from './BruteForceProtection';
 import { SecurityHeaders } from './SecurityHeaders';
 import { SecurityManager } from './SecurityManager';
 import { Request, Response, NextFunction } from 'express';
-// UserPayload tipini doğru konumdan import ediyoruz
+import { BadRequestError } from '../common/errors/bad-request-error';
 import { UserPayload } from '../common/middlewares/current-user';
+import * as jwt from 'jsonwebtoken';
 
 // Genişletilmiş Express Request tipi
 interface ExtendedRequest extends Request {
   currentUser?: UserPayload;
+  csrfTokenData?: any;
 }
 
 /**
@@ -187,12 +189,56 @@ export class MicroserviceSecurityService {
    * Rate limiting için Express middleware'i alır
    */
   getRateLimitMiddleware() {
-    // RateLimiter nesnesini kontrol et
-    if (!this.rateLimiter || typeof this.rateLimiter.middleware !== 'function') {
-      logger.error('RateLimiter middleware fonksiyonu bulunamadı');
-      return (_req: Request, _res: Response, next: NextFunction) => next();
-    }
     return this.rateLimiter.middleware();
+  }
+
+  /**
+   * NoSQL Injection koruma middleware
+   * Tüm request.body, request.params ve request.query değerlerini kontrol eder ve tehlikeli MongoDB operatörleri içeriyorsa hata fırlatır
+   * Tehlikeli operatör içermeyen istekleri ise temizleyip devam eder
+   * 
+   * @returns NoSQL sanitize middleware
+   */
+  getNoSQLSanitizerMiddleware() {
+    return (req: Request, res: Response, next: NextFunction) => {
+      try {
+        // Önce girdilerde potansiyel NoSQL injection kontrolü yap
+        
+        // Request body'sini kontrol et
+        if (req.body && this.validator) {
+          // Önemli: Tehlikeli operatörler içeren istekleri reddet
+          if (this.validator.detectNoSQLInjection(req.body)) {
+            logger.warn('NoSQL injection tespit edildi - istek reddedildi', { body: JSON.stringify(req.body) });
+            throw new BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+          }
+          req.body = this.validator.sanitizeInput(req.body);
+        }
+        
+        // URL parametrelerini kontrol et
+        if (req.params && this.validator) {
+          // Önemli: Tehlikeli operatörler içeren istekleri reddet
+          if (this.validator.detectNoSQLInjection(req.params)) {
+            logger.warn('NoSQL injection tespit edildi - istek reddedildi', { params: JSON.stringify(req.params) });
+            throw new BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+          }
+          req.params = this.validator.sanitizeInput(req.params);
+        }
+        
+        // Query parametrelerini kontrol et
+        if (req.query && this.validator) {
+          // Önemli: Tehlikeli operatörler içeren istekleri reddet
+          if (this.validator.detectNoSQLInjection(req.query)) {
+            logger.warn('NoSQL injection tespit edildi - istek reddedildi', { query: JSON.stringify(req.query) });
+            throw new BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+          }
+          req.query = this.validator.sanitizeInput(req.query);
+        }
+        
+        next();
+      } catch (error) {
+        next(error);
+      }
+    };
   }
 
   /**
@@ -283,6 +329,70 @@ export class MicroserviceSecurityService {
       isValid: false,
       errors: ['File validation service is not available']
     };
+  }
+
+  /**
+   * JWT tabanlı CSRF koruma middleware'i
+   * Cookie olmadan stateless bir yaklaşım kullanır ve tüm mikroservislerde tutarlı koruma sağlar
+   * 
+   * @returns Express middleware
+   */
+  getJwtCsrfProtectionMiddleware() {
+    return (req: Request, res: Response, next: NextFunction) => {
+      // GET, HEAD ve OPTIONS istekleri için doğrulama gerekmez
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+        return next();
+      }
+      
+      const token = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'];
+      // Header'lar dizi veya string olabilir, tek bir değer beklendiğinden ilk değeri alıyoruz
+      const csrfToken = Array.isArray(token) ? token[0] : token;
+      
+      if (!csrfToken) {
+        return res.status(403).json({
+          errors: [{ message: 'CSRF token eksik' }]
+        });
+      }
+      
+      try {
+        // Token doğrula - tüm mikroservislerin aynı JWT_SECRET değişkenini kullanması gerekir
+        const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
+        const decoded = jwt.verify(csrfToken, jwtSecret);
+        
+        // CSRF token verisini request nesnesine ekle
+        (req as ExtendedRequest).csrfTokenData = decoded;
+        next();
+      } catch (err: unknown) {
+        // JWT hatası - token geçersiz veya süresi dolmuş
+        // Hata mesajını güvenli şekilde erişme
+        const errorMessage = err instanceof Error ? err.message : 'Bilinmeyen hata';
+        logger.warn(`CSRF token doğrulama hatası: ${errorMessage}`);
+        return res.status(403).json({
+          errors: [{ message: 'Geçersiz veya süresi dolmuş CSRF token' }]
+        });
+      }
+    };
+  }
+
+  /**
+   * CSRF token oluşturma (auth servisi için)
+   * 
+   * @param userId Kullanıcı ID'si (opsiyonel)
+   * @param fingerprint Tarayıcı/kullanıcı parmak izi
+   * @returns JWT formatında CSRF token
+   */
+  generateCsrfToken(userId?: string, fingerprint?: string) {
+    const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
+    
+    const token = jwt.sign({
+      userId: userId || 'anonymous',
+      fingerprint: fingerprint || 'generic',
+      createdAt: Date.now()
+    }, jwtSecret, {
+      expiresIn: '30m' // 30 dakika geçerli
+    });
+    
+    return token;
   }
 
   /**

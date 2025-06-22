@@ -1,7 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.securityValidator = exports.SecurityValidator = void 0;
 const logger_service_1 = require("../services/logger.service");
+const mongo_sanitize_1 = __importDefault(require("mongo-sanitize"));
 // Simple XSS protection function
 function sanitizeString(input) {
     if (typeof input !== 'string')
@@ -36,18 +40,30 @@ class SecurityValidator {
         this.config = Object.assign({ enableXSSProtection: true, enableSQLInjectionProtection: true, enableFileUploadValidation: true, maxFileSize: 5 * 1024 * 1024, allowedFileTypes: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx'], maxInputLength: 10000, enableInputSanitization: true }, config);
     }
     /**
-     * XSS saldırılarına karşı string temizleme
+     * XSS ve NoSQL injection saldırılarına karşı girdi temizleme
+     * @param input Temizlenecek girdi (string veya obje olabilir)
+     * @returns Temizlenmiş girdi
      */
     sanitizeInput(input) {
         if (!this.config.enableInputSanitization) {
             return input;
         }
         try {
-            return sanitizeString(input);
+            let sanitized = input;
+            // String input için XSS koruması
+            if (typeof input === 'string') {
+                sanitized = sanitizeString(input);
+            }
+            // Object input için NoSQL injection koruması
+            if (typeof input === 'object' && input !== null) {
+                // MongoDB operatör karakterlerinin kaldırılması ($ ve .)
+                sanitized = (0, mongo_sanitize_1.default)(sanitized);
+            }
+            return sanitized;
         }
         catch (error) {
-            logger_service_1.logger.error('XSS sanitization error:', error);
-            return '';
+            logger_service_1.logger.error('Input sanitization error:', error);
+            return input;
         }
     }
     /**

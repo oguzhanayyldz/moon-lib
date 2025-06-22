@@ -50,9 +50,11 @@ export declare class SecurityValidator {
     private config;
     constructor(config?: Partial<SecurityValidatorConfig>);
     /**
-     * XSS saldırılarına karşı string temizleme
+     * XSS ve NoSQL injection saldırılarına karşı girdi temizleme
+     * @param input Temizlenecek girdi (string veya obje olabilir)
+     * @returns Temizlenmiş girdi
      */
-    sanitizeInput(input: string): string;
+    sanitizeInput(input: any): any;
     /**
      * SQL Injection tespiti
      */

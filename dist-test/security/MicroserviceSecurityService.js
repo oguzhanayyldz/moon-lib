@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MicroserviceSecurityService = void 0;
 const index_1 = require("../index");
@@ -7,6 +40,7 @@ const RateLimiter_1 = require("./RateLimiter");
 const BruteForceProtection_1 = require("./BruteForceProtection");
 const SecurityHeaders_1 = require("./SecurityHeaders");
 const SecurityManager_1 = require("./SecurityManager");
+const jwt = __importStar(require("jsonwebtoken"));
 /**
  * Merkezi Mikroservis Güvenlik Servisi
  *
@@ -138,12 +172,27 @@ class MicroserviceSecurityService {
      * Rate limiting için Express middleware'i alır
      */
     getRateLimitMiddleware() {
-        // RateLimiter nesnesini kontrol et
-        if (!this.rateLimiter || typeof this.rateLimiter.middleware !== 'function') {
-            index_1.logger.error('RateLimiter middleware fonksiyonu bulunamadı');
-            return (_req, _res, next) => next();
-        }
         return this.rateLimiter.middleware();
+    }
+    /**
+     * NoSQL Injection koruma middleware
+     * Tüm request.body, request.params ve request.query değerlerini temizler
+     *
+     * @returns NoSQL sanitize middleware
+     */
+    getNoSQLSanitizerMiddleware() {
+        return (req, res, next) => {
+            if (req.body && this.validator) {
+                req.body = this.validator.sanitizeInput(req.body);
+            }
+            if (req.params && this.validator) {
+                req.params = this.validator.sanitizeInput(req.params);
+            }
+            if (req.query && this.validator) {
+                req.query = this.validator.sanitizeInput(req.query);
+            }
+            next();
+        };
     }
     /**
      * Güvenlik başlıkları için Express middleware'i alır
@@ -224,6 +273,63 @@ class MicroserviceSecurityService {
             isValid: false,
             errors: ['File validation service is not available']
         };
+    }
+    /**
+     * JWT tabanlı CSRF koruma middleware'i
+     * Cookie olmadan stateless bir yaklaşım kullanır ve tüm mikroservislerde tutarlı koruma sağlar
+     *
+     * @returns Express middleware
+     */
+    getJwtCsrfProtectionMiddleware() {
+        return (req, res, next) => {
+            // GET, HEAD ve OPTIONS istekleri için doğrulama gerekmez
+            if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+                return next();
+            }
+            const token = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'];
+            // Header'lar dizi veya string olabilir, tek bir değer beklendiğinden ilk değeri alıyoruz
+            const csrfToken = Array.isArray(token) ? token[0] : token;
+            if (!csrfToken) {
+                return res.status(403).json({
+                    errors: [{ message: 'CSRF token eksik' }]
+                });
+            }
+            try {
+                // Token doğrula - tüm mikroservislerin aynı JWT_SECRET değişkenini kullanması gerekir
+                const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
+                const decoded = jwt.verify(csrfToken, jwtSecret);
+                // CSRF token verisini request nesnesine ekle
+                req.csrfTokenData = decoded;
+                next();
+            }
+            catch (err) {
+                // JWT hatası - token geçersiz veya süresi dolmuş
+                // Hata mesajını güvenli şekilde erişme
+                const errorMessage = err instanceof Error ? err.message : 'Bilinmeyen hata';
+                index_1.logger.warn(`CSRF token doğrulama hatası: ${errorMessage}`);
+                return res.status(403).json({
+                    errors: [{ message: 'Geçersiz veya süresi dolmuş CSRF token' }]
+                });
+            }
+        };
+    }
+    /**
+     * CSRF token oluşturma (auth servisi için)
+     *
+     * @param userId Kullanıcı ID'si (opsiyonel)
+     * @param fingerprint Tarayıcı/kullanıcı parmak izi
+     * @returns JWT formatında CSRF token
+     */
+    generateCsrfToken(userId, fingerprint) {
+        const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
+        const token = jwt.sign({
+            userId: userId || 'anonymous',
+            fingerprint: fingerprint || 'generic',
+            createdAt: Date.now()
+        }, jwtSecret, {
+            expiresIn: '30m' // 30 dakika geçerli
+        });
+        return token;
     }
     /**
      * Başarısız giriş denemesini kaydeder

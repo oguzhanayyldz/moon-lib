@@ -70,7 +70,14 @@ export declare class MicroserviceSecurityService {
     /**
      * Rate limiting için Express middleware'i alır
      */
-    getRateLimitMiddleware(): (_req: Request, _res: Response, next: NextFunction) => void;
+    getRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
+    /**
+     * NoSQL Injection koruma middleware
+     * Tüm request.body, request.params ve request.query değerlerini temizler
+     *
+     * @returns NoSQL sanitize middleware
+     */
+    getNoSQLSanitizerMiddleware(): (req: Request, res: Response, next: NextFunction) => void;
     /**
      * Güvenlik başlıkları için Express middleware'i alır
      */
@@ -87,7 +94,7 @@ export declare class MicroserviceSecurityService {
      * Kullanıcıya özgü rate limiting middleware'i
      * Not: Servis-özel işlevlerle geriye dönük uyumluluk için
      */
-    getUserRateLimitMiddleware(): (_req: Request, _res: Response, next: NextFunction) => void;
+    getUserRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
     /**
      * Dosya yükleme validasyon middleware'i
      * Not: Servis-özel işlevlerle geriye dönük uyumluluk için
@@ -98,6 +105,21 @@ export declare class MicroserviceSecurityService {
      * @param file Yüklenecek dosya objesi
      */
     validateFileUpload(file: any): Promise<import("./SecurityValidator").ValidationResult>;
+    /**
+     * JWT tabanlı CSRF koruma middleware'i
+     * Cookie olmadan stateless bir yaklaşım kullanır ve tüm mikroservislerde tutarlı koruma sağlar
+     *
+     * @returns Express middleware
+     */
+    getJwtCsrfProtectionMiddleware(): (req: Request, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
+    /**
+     * CSRF token oluşturma (auth servisi için)
+     *
+     * @param userId Kullanıcı ID'si (opsiyonel)
+     * @param fingerprint Tarayıcı/kullanıcı parmak izi
+     * @returns JWT formatında CSRF token
+     */
+    generateCsrfToken(userId?: string, fingerprint?: string): string;
     /**
      * Başarısız giriş denemesini kaydeder
      */

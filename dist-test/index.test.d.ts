@@ -156,6 +156,9 @@ export declare const createMicroserviceSecurityService: (config?: any) => {
     getFailedLoginHandlerMiddleware: () => jest.Mock<any, any, any>;
     getUserRateLimitMiddleware: () => jest.Mock<any, any, any>;
     getFileUploadValidationMiddleware: () => jest.Mock<any, any, any>;
+    getNoSQLSanitizerMiddleware: () => jest.Mock<any, any, any>;
+    getJwtCsrfProtectionMiddleware: () => jest.Mock<any, any, any>;
+    generateCsrfToken: jest.Mock<any, any, any>;
     validateInput: jest.Mock<any, any, any>;
     validateFileUpload: jest.Mock<any, any, any>;
     getStatus: jest.Mock<any, any, any>;
@@ -196,6 +199,9 @@ export declare const microserviceSecurityService: {
     getFailedLoginHandlerMiddleware: () => jest.Mock<any, any, any>;
     getUserRateLimitMiddleware: () => jest.Mock<any, any, any>;
     getFileUploadValidationMiddleware: () => jest.Mock<any, any, any>;
+    getNoSQLSanitizerMiddleware: () => jest.Mock<any, any, any>;
+    getJwtCsrfProtectionMiddleware: () => jest.Mock<any, any, any>;
+    generateCsrfToken: jest.Mock<any, any, any>;
     validateInput: jest.Mock<any, any, any>;
     validateFileUpload: jest.Mock<any, any, any>;
     getStatus: jest.Mock<any, any, any>;

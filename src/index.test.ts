@@ -331,6 +331,10 @@ export const createMicroserviceSecurityService = (config: any = {}) => {
         getFailedLoginHandlerMiddleware: createMockMiddleware,
         getUserRateLimitMiddleware: createMockMiddleware,
         getFileUploadValidationMiddleware: createMockMiddleware,
+        // CSRF koruması ve NoSQL sanitization
+        getNoSQLSanitizerMiddleware: createMockMiddleware,
+        getJwtCsrfProtectionMiddleware: createMockMiddleware,
+        generateCsrfToken: jest.fn().mockReturnValue('mock-csrf-token-for-testing'),
         
         // Core validation methods
         validateInput: jest.fn().mockResolvedValue(mockValidationResult),

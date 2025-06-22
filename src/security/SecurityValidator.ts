@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../services/logger.service';
+import expressMongoSanitize from 'express-mongo-sanitize';
+import sanitize from 'mongo-sanitize';
 
 // Simple XSS protection function
 function sanitizeString(input: string): string {
@@ -83,18 +85,33 @@ export class SecurityValidator {
     }
 
     /**
-     * XSS saldırılarına karşı string temizleme
+     * XSS ve NoSQL injection saldırılarına karşı girdi temizleme
+     * @param input Temizlenecek girdi (string veya obje olabilir)
+     * @returns Temizlenmiş girdi
      */
-    sanitizeInput(input: string): string {
+    sanitizeInput(input: any): any {
         if (!this.config.enableInputSanitization) {
             return input;
         }
 
         try {
-            return sanitizeString(input);
+            let sanitized = input;
+            
+            // String input için XSS koruması
+            if (typeof input === 'string') {
+                sanitized = sanitizeString(input);
+            }
+            
+            // Object input için NoSQL injection koruması
+            if (typeof input === 'object' && input !== null) {
+                // MongoDB operatör karakterlerinin kaldırılması ($ ve .)
+                sanitized = sanitize(sanitized);
+            }
+            
+            return sanitized;
         } catch (error) {
-            logger.error('XSS sanitization error:', error);
-            return '';
+            logger.error('Input sanitization error:', error);
+            return input;
         }
     }
 
@@ -118,14 +135,48 @@ export class SecurityValidator {
     }
 
     /**
-     * NoSQL Injection tespiti
+     * NoSQL Injection tespiti - recursive olarak özellikle MongoDB operatörlerini arar
      */
     detectNoSQLInjection(input: any): boolean {
-        if (typeof input === 'object' && input !== null) {
-            const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin'];
-            return Object.keys(input).some(key => dangerousKeys.includes(key));
+        if (typeof input !== 'object' || input === null) {
+            return false;
         }
-        return false;
+
+        const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin', '$exists', '$mod', '$elemMatch', '$text', '$expr', '$or', '$and', '$not', '$nor'];
+        
+        // Input'u konsola yazdır - debug için 
+        logger.debug('NoSQL Injection kontrol ediliyor, input:', JSON.stringify(input));
+        
+        // Recursive olarak objedeki tüm alanları kontrol et
+        const checkObject = (obj: any, path = ''): boolean => {
+            // Eğer array ise, her elemanını kontrol et
+            if (Array.isArray(obj)) {
+                return obj.some((item, index) => typeof item === 'object' && item !== null && checkObject(item, `${path}[${index}]`));
+            }
+            
+            // Obje ise her key'i kontrol et
+            if (typeof obj === 'object' && obj !== null) {
+                // 1. Tehlikeli operatörler var mı diye direkt key'leri kontrol et
+                const dangerousKey = Object.keys(obj).find(key => dangerousKeys.includes(key));
+                if (dangerousKey) {
+                    logger.warn(`NoSQL Injection tespit edildi: ${path ? path + '.' : ''}${dangerousKey}`, { value: obj[dangerousKey] });
+                    return true;
+                }
+                
+                // 2. Alt nesneleri recursive olarak kontrol et
+                return Object.entries(obj).some(([key, value]) => 
+                    typeof value === 'object' && value !== null && checkObject(value, path ? `${path}.${key}` : key)
+                );
+            }
+            
+            return false;
+        };
+        
+        const result = checkObject(input);
+        if (result) {
+            logger.warn('NoSQL Injection tespit edildi, tam input:', { input: JSON.stringify(input) });
+        }
+        return result;
     }
 
     /**
