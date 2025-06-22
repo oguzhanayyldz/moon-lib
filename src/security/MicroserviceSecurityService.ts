@@ -34,6 +34,12 @@ export interface MicroserviceSecurityConfig {
   enableXFrameOptions: boolean;     // X-Frame-Options etkinleştirme
   enableXContentTypeOptions: boolean; // X-Content-Type-Options etkinleştirme
   maxInputLength: number;           // Maksimum girdi uzunluğu
+  // Environment-based configuration
+  environment?: 'development' | 'staging' | 'production';
+  enableApiKeyRateLimit?: boolean;  // API key based rate limiting
+  apiKeyMaxRequests?: number;       // API key request limit
+  enableSecurityMonitoring?: boolean; // Security event monitoring
+  securityLogLevel?: 'error' | 'warn' | 'info' | 'debug';
 }
 
 /**
@@ -317,5 +323,296 @@ export class MicroserviceSecurityService {
       }
       next();
     };
+  }
+
+  /**
+   * API Key based rate limiting middleware
+   */
+  getApiKeyRateLimitMiddleware() {
+    if (!this.config.enableApiKeyRateLimit) {
+      return (_req: Request, _res: Response, next: NextFunction) => {
+        next();
+      };
+    }
+
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const apiKey = req.headers['x-api-key'] as string;
+        
+        if (!apiKey) {
+          return next(); // No API key, skip API key rate limiting
+        }
+
+        // Use RateLimiter's API key method if available
+        if (this.rateLimiter && typeof this.rateLimiter.checkAPIKeyRateLimit === 'function') {
+          const endpoint = `${req.method}:${req.route?.path || req.path}`;
+          const result = await this.rateLimiter.checkAPIKeyRateLimit(apiKey, endpoint);
+          
+          if (!result.allowed) {
+            logger.warn('API key rate limit exceeded:', {
+              apiKey: apiKey.substring(0, 8) + '...',
+              endpoint,
+              totalHits: result.totalHits
+            });
+
+            return res.status(429).json({
+              error: 'API key rate limit exceeded',
+              retryAfter: Math.ceil(result.timeUntilReset / 1000),
+              resetTime: result.resetTime
+            });
+          }
+
+          // Set API key rate limit headers
+          res.set({
+            'X-API-RateLimit-Limit': this.config.apiKeyMaxRequests?.toString() || '5000',
+            'X-API-RateLimit-Remaining': (this.config.apiKeyMaxRequests! - result.totalHits).toString(),
+            'X-API-RateLimit-Reset': result.resetTime.toISOString()
+          });
+        }
+
+        next();
+      } catch (error) {
+        logger.error('API key rate limiting error:', error);
+        next(); // Fail open
+      }
+    };
+  }
+
+  /**
+   * Combined security middleware with API key support
+   */
+  getEnhancedSecurityMiddleware() {
+    const middlewares = [];
+
+    // Security headers (always first)
+    middlewares.push(this.getSecurityHeadersMiddleware());
+
+    // API key rate limiting (if enabled)
+    if (this.config.enableApiKeyRateLimit) {
+      middlewares.push(this.getApiKeyRateLimitMiddleware());
+    }
+
+    // Regular rate limiting
+    middlewares.push(this.getRateLimitMiddleware());
+
+    // Input validation
+    if (this.validator) {
+      middlewares.push((req: Request, res: Response, next: NextFunction) => {
+        if (req.body && this.validator && typeof this.validator.sanitizeInput === 'function') {
+          req.body = this.validator.sanitizeInput(req.body);
+        }
+        next();
+      });
+    }
+
+    return middlewares;
+  }
+
+  /**
+   * CSRF protection middleware - delegates to SecurityManager
+   */
+  getCSRFProtectionMiddleware() {
+    // SecurityManager'dan CSRF protection middleware'i al
+    if (!this.securityManager || typeof this.securityManager.csrfProtectionMiddleware !== 'function') {
+      logger.error('SecurityManager CSRF protection middleware bulunamadı');
+      // Fallback middleware dönelim
+      return (_req: Request, _res: Response, next: NextFunction) => {
+        next();
+      };
+    }
+
+    return this.securityManager.csrfProtectionMiddleware();
+  }
+
+  /**
+   * Generate CSRF token for requests
+   */
+  generateCSRFToken(req: Request): string {
+    if (!this.securityManager || typeof this.securityManager.generateCSRFToken !== 'function') {
+      logger.error('SecurityManager generateCSRFToken fonksiyonu bulunamadı');
+      // Fallback token generation
+      const crypto = require('crypto');
+      return crypto.randomBytes(32).toString('hex');
+    }
+
+    return this.securityManager.generateCSRFToken(req);
+  }
+
+  /**
+   * Enhanced security middleware stack with CSRF protection
+   */
+  getFullSecurityMiddleware(options: { enableCSRF?: boolean } = {}) {
+    const middlewares = [];
+
+    // Security headers (always first)
+    middlewares.push(this.getSecurityHeadersMiddleware());
+
+    // CSRF protection (if enabled)
+    if (options.enableCSRF) {
+      middlewares.push(this.getCSRFProtectionMiddleware());
+    }
+
+    // API key rate limiting (if enabled)
+    if (this.config.enableApiKeyRateLimit) {
+      middlewares.push(this.getApiKeyRateLimitMiddleware());
+    }
+
+    // Regular rate limiting
+    middlewares.push(this.getRateLimitMiddleware());
+
+    // Input validation and sanitization
+    if (this.validator) {
+      middlewares.push((req: Request, res: Response, next: NextFunction) => {
+        if (req.body && this.validator && typeof this.validator.sanitizeInput === 'function') {
+          req.body = this.validator.sanitizeInput(req.body);
+        }
+        next();
+      });
+    }
+
+    return middlewares;
+  }
+}
+
+/**
+ * Environment-based Security Configuration Factory
+ */
+export class SecurityConfigFactory {
+  /**
+   * Creates security configuration based on environment variables and service type
+   */
+  static createConfig(serviceName: string, environment: string = process.env.NODE_ENV || 'development'): Partial<MicroserviceSecurityConfig> {
+    const baseConfig: Partial<MicroserviceSecurityConfig> = {
+      serviceName,
+      environment: environment as 'development' | 'staging' | 'production',
+      // Environment variables with fallbacks
+      maxFileSize: parseInt(process.env.SECURITY_MAX_FILE_SIZE || '10485760'), // 10MB default
+      maxRequestsPerWindow: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
+      requestWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
+      bruteForceMaxAttempts: parseInt(process.env.BRUTE_FORCE_MAX_ATTEMPTS || '5'),
+      bruteForceBlockDurationMs: parseInt(process.env.BRUTE_FORCE_LOCKOUT_DURATION_SECONDS || '1800') * 1000,
+      bruteForceWindowMs: parseInt(process.env.BRUTE_FORCE_WINDOW_SECONDS || '900') * 1000,
+      maxInputLength: parseInt(process.env.SECURITY_MAX_INPUT_LENGTH || '10000'),
+      
+      // Feature flags from environment
+      enableXSSProtection: process.env.SECURITY_ENABLE_XSS_PROTECTION !== 'false',
+      enableSQLInjectionProtection: process.env.SECURITY_ENABLE_SQL_INJECTION_DETECTION !== 'false',
+      enableFileUploadValidation: process.env.SECURITY_ENABLE_FILE_UPLOAD_VALIDATION !== 'false',
+      enableCSP: process.env.SECURITY_ENABLE_CSP !== 'false',
+      enableHSTS: process.env.SECURITY_ENABLE_HSTS !== 'false',
+      enableXFrameOptions: process.env.SECURITY_ENABLE_X_FRAME_OPTIONS !== 'false',
+      enableXContentTypeOptions: process.env.SECURITY_ENABLE_X_CONTENT_TYPE_OPTIONS !== 'false',
+      enableApiKeyRateLimit: process.env.SECURITY_ENABLE_API_KEY_RATE_LIMIT === 'true',
+      apiKeyMaxRequests: parseInt(process.env.RATE_LIMIT_API_KEY_MAX_REQUESTS || '5000'),
+      enableSecurityMonitoring: process.env.SECURITY_ENABLE_MONITORING !== 'false',
+      securityLogLevel: (process.env.SECURITY_LOG_LEVEL || 'warn') as 'error' | 'warn' | 'info' | 'debug',
+      
+      // File types from environment
+      allowedFileTypes: (process.env.SECURITY_ALLOWED_MIME_TYPES || 'image/jpeg,image/png,image/gif,application/pdf')
+        .split(',')
+        .map(type => type.trim())
+    };
+
+    // Environment-specific overrides
+    switch (environment) {
+      case 'production':
+        return {
+          ...baseConfig,
+          maxRequestsPerWindow: Math.min(baseConfig.maxRequestsPerWindow || 100, 50), // Stricter in prod
+          bruteForceMaxAttempts: Math.min(baseConfig.bruteForceMaxAttempts || 5, 3), // Stricter in prod
+          securityLogLevel: 'warn', // Less verbose in prod
+          enableSecurityMonitoring: true // Always enabled in prod
+        };
+        
+      case 'staging':
+        return {
+          ...baseConfig,
+          securityLogLevel: 'info',
+          enableSecurityMonitoring: true
+        };
+        
+      case 'development':
+      default:
+        return {
+          ...baseConfig,
+          maxRequestsPerWindow: (baseConfig.maxRequestsPerWindow || 100) * 2, // More lenient in dev
+          securityLogLevel: 'debug', // More verbose in dev
+          enableSecurityMonitoring: false // Optional in dev
+        };
+    }
+  }
+
+  /**
+   * Creates service-specific configuration with environment overrides
+   */
+  static createServiceConfig(serviceName: string): MicroserviceSecurityConfig {
+    const envConfig = this.createConfig(serviceName);
+    
+    // Service-specific configurations
+    const serviceDefaults: Record<string, Partial<MicroserviceSecurityConfig>> = {
+      auth: {
+        apiPathRegex: /^\/api\/users\/?/,
+        maxRequestsPerWindow: 100,
+        bruteForceMaxAttempts: 5,
+        bruteForceBlockDurationMs: 15 * 60 * 1000, // 15 minutes
+        maxInputLength: 1000
+      },
+      orders: {
+        apiPathRegex: /^\/api\/orders\/?/,
+        maxRequestsPerWindow: 200,
+        bruteForceMaxAttempts: 10,
+        maxFileSize: 10 * 1024 * 1024, // 10MB
+        maxInputLength: 5000,
+        allowedFileTypes: ['image/jpeg', 'image/png', 'application/pdf', 'text/csv']
+      },
+      products: {
+        apiPathRegex: /^\/api\/products\/?/,
+        maxRequestsPerWindow: 150,
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        allowedFileTypes: ['image/jpeg', 'image/png', 'application/json']
+      },
+      catalog: {
+        apiPathRegex: /^\/api\/catalog\/?/,
+        maxRequestsPerWindow: 150,
+        maxFileSize: 3 * 1024 * 1024 // 3MB
+      },
+      inventory: {
+        apiPathRegex: /^\/api\/inventory\/?/,
+        maxRequestsPerWindow: 150
+      },
+      pricing: {
+        apiPathRegex: /^\/api\/pricing\/?/,
+        maxRequestsPerWindow: 200
+      }
+    };
+
+    const serviceConfig = serviceDefaults[serviceName] || {};
+    
+    return {
+      serviceName,
+      apiPathRegex: /.*/,
+      maxFileSize: 5 * 1024 * 1024,
+      allowedFileTypes: ['application/json'],
+      maxRequestsPerWindow: 100,
+      requestWindowMs: 15 * 60 * 1000,
+      bruteForceMaxAttempts: 5,
+      bruteForceBlockDurationMs: 15 * 60 * 1000,
+      bruteForceWindowMs: 30 * 60 * 1000,
+      enableXSSProtection: true,
+      enableSQLInjectionProtection: true,
+      enableFileUploadValidation: true,
+      enableCSP: true,
+      enableHSTS: true,
+      enableXFrameOptions: true,
+      enableXContentTypeOptions: true,
+      maxInputLength: 1000,
+      environment: 'development',
+      enableApiKeyRateLimit: false,
+      apiKeyMaxRequests: 5000,
+      enableSecurityMonitoring: true,
+      securityLogLevel: 'warn',
+      ...envConfig,
+      ...serviceConfig
+    } as MicroserviceSecurityConfig;
   }
 }

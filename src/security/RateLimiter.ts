@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { RedisClientType } from 'redis';
 import { logger } from '../services/logger.service';
+import { globalSecurityMonitor, SecurityEventType } from './SecurityMonitor';
 
 export interface RateLimitConfig {
     windowMs: number;
@@ -219,6 +220,25 @@ export class RateLimiter {
                 });
 
                 if (!result.allowed) {
+                    // Record security event
+                    globalSecurityMonitor.recordEvent({
+                        type: SecurityEventType.RATE_LIMIT_EXCEEDED,
+                        severity: 'medium',
+                        ip,
+                        userAgent: req.headers['user-agent'],
+                        userId: (req as any).user?.id,
+                        endpoint: `${req.method}:${endpoint}`,
+                        method: req.method,
+                        serviceName: (req as any).serviceName || 'unknown',
+                        blocked: true,
+                        details: {
+                            totalHits: result.totalHits,
+                            limit: config.maxRequests,
+                            windowMs: config.windowMs,
+                            keyType: config.keyGenerator !== this.config.keyGenerator ? 'custom' : 'ip'
+                        }
+                    });
+
                     logger.warn('Rate limit exceeded:', {
                         ip,
                         endpoint,

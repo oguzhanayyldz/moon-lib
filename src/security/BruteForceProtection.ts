@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { RedisClientType } from 'redis';
 import { logger } from '../services/logger.service';
+import { globalSecurityMonitor, SecurityEventType } from './SecurityMonitor';
 
 export interface BruteForceConfig {
     maxAttempts?: number;
@@ -113,6 +114,23 @@ export class BruteForceProtection {
 
                 // Clear attempt count
                 await this.redisClient.del(attemptKey);
+
+                // Record security event
+                globalSecurityMonitor.recordEvent({
+                    type: SecurityEventType.BRUTE_FORCE_ATTEMPT,
+                    severity: 'high',
+                    ip,
+                    endpoint: 'brute_force_block',
+                    method: 'BLOCK',
+                    serviceName: 'security',
+                    blocked: true,
+                    details: {
+                        attempts,
+                        maxAttempts: this.config.maxAttempts,
+                        blockDuration: this.config.blockDurationMs,
+                        windowMs: this.config.windowMs
+                    }
+                });
 
                 logger.warn('IP blocked due to brute force attempts:', {
                     ip,
