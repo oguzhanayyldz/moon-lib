@@ -4,6 +4,7 @@ import { RateLimiter } from './RateLimiter';
 import { BruteForceProtection } from './BruteForceProtection';
 import { SecurityHeaders } from './SecurityHeaders';
 import { SecurityManager } from './SecurityManager';
+import { CSRFService } from './CSRFService';
 import { Request, Response, NextFunction } from 'express';
 // UserPayload tipini doğru konumdan import ediyoruz
 import { UserPayload } from '../common/middlewares/current-user';
@@ -55,6 +56,7 @@ export class MicroserviceSecurityService {
   public readonly bruteForceProtection: BruteForceProtection;
   public readonly securityHeaders: SecurityHeaders;
   public readonly securityManager: SecurityManager;
+  public readonly csrfService: CSRFService;
   private readonly config: MicroserviceSecurityConfig;
 
   /**
@@ -132,6 +134,16 @@ export class MicroserviceSecurityService {
 
     // SecurityManager başlat
     this.securityManager = new SecurityManager();
+
+    // CSRFService başlat
+    this.csrfService = new CSRFService(redisWrapper.client, {
+      secretKey: process.env.CSRF_SECRET || `${this.config.serviceName}-csrf-secret`,
+      tokenExpiry: 3600, // 1 hour
+      cookieName: '_csrf',
+      headerName: 'x-csrf-token',
+      skipRoutes: ['/health', '/metrics', '/api/health'],
+      secure: this.config.environment === 'production'
+    });
 
     logger.info(`MicroserviceSecurityService initialized for ${this.config.serviceName} service`);
   }
@@ -409,33 +421,39 @@ export class MicroserviceSecurityService {
   }
 
   /**
-   * CSRF protection middleware - delegates to SecurityManager
+   * CSRF protection middleware - uses enhanced CSRFService
    */
   getCSRFProtectionMiddleware() {
-    // SecurityManager'dan CSRF protection middleware'i al
-    if (!this.securityManager || typeof this.securityManager.csrfProtectionMiddleware !== 'function') {
-      logger.error('SecurityManager CSRF protection middleware bulunamadı');
-      // Fallback middleware dönelim
-      return (_req: Request, _res: Response, next: NextFunction) => {
-        next();
-      };
-    }
-
-    return this.securityManager.csrfProtectionMiddleware();
+    return this.csrfService.protectionMiddleware(this.config.serviceName);
   }
 
   /**
    * Generate CSRF token for requests
    */
-  generateCSRFToken(req: Request): string {
-    if (!this.securityManager || typeof this.securityManager.generateCSRFToken !== 'function') {
-      logger.error('SecurityManager generateCSRFToken fonksiyonu bulunamadı');
-      // Fallback token generation
-      const crypto = require('crypto');
-      return crypto.randomBytes(32).toString('hex');
-    }
+  async generateCSRFToken(req: Request): Promise<string> {
+    const userId = (req as any).currentUser?.id;
+    return await this.csrfService.generateToken(req, this.config.serviceName, userId);
+  }
 
-    return this.securityManager.generateCSRFToken(req);
+  /**
+   * CSRF token generation endpoint
+   */
+  getCSRFTokenEndpoint() {
+    return this.csrfService.generateTokenEndpoint(this.config.serviceName);
+  }
+
+  /**
+   * CSRF token refresh endpoint
+   */
+  getCSRFRefreshEndpoint() {
+    return this.csrfService.refreshTokenEndpoint(this.config.serviceName);
+  }
+
+  /**
+   * Cross-service CSRF token validation endpoint
+   */
+  getCSRFValidateEndpoint() {
+    return this.csrfService.validateTokenEndpoint(this.config.serviceName);
   }
 
   /**
