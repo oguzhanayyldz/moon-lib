@@ -31,6 +31,7 @@ export * from './security/BruteForceProtection';
 export * from './security/SecurityHeaders';
 export * from './security/SecurityManager';
 export * from './security/CSRFService';
+export * from './security/UnifiedCSRFService';
 export * from './security/MicroserviceSecurityService';
 
 // Utils
