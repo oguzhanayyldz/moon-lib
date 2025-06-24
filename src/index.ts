@@ -32,6 +32,13 @@ export * from './security/SecurityHeaders';
 export * from './security/SecurityManager';
 export * from './security/MicroserviceSecurityService';
 
+// Security Logger
+export * from './security-logger';
+
+// Performance Optimizations
+export * from './services/redisConnectionPool.service';
+export * from './security/OptimizedSecurityService';
+
 // Utils
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
