@@ -36,8 +36,7 @@ export * from './security/MicroserviceSecurityService';
 export * from './security-logger';
 
 // Performance Optimizations
-export * from './services/redisConnectionPool.service';
-export * from './security/OptimizedSecurityService';
+// Redis connection pooling handled by redisWrapper.service
 
 // Utils
 export * from './utils/optimisticLocking.util';

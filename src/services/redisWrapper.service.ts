@@ -132,6 +132,24 @@ class RedisWrapper {
             this._url = undefined;
         }
     }
+
+    // Connection monitoring metodları
+    getConnectionStats() {
+        return {
+            totalInstances: RedisWrapper.instances.size,
+            currentUrl: this._url,
+            isConnected: !!this._client
+        };
+    }
+
+    getActiveConnections() {
+        return RedisWrapper.instances.size;
+    }
+
+    // Tüm instance'ları listele (debugging için)
+    static getInstanceUrls(): string[] {
+        return Array.from(RedisWrapper.instances.keys());
+    }
 }
 
 export const redisWrapper = new RedisWrapper();
