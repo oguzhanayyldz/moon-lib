@@ -11,7 +11,7 @@ class Publisher {
                 if (err) {
                     return reject(err);
                 }
-                console.log("Event published to subject", this.subject);
+                // Event published to subject
                 resolve();
             });
         });

@@ -56,8 +56,9 @@ export class MicroserviceSecurityService {
   /**
    * Mikroservis Güvenlik Servisi oluşturur
    * @param config Güvenlik yapılandırması
+   * @param redisClient Redis client instance (her mikroservisin kendi redis bağlantısı)
    */
-  constructor(config: MicroserviceSecurityConfig) {
+  constructor(config: MicroserviceSecurityConfig, redisClient?: any) {
     // Default değerleri içeren temel konfigürasyon
     const defaultConfig: MicroserviceSecurityConfig = {
       serviceName: 'default',
@@ -93,8 +94,9 @@ export class MicroserviceSecurityService {
       allowedFileTypes: this.config.allowedFileTypes
     });
 
-    // RateLimiter başlat
-    this.rateLimiter = new RateLimiter(redisWrapper.client, {
+    // RateLimiter başlat - injected redis client veya fallback olarak global redisWrapper kullan
+    const redis = redisClient || redisWrapper.client;
+    this.rateLimiter = new RateLimiter(redis, {
       windowMs: this.config.requestWindowMs,
       maxRequests: this.config.maxRequestsPerWindow,
       keyGenerator: (req: ExtendedRequest) => {
@@ -109,8 +111,8 @@ export class MicroserviceSecurityService {
       skipFailedRequests: false
     });
 
-    // BruteForceProtection başlat
-    this.bruteForceProtection = new BruteForceProtection(redisWrapper.client, {
+    // BruteForceProtection başlat - aynı redis client'ı kullan
+    this.bruteForceProtection = new BruteForceProtection(redis, {
       maxAttempts: this.config.bruteForceMaxAttempts,
       blockDurationMs: this.config.bruteForceBlockDurationMs,
       windowMs: this.config.bruteForceWindowMs,

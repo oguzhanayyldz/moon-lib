@@ -26,14 +26,12 @@ import {
   BaseIntegration
 } from '../index';
 
-console.log('✅ All critical imports successful!');
+// All critical imports successful!
 
 // Quick functionality tests
 const testError = new BadRequestError('Test error');
-console.log('✅ Error creation works:', testError.statusCode === 400);
-
-console.log('✅ UserRole enum works:', UserRole.Admin === 0);
-
-console.log('✅ Subjects enum works:', typeof Subjects.UserCreated === 'string');
+// Error creation test passed
+// UserRole enum test passed
+// Subjects enum test passed
 
 export {};

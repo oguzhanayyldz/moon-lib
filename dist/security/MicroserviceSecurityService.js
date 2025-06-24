@@ -49,6 +49,7 @@ const RateLimiter_1 = require("./RateLimiter");
 const BruteForceProtection_1 = require("./BruteForceProtection");
 const SecurityHeaders_1 = require("./SecurityHeaders");
 const SecurityManager_1 = require("./SecurityManager");
+const bad_request_error_1 = require("../common/errors/bad-request-error");
 const jwt = __importStar(require("jsonwebtoken"));
 /**
  * Merkezi Mikroservis Güvenlik Servisi
@@ -61,8 +62,9 @@ class MicroserviceSecurityService {
     /**
      * Mikroservis Güvenlik Servisi oluşturur
      * @param config Güvenlik yapılandırması
+     * @param redisClient Redis client instance (her mikroservisin kendi redis bağlantısı)
      */
-    constructor(config) {
+    constructor(config, redisClient) {
         // Default değerleri içeren temel konfigürasyon
         const defaultConfig = {
             serviceName: 'default',
@@ -95,8 +97,9 @@ class MicroserviceSecurityService {
             maxFileSize: this.config.maxFileSize,
             allowedFileTypes: this.config.allowedFileTypes
         });
-        // RateLimiter başlat
-        this.rateLimiter = new RateLimiter_1.RateLimiter(index_1.redisWrapper.client, {
+        // RateLimiter başlat - injected redis client veya fallback olarak global redisWrapper kullan
+        const redis = redisClient || index_1.redisWrapper.client;
+        this.rateLimiter = new RateLimiter_1.RateLimiter(redis, {
             windowMs: this.config.requestWindowMs,
             maxRequests: this.config.maxRequestsPerWindow,
             keyGenerator: (req) => {
@@ -111,8 +114,8 @@ class MicroserviceSecurityService {
             skipSuccessfulRequests: false,
             skipFailedRequests: false
         });
-        // BruteForceProtection başlat
-        this.bruteForceProtection = new BruteForceProtection_1.BruteForceProtection(index_1.redisWrapper.client, {
+        // BruteForceProtection başlat - aynı redis client'ı kullan
+        this.bruteForceProtection = new BruteForceProtection_1.BruteForceProtection(redis, {
             maxAttempts: this.config.bruteForceMaxAttempts,
             blockDurationMs: this.config.bruteForceBlockDurationMs,
             windowMs: this.config.bruteForceWindowMs,
@@ -189,22 +192,47 @@ class MicroserviceSecurityService {
     }
     /**
      * NoSQL Injection koruma middleware
-     * Tüm request.body, request.params ve request.query değerlerini temizler
+     * Tüm request.body, request.params ve request.query değerlerini kontrol eder ve tehlikeli MongoDB operatörleri içeriyorsa hata fırlatır
+     * Tehlikeli operatör içermeyen istekleri ise temizleyip devam eder
      *
      * @returns NoSQL sanitize middleware
      */
     getNoSQLSanitizerMiddleware() {
         return (req, res, next) => {
-            if (req.body && this.validator) {
-                req.body = this.validator.sanitizeInput(req.body);
+            try {
+                // Önce girdilerde potansiyel NoSQL injection kontrolü yap
+                // Request body'sini kontrol et
+                if (req.body && this.validator) {
+                    // Önemli: Tehlikeli operatörler içeren istekleri reddet
+                    if (this.validator.detectNoSQLInjection(req.body)) {
+                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { body: JSON.stringify(req.body) });
+                        throw new bad_request_error_1.BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+                    }
+                    req.body = this.validator.sanitizeInput(req.body);
+                }
+                // URL parametrelerini kontrol et
+                if (req.params && this.validator) {
+                    // Önemli: Tehlikeli operatörler içeren istekleri reddet
+                    if (this.validator.detectNoSQLInjection(req.params)) {
+                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { params: JSON.stringify(req.params) });
+                        throw new bad_request_error_1.BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+                    }
+                    req.params = this.validator.sanitizeInput(req.params);
+                }
+                // Query parametrelerini kontrol et
+                if (req.query && this.validator) {
+                    // Önemli: Tehlikeli operatörler içeren istekleri reddet
+                    if (this.validator.detectNoSQLInjection(req.query)) {
+                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { query: JSON.stringify(req.query) });
+                        throw new bad_request_error_1.BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+                    }
+                    req.query = this.validator.sanitizeInput(req.query);
+                }
+                next();
             }
-            if (req.params && this.validator) {
-                req.params = this.validator.sanitizeInput(req.params);
+            catch (error) {
+                next(error);
             }
-            if (req.query && this.validator) {
-                req.query = this.validator.sanitizeInput(req.query);
-            }
-            next();
         };
     }
     /**

@@ -43,8 +43,9 @@ export declare class MicroserviceSecurityService {
     /**
      * Mikroservis Güvenlik Servisi oluşturur
      * @param config Güvenlik yapılandırması
+     * @param redisClient Redis client instance (her mikroservisin kendi redis bağlantısı)
      */
-    constructor(config: MicroserviceSecurityConfig);
+    constructor(config: MicroserviceSecurityConfig, redisClient?: any);
     /**
      * Input doğrulaması gerçekleştirir
      *
@@ -73,7 +74,8 @@ export declare class MicroserviceSecurityService {
     getRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
     /**
      * NoSQL Injection koruma middleware
-     * Tüm request.body, request.params ve request.query değerlerini temizler
+     * Tüm request.body, request.params ve request.query değerlerini kontrol eder ve tehlikeli MongoDB operatörleri içeriyorsa hata fırlatır
+     * Tehlikeli operatör içermeyen istekleri ise temizleyip devam eder
      *
      * @returns NoSQL sanitize middleware
      */

@@ -83,14 +83,39 @@ class SecurityValidator {
         return sqlPatterns.some(pattern => pattern.test(input));
     }
     /**
-     * NoSQL Injection tespiti
+     * NoSQL Injection tespiti - recursive olarak özellikle MongoDB operatörlerini arar
      */
     detectNoSQLInjection(input) {
-        if (typeof input === 'object' && input !== null) {
-            const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin'];
-            return Object.keys(input).some(key => dangerousKeys.includes(key));
+        if (typeof input !== 'object' || input === null) {
+            return false;
         }
-        return false;
+        const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin', '$exists', '$mod', '$elemMatch', '$text', '$expr', '$or', '$and', '$not', '$nor'];
+        // Input'u konsola yazdır - debug için 
+        logger_service_1.logger.debug('NoSQL Injection kontrol ediliyor, input:', JSON.stringify(input));
+        // Recursive olarak objedeki tüm alanları kontrol et
+        const checkObject = (obj, path = '') => {
+            // Eğer array ise, her elemanını kontrol et
+            if (Array.isArray(obj)) {
+                return obj.some((item, index) => typeof item === 'object' && item !== null && checkObject(item, `${path}[${index}]`));
+            }
+            // Obje ise her key'i kontrol et
+            if (typeof obj === 'object' && obj !== null) {
+                // 1. Tehlikeli operatörler var mı diye direkt key'leri kontrol et
+                const dangerousKey = Object.keys(obj).find(key => dangerousKeys.includes(key));
+                if (dangerousKey) {
+                    logger_service_1.logger.warn(`NoSQL Injection tespit edildi: ${path ? path + '.' : ''}${dangerousKey}`, { value: obj[dangerousKey] });
+                    return true;
+                }
+                // 2. Alt nesneleri recursive olarak kontrol et
+                return Object.entries(obj).some(([key, value]) => typeof value === 'object' && value !== null && checkObject(value, path ? `${path}.${key}` : key));
+            }
+            return false;
+        };
+        const result = checkObject(input);
+        if (result) {
+            logger_service_1.logger.warn('NoSQL Injection tespit edildi, tam input:', { input: JSON.stringify(input) });
+        }
+        return result;
     }
     /**
      * Dosya yükleme güvenlik kontrolü

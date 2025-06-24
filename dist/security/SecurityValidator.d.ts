@@ -60,7 +60,7 @@ export declare class SecurityValidator {
      */
     detectSQLInjection(input: string): boolean;
     /**
-     * NoSQL Injection tespiti
+     * NoSQL Injection tespiti - recursive olarak özellikle MongoDB operatörlerini arar
      */
     detectNoSQLInjection(input: any): boolean;
     /**

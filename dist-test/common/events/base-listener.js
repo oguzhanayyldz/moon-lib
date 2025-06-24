@@ -17,7 +17,7 @@ class Listener {
     listen() {
         const subscription = this.client.subscribe(this.subject, this.queueGroupName, this.subscriptionOptions());
         subscription.on('message', (msg) => {
-            console.log(`Message received: ${this.subject} / ${this.queueGroupName}`);
+            // Message received
             const parsedData = this.parseMessage(msg);
             this.onMessage(parsedData, msg);
             // msg.ack();
