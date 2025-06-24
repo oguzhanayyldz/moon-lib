@@ -19,6 +19,7 @@ export * from './security/BruteForceProtection';
 export * from './security/SecurityHeaders';
 export * from './security/SecurityManager';
 export * from './security/MicroserviceSecurityService';
+export * from './security-logger';
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
 export * from './jobs/eventPublisher.job';

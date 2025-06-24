@@ -23,6 +23,13 @@ declare class RedisWrapper {
     }): Promise<any>;
     setNX(key: string, value: string, expireSeconds: number): Promise<boolean>;
     disconnect(): Promise<void>;
+    getConnectionStats(): {
+        totalInstances: number;
+        currentUrl: string | undefined;
+        isConnected: boolean;
+    };
+    getActiveConnections(): number;
+    static getInstanceUrls(): string[];
 }
 export declare const redisWrapper: RedisWrapper;
 export {};

@@ -147,6 +147,21 @@ class RedisWrapper {
             }
         });
     }
+    // Connection monitoring metodları
+    getConnectionStats() {
+        return {
+            totalInstances: RedisWrapper.instances.size,
+            currentUrl: this._url,
+            isConnected: !!this._client
+        };
+    }
+    getActiveConnections() {
+        return RedisWrapper.instances.size;
+    }
+    // Tüm instance'ları listele (debugging için)
+    static getInstanceUrls() {
+        return Array.from(RedisWrapper.instances.keys());
+    }
 }
 RedisWrapper.instances = new Map();
 exports.redisWrapper = new RedisWrapper();

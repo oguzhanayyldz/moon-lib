@@ -44,6 +44,10 @@ __exportStar(require("./security/BruteForceProtection"), exports);
 __exportStar(require("./security/SecurityHeaders"), exports);
 __exportStar(require("./security/SecurityManager"), exports);
 __exportStar(require("./security/MicroserviceSecurityService"), exports);
+// Security Logger
+__exportStar(require("./security-logger"), exports);
+// Performance Optimizations
+// Redis connection pooling handled by redisWrapper.service
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);

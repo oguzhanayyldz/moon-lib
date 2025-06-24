@@ -28,10 +28,3 @@ export {
     SecurityMetricsData,
     getEventSeverity
 } from './SecurityEventTypes';
-
-// Re-export for convenience
-export type {
-    SecurityEventMetadata,
-    SecurityLogEntry,
-    SecurityMetricsData
-} from './SecurityEventTypes';
