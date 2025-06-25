@@ -23,6 +23,8 @@ export * from './services/retryManager';
 export * from './services/logger.service';
 export * from './services/integrationRouter.service';
 export * from './services/integrationRequestLog.service';
+export * from './services/baseApiClient.service';
+export * from './services/circuitBreaker.service';
 
 // Security
 export * from './security/SecurityValidator';
@@ -86,7 +88,13 @@ export * from './events/publishers/orderIntegrationStatusUpdated.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
-export * from './common/';
+export * from './common/errors';
+export * from './common/events';
+export * from './common/interfaces';
+export * from './common/middlewares';
+export * from './common/types';
+export * from './common/methods';
+export * from './common/core';
 
 // Model başlatma fonksiyonu
 export const initializeModels = (connection: mongoose.Connection): void => {

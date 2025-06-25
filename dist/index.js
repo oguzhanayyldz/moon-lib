@@ -37,6 +37,8 @@ __exportStar(require("./services/retryManager"), exports);
 __exportStar(require("./services/logger.service"), exports);
 __exportStar(require("./services/integrationRouter.service"), exports);
 __exportStar(require("./services/integrationRequestLog.service"), exports);
+__exportStar(require("./services/baseApiClient.service"), exports);
+__exportStar(require("./services/circuitBreaker.service"), exports);
 // Security
 __exportStar(require("./security/SecurityValidator"), exports);
 __exportStar(require("./security/RateLimiter"), exports);
@@ -93,7 +95,13 @@ __exportStar(require("./events/publishers/userIntegrationSettings.publisher"), e
 __exportStar(require("./events/publishers/orderIntegrationStatusUpdated.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
-__exportStar(require("./common/"), exports);
+__exportStar(require("./common/errors"), exports);
+__exportStar(require("./common/events"), exports);
+__exportStar(require("./common/interfaces"), exports);
+__exportStar(require("./common/middlewares"), exports);
+__exportStar(require("./common/types"), exports);
+__exportStar(require("./common/methods"), exports);
+__exportStar(require("./common/core"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);
