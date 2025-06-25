@@ -1,6 +1,5 @@
 import { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
-import PQueue from 'p-queue';
 import { IApiClient, RequestConfig } from '../common/interfaces/api-client.interface';
 import { BaseApiClientConfig, ApiRequestMetrics } from '../common/types/api-client.types';
 import { CircuitBreaker } from './circuitBreaker.service';
@@ -9,7 +8,7 @@ import { ResourceName } from '../common';
 export declare abstract class BaseApiClient implements IApiClient {
     protected httpClient: AxiosInstance;
     protected rateLimiter: RateLimiterMemory;
-    protected queue: PQueue;
+    protected queue: any;
     protected circuitBreaker: CircuitBreaker;
     protected logService?: IntegrationRequestLogService;
     protected tracer: any;

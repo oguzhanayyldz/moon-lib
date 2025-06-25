@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseApiClient = void 0;
 const axios_1 = __importDefault(require("axios"));
 const rate_limiter_flexible_1 = require("rate-limiter-flexible");
-const p_queue_1 = __importDefault(require("p-queue"));
+const PQueue = require('p-queue').default;
 const api_client_types_1 = require("../common/types/api-client.types");
 const circuitBreaker_service_1 = require("./circuitBreaker.service");
 const logger_service_1 = require("./logger.service");
@@ -218,7 +218,7 @@ class BaseApiClient {
         });
     }
     setupQueue(config) {
-        this.queue = new p_queue_1.default({
+        this.queue = new PQueue({
             concurrency: config.concurrency,
             intervalCap: config.intervalCap,
             interval: config.interval,

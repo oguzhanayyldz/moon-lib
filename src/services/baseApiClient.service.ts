@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
-import PQueue from 'p-queue';
+const PQueue = require('p-queue').default;
 
 import { IApiClient, RequestConfig } from '../common/interfaces/api-client.interface';
 import { 
@@ -21,7 +21,7 @@ import { ResourceName } from '../common';
 export abstract class BaseApiClient implements IApiClient {
   protected httpClient!: AxiosInstance;
   protected rateLimiter!: RateLimiterMemory;
-  protected queue!: PQueue;
+  protected queue!: any;
   protected circuitBreaker!: CircuitBreaker;
   protected logService?: IntegrationRequestLogService;
   protected tracer: any;
@@ -167,7 +167,9 @@ export abstract class BaseApiClient implements IApiClient {
           span.setTag('http.url', requestConfig.url);
         }
 
+        console.log(`Executing request: ${JSON.stringify(requestConfig)}`);
         const response = await this.httpClient.request<T>(requestConfig);
+        console.log(`Response received: ${JSON.stringify(response)}`);
         
         if (span) {
           span.setTag('http.status_code', response.status);
