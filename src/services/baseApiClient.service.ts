@@ -167,9 +167,7 @@ export abstract class BaseApiClient implements IApiClient {
           span.setTag('http.url', requestConfig.url);
         }
 
-        console.log(`Executing request: ${JSON.stringify(requestConfig)}`);
         const response = await this.httpClient.request<T>(requestConfig);
-        console.log(`Response received: ${JSON.stringify(response)}`);
         
         if (span) {
           span.setTag('http.status_code', response.status);
