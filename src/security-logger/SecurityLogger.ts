@@ -290,7 +290,7 @@ export class SecurityLogger {
         };
         
         // Output as JSON for log aggregation
-        console.log(JSON.stringify(output));
+        // console.log(JSON.stringify(output));
     }
     
     private collectMetrics(eventType: SecurityEventType, timestamp: Date): void {
