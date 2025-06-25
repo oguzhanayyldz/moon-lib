@@ -157,7 +157,7 @@ class SecurityLogger {
     outputStructuredLog(logEntry) {
         const output = Object.assign({ timestamp: logEntry.metadata.timestamp.toISOString(), level: logEntry.level, service: this.serviceName, message: logEntry.message, eventType: logEntry.metadata.eventType, severity: logEntry.metadata.severity, correlationId: logEntry.correlationId, metadata: logEntry.metadata }, (logEntry.error && { error: logEntry.error }));
         // Output as JSON for log aggregation
-        console.log(JSON.stringify(output));
+        // console.log(JSON.stringify(output));
     }
     collectMetrics(eventType, timestamp) {
         if (!this.metricsCollector)
