@@ -18,7 +18,8 @@
     "prebuild:test": "npm run clean:test",
     "build": "tsc",
     "build:test": "tsc --project tsconfig.test.json",
-    "build:all": "npm run build && npm run build:test"
+    "build:all": "npm run build && npm run build:test",
+    "build:watch": "tsc --watch"
   },
   "files": [
     "dist",

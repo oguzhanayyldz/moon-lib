@@ -8,8 +8,10 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'unknown-service';
 const consoleFormat = winston.format.combine(
     winston.format.timestamp(),
     winston.format.colorize(),
-    winston.format.printf(({ level, message, timestamp }) => {
-        return `[${timestamp}] [${SERVICE_NAME}] [${POD_NAME}] [${level}]: ${message}`;
+    winston.format.printf(({ level, message, timestamp, ...meta }) => {
+        // Meta verileri işle
+        const metaStr = Object.keys(meta).length > 0 ? ' ' + JSON.stringify(meta) : '';
+        return `[${timestamp}] [${SERVICE_NAME}] [${POD_NAME}] [${level}]: ${message}${metaStr}`;
     })
 );
 

@@ -95,25 +95,34 @@ export abstract class BaseApiClient implements IApiClient {
     const startTime = Date.now();
     let logId: string | undefined;
 
+    // Merge default headers with request headers
+    const finalConfig: RequestConfig = {
+      ...requestConfig,
+      headers: {
+        ...this.getDefaultHeaders(),
+        ...requestConfig.headers
+      }
+    };
+
     try {
       // Rate limiting check (unless skipped)
-      if (!requestConfig.skipRateLimit) {
-        await this.checkRateLimit(requestConfig);
+      if (!finalConfig.skipRateLimit) {
+        await this.checkRateLimit(finalConfig);
       }
 
       // Add request to queue and execute with circuit breaker
       const response = await this.queue.add(async () => {
-        if (!requestConfig.skipCircuitBreaker) {
-          return this.circuitBreaker.execute(() => this.executeRequest<T>(requestConfig));
+        if (!finalConfig.skipCircuitBreaker) {
+          return this.circuitBreaker.execute(() => this.executeRequest<T>(finalConfig));
         } else {
-          return this.executeRequest<T>(requestConfig);
+          return this.executeRequest<T>(finalConfig);
         }
       }) as AxiosResponse<T>;
 
       // Log successful request
-      if (requestConfig.logRequest !== false && this.logService) {
+      if (finalConfig.logRequest !== false && this.logService) {
         const duration = Date.now() - startTime;
-        logId = await this.logRequest(requestConfig);
+        logId = await this.logRequest(finalConfig);
         await this.logResponse(logId, {
           status: response.status,
           headers: response.headers,
@@ -247,7 +256,14 @@ export abstract class BaseApiClient implements IApiClient {
   private buildFullUrl(url: string): string {
     if (url.startsWith('http')) return url;
     const baseURL = this.getBaseURL();
-    return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+    const fullUrl = `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+    logger.debug('Building full URL', { 
+      baseURL, 
+      url, 
+      fullUrl,
+      integrationName: this.integrationName
+    });
+    return fullUrl;
   }
 
   private updateMetrics(success: boolean, responseTime: number): void {
@@ -272,7 +288,7 @@ export abstract class BaseApiClient implements IApiClient {
   // Setup methods
   private setupHttpClient(config: BaseApiClientConfig): void {
     this.httpClient = axios.create({
-      baseURL: config.baseURL || this.getBaseURL(),
+      baseURL: this.getBaseURL(),
       timeout: config.timeout,
       headers: this.getDefaultHeaders()
     });
@@ -317,7 +333,12 @@ export abstract class BaseApiClient implements IApiClient {
         logger.debug('HTTP Request', {
           method: config.method?.toUpperCase(),
           url: config.url,
-          headers: config.headers
+          baseURL: config.baseURL,
+          fullURL: config.baseURL ? `${config.baseURL}${config.url}` : config.url,
+          headers: {
+            'Content-Type': config.headers['Content-Type'],
+            'X-Shopify-Access-Token': config.headers['X-Shopify-Access-Token'] ? '[REDACTED]' : undefined
+          }
         });
         return config;
       },
@@ -333,7 +354,7 @@ export abstract class BaseApiClient implements IApiClient {
         logger.debug('HTTP Response', {
           status: response.status,
           url: response.config.url,
-          duration: Date.now() - (response.config as any).startTime
+          dataExists: !!response.data
         });
         return response;
       },

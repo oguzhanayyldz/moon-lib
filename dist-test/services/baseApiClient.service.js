@@ -50,24 +50,26 @@ class BaseApiClient {
         var _a, _b, _c;
         const startTime = Date.now();
         let logId;
+        // Merge default headers with request headers
+        const finalConfig = Object.assign(Object.assign({}, requestConfig), { headers: Object.assign(Object.assign({}, this.getDefaultHeaders()), requestConfig.headers) });
         try {
             // Rate limiting check (unless skipped)
-            if (!requestConfig.skipRateLimit) {
-                await this.checkRateLimit(requestConfig);
+            if (!finalConfig.skipRateLimit) {
+                await this.checkRateLimit(finalConfig);
             }
             // Add request to queue and execute with circuit breaker
             const response = await this.queue.add(async () => {
-                if (!requestConfig.skipCircuitBreaker) {
-                    return this.circuitBreaker.execute(() => this.executeRequest(requestConfig));
+                if (!finalConfig.skipCircuitBreaker) {
+                    return this.circuitBreaker.execute(() => this.executeRequest(finalConfig));
                 }
                 else {
-                    return this.executeRequest(requestConfig);
+                    return this.executeRequest(finalConfig);
                 }
             });
             // Log successful request
-            if (requestConfig.logRequest !== false && this.logService) {
+            if (finalConfig.logRequest !== false && this.logService) {
                 const duration = Date.now() - startTime;
-                logId = await this.logRequest(requestConfig);
+                logId = await this.logRequest(finalConfig);
                 await this.logResponse(logId, {
                     status: response.status,
                     headers: response.headers,
@@ -184,7 +186,14 @@ class BaseApiClient {
         if (url.startsWith('http'))
             return url;
         const baseURL = this.getBaseURL();
-        return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+        const fullUrl = `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+        logger_service_1.logger.info('Building full URL', {
+            baseURL,
+            url,
+            fullUrl,
+            integrationName: this.integrationName
+        });
+        return fullUrl;
     }
     updateMetrics(success, responseTime) {
         this.metrics.totalRequests++;
@@ -205,7 +214,7 @@ class BaseApiClient {
     // Setup methods
     setupHttpClient(config) {
         this.httpClient = axios_1.default.create({
-            baseURL: config.baseURL || this.getBaseURL(),
+            baseURL: this.getBaseURL(),
             timeout: config.timeout,
             headers: this.getDefaultHeaders()
         });
@@ -242,10 +251,15 @@ class BaseApiClient {
         // Request interceptor
         this.httpClient.interceptors.request.use((config) => {
             var _a;
-            logger_service_1.logger.debug('HTTP Request', {
+            logger_service_1.logger.info('HTTP Request', {
                 method: (_a = config.method) === null || _a === void 0 ? void 0 : _a.toUpperCase(),
                 url: config.url,
-                headers: config.headers
+                baseURL: config.baseURL,
+                fullURL: config.baseURL ? `${config.baseURL}${config.url}` : config.url,
+                headers: {
+                    'Content-Type': config.headers['Content-Type'],
+                    'X-Shopify-Access-Token': config.headers['X-Shopify-Access-Token'] ? '[REDACTED]' : undefined
+                }
             });
             return config;
         }, (error) => {
@@ -254,19 +268,16 @@ class BaseApiClient {
         });
         // Response interceptor
         this.httpClient.interceptors.response.use((response) => {
-            logger_service_1.logger.debug('HTTP Response', {
+            logger_service_1.logger.info('Config', JSON.stringify(response.config));
+            logger_service_1.logger.info('HTTP Response', {
                 status: response.status,
                 url: response.config.url,
-                duration: Date.now() - response.config.startTime
+                fullURL: response.config.baseURL ? `${response.config.baseURL}${response.config.url}` : response.config.url,
+                dataExists: !!response.data
             });
             return response;
         }, (error) => {
-            var _a, _b;
-            logger_service_1.logger.error('HTTP Response Error', {
-                status: (_a = error.response) === null || _a === void 0 ? void 0 : _a.status,
-                url: (_b = error.config) === null || _b === void 0 ? void 0 : _b.url,
-                error: error.message
-            });
+            logger_service_1.logger.error('HTTP Response Error', JSON.stringify(error.response || error.message));
             return Promise.reject(error);
         });
     }
