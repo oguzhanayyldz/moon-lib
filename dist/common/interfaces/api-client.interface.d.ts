@@ -1,4 +1,13 @@
-import { AxiosRequestConfig } from 'axios';
+interface AxiosRequestConfig {
+    method?: string;
+    url?: string;
+    data?: any;
+    headers?: Record<string, any>;
+    timeout?: number;
+    params?: any;
+    baseURL?: string;
+    [key: string]: any;
+}
 export interface IApiClient {
     get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
     post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
@@ -40,4 +49,9 @@ export interface RequestConfig extends AxiosRequestConfig {
     skipRateLimit?: boolean;
     skipCircuitBreaker?: boolean;
     logRequest?: boolean;
+    method?: string;
+    url?: string;
+    headers?: Record<string, any>;
+    data?: any;
 }
+export {};

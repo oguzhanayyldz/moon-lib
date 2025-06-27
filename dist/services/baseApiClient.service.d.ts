@@ -1,4 +1,28 @@
-import { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+interface AxiosRequestConfig {
+    method?: string;
+    url?: string;
+    data?: any;
+    headers?: Record<string, any>;
+    timeout?: number;
+    params?: any;
+    baseURL?: string;
+    [key: string]: any;
+}
+interface AxiosResponse<T = any> {
+    data: T;
+    status: number;
+    statusText: string;
+    headers: any;
+    config: AxiosRequestConfig;
+}
+interface AxiosError extends Error {
+    config?: AxiosRequestConfig;
+    code?: string;
+    request?: any;
+    response?: AxiosResponse;
+    isAxiosError: boolean;
+    toJSON(): object;
+}
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { IApiClient, RequestConfig } from '../common/interfaces/api-client.interface';
 import { BaseApiClientConfig, ApiRequestMetrics } from '../common/types/api-client.types';
@@ -6,7 +30,7 @@ import { CircuitBreaker } from './circuitBreaker.service';
 import { IntegrationRequestLogService } from './integrationRequestLog.service';
 import { ResourceName } from '../common';
 export declare abstract class BaseApiClient implements IApiClient {
-    protected httpClient: AxiosInstance;
+    protected httpClient: any;
     protected rateLimiter: RateLimiterMemory;
     protected queue: any;
     protected circuitBreaker: CircuitBreaker;
@@ -47,3 +71,4 @@ export declare abstract class BaseApiClient implements IApiClient {
     getCircuitBreakerMetrics(): import("../common").CircuitBreakerMetrics;
     resetCircuitBreaker(): void;
 }
+export {};

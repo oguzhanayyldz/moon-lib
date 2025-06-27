@@ -1,4 +1,52 @@
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios from 'axios';
+
+// Simple type definitions for compatibility with Axios 1.x
+interface AxiosRequestConfig {
+  method?: string;
+  url?: string;
+  data?: any;
+  headers?: Record<string, any>;
+  timeout?: number;
+  params?: any;
+  baseURL?: string;
+  [key: string]: any;
+}
+
+interface AxiosResponse<T = any> {
+  data: T;
+  status: number;
+  statusText: string;
+  headers: any;
+  config: AxiosRequestConfig;
+}
+
+interface AxiosError extends Error {
+  config?: AxiosRequestConfig;
+  code?: string;
+  request?: any;
+  response?: AxiosResponse;
+  isAxiosError: boolean;
+  toJSON(): object;
+}
+
+interface AxiosInstance {
+  request<T = any, R = AxiosResponse<T>>(config: AxiosRequestConfig): Promise<R>;
+  get<T = any, R = AxiosResponse<T>>(url: string, config?: AxiosRequestConfig): Promise<R>;
+  delete<T = any, R = AxiosResponse<T>>(url: string, config?: AxiosRequestConfig): Promise<R>;
+  head<T = any, R = AxiosResponse<T>>(url: string, config?: AxiosRequestConfig): Promise<R>;
+  options<T = any, R = AxiosResponse<T>>(url: string, config?: AxiosRequestConfig): Promise<R>;
+  post<T = any, R = AxiosResponse<T>>(url: string, data?: any, config?: AxiosRequestConfig): Promise<R>;
+  put<T = any, R = AxiosResponse<T>>(url: string, data?: any, config?: AxiosRequestConfig): Promise<R>;
+  patch<T = any, R = AxiosResponse<T>>(url: string, data?: any, config?: AxiosRequestConfig): Promise<R>;
+  defaults: AxiosRequestConfig;
+  interceptors: {
+    request: any;
+    response: any;
+  };
+  create(config?: AxiosRequestConfig): AxiosInstance;
+}
+
+type InternalAxiosRequestConfig = AxiosRequestConfig;
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 const PQueue = require('p-queue').default;
 
@@ -19,7 +67,7 @@ import { logger } from './logger.service';
 import { ResourceName } from '../common';
 
 export abstract class BaseApiClient implements IApiClient {
-  protected httpClient!: AxiosInstance;
+  protected httpClient!: any;
   protected rateLimiter!: RateLimiterMemory;
   protected queue!: any;
   protected circuitBreaker!: CircuitBreaker;
@@ -183,7 +231,7 @@ export abstract class BaseApiClient implements IApiClient {
           span.setTag('http.url', requestConfig.url);
         }
 
-        const response = await this.httpClient.request<T>(requestConfig);
+        const response = await this.httpClient.request(requestConfig) as AxiosResponse<T>;
         
         if (span) {
           span.setTag('http.status_code', response.status);
@@ -366,20 +414,20 @@ export abstract class BaseApiClient implements IApiClient {
   private setupInterceptors(): void {
     // Request interceptor
     this.httpClient.interceptors.request.use(
-      (config) => {
+      (config: InternalAxiosRequestConfig) => {
         logger.debug('HTTP Request', {
           method: config.method?.toUpperCase(),
           url: config.url,
           baseURL: config.baseURL,
           fullURL: config.baseURL ? `${config.baseURL}${config.url}` : config.url,
           headers: {
-            'Content-Type': config.headers['Content-Type'],
-            'X-Shopify-Access-Token': config.headers['X-Shopify-Access-Token'] ? '[REDACTED]' : undefined
+            'Content-Type': config.headers?.['Content-Type'] || 'N/A',
+            'X-Shopify-Access-Token': config.headers?.['X-Shopify-Access-Token'] ? '[REDACTED]' : 'N/A'
           }
         });
         return config;
       },
-      (error) => {
+      (error: AxiosError) => {
         logger.error('HTTP Request Error', { error: error.message });
         return Promise.reject(error);
       }
@@ -387,7 +435,7 @@ export abstract class BaseApiClient implements IApiClient {
 
     // Response interceptor
     this.httpClient.interceptors.response.use(
-      (response) => {
+      (response: AxiosResponse) => {
         logger.debug('HTTP Response', {
           status: response.status,
           url: response.config.url,
@@ -395,7 +443,7 @@ export abstract class BaseApiClient implements IApiClient {
         });
         return response;
       },
-      (error) => {
+      (error: AxiosError) => {
         logger.error('HTTP Response Error', {
           status: error.response?.status,
           url: error.config?.url,

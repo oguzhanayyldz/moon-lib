@@ -277,15 +277,15 @@ class BaseApiClient {
     setupInterceptors() {
         // Request interceptor
         this.httpClient.interceptors.request.use((config) => {
-            var _a;
+            var _a, _b, _c;
             logger_service_1.logger.debug('HTTP Request', {
                 method: (_a = config.method) === null || _a === void 0 ? void 0 : _a.toUpperCase(),
                 url: config.url,
                 baseURL: config.baseURL,
                 fullURL: config.baseURL ? `${config.baseURL}${config.url}` : config.url,
                 headers: {
-                    'Content-Type': config.headers['Content-Type'],
-                    'X-Shopify-Access-Token': config.headers['X-Shopify-Access-Token'] ? '[REDACTED]' : undefined
+                    'Content-Type': ((_b = config.headers) === null || _b === void 0 ? void 0 : _b['Content-Type']) || 'N/A',
+                    'X-Shopify-Access-Token': ((_c = config.headers) === null || _c === void 0 ? void 0 : _c['X-Shopify-Access-Token']) ? '[REDACTED]' : 'N/A'
                 }
             });
             return config;
