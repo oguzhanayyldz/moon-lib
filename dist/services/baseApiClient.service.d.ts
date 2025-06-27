@@ -26,6 +26,7 @@ export declare abstract class BaseApiClient implements IApiClient {
     put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
     delete<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
     graphql<T>(query: string, variables?: any, config?: AxiosRequestConfig): Promise<T>;
+    protected getGraphQLEndpoint?(): string;
     protected makeRequest<T>(requestConfig: RequestConfig): Promise<T>;
     private executeRequest;
     private checkRateLimit;
@@ -36,6 +37,7 @@ export declare abstract class BaseApiClient implements IApiClient {
     private updateMetrics;
     private sleep;
     private setupHttpClient;
+    reconfigureHttpClient(): void;
     private setupRateLimiter;
     private setupQueue;
     private setupCircuitBreaker;

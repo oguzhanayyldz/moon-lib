@@ -46,12 +46,13 @@ export abstract class BaseApiClient implements IApiClient {
       averageResponseTime: 0
     };
 
-    this.setupHttpClient(config);
+    // Setup dependencies first (HTTP client will be set up later by child classes)
     this.setupRateLimiter(config.rateLimiter);
     this.setupQueue(config.queue);
     this.setupCircuitBreaker(config.circuitBreaker, serviceName);
     this.setupTracing(tracer);
-    this.setupInterceptors();
+    
+    // Note: HTTP client setup is deferred to child classes via reconfigureHttpClient()
   }
 
   // Abstract methods that must be implemented by concrete classes
@@ -80,15 +81,21 @@ export abstract class BaseApiClient implements IApiClient {
     return this.makeRequest<T>({ ...config, method: 'DELETE', url });
   }
 
-  // GraphQL support method
+  // GraphQL support method - can be overridden by child classes
   async graphql<T>(query: string, variables?: any, config?: AxiosRequestConfig): Promise<T> {
+    // Use custom GraphQL endpoint if implemented by child class
+    const graphqlEndpoint = this.getGraphQLEndpoint ? this.getGraphQLEndpoint() : '/graphql';
+    
     return this.makeRequest<T>({
       ...config,
       method: 'POST',
-      url: '/graphql',
+      url: graphqlEndpoint,
       data: { query, variables }
     });
   }
+
+  // Optional method for child classes to override GraphQL endpoint
+  protected getGraphQLEndpoint?(): string;
 
   // Core request method
   protected async makeRequest<T>(requestConfig: RequestConfig): Promise<T> {
@@ -292,6 +299,36 @@ export abstract class BaseApiClient implements IApiClient {
       timeout: config.timeout,
       headers: this.getDefaultHeaders()
     });
+  }
+
+  // Allow child classes to initialize HTTP client after properties are set
+  public reconfigureHttpClient(): void {
+    if (!this.httpClient) {
+      // Initial setup
+      this.httpClient = axios.create({
+        baseURL: this.getBaseURL(),
+        timeout: this.config.timeout,
+        headers: this.getDefaultHeaders()
+      });
+      this.setupInterceptors();
+      
+      logger.debug('HTTP client initialized', {
+        baseURL: this.httpClient.defaults.baseURL,
+        integrationName: this.integrationName
+      });
+    } else {
+      // Reconfiguration
+      this.httpClient.defaults.baseURL = this.getBaseURL();
+      this.httpClient.defaults.headers.common = {
+        ...this.httpClient.defaults.headers.common,
+        ...this.getDefaultHeaders()
+      };
+      
+      logger.debug('HTTP client reconfigured', {
+        baseURL: this.httpClient.defaults.baseURL,
+        integrationName: this.integrationName
+      });
+    }
   }
 
   private setupRateLimiter(config: ApiRateLimitConfig): void {

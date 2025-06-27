@@ -30,12 +30,12 @@ class BaseApiClient {
             failedRequests: 0,
             averageResponseTime: 0
         };
-        this.setupHttpClient(config);
+        // Setup dependencies first (HTTP client will be set up later by child classes)
         this.setupRateLimiter(config.rateLimiter);
         this.setupQueue(config.queue);
         this.setupCircuitBreaker(config.circuitBreaker, serviceName);
         this.setupTracing(tracer);
-        this.setupInterceptors();
+        // Note: HTTP client setup is deferred to child classes via reconfigureHttpClient()
     }
     // Public API methods
     get(url, config) {
@@ -58,10 +58,12 @@ class BaseApiClient {
             return this.makeRequest(Object.assign(Object.assign({}, config), { method: 'DELETE', url }));
         });
     }
-    // GraphQL support method
+    // GraphQL support method - can be overridden by child classes
     graphql(query, variables, config) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.makeRequest(Object.assign(Object.assign({}, config), { method: 'POST', url: '/graphql', data: { query, variables } }));
+            // Use custom GraphQL endpoint if implemented by child class
+            const graphqlEndpoint = this.getGraphQLEndpoint ? this.getGraphQLEndpoint() : '/graphql';
+            return this.makeRequest(Object.assign(Object.assign({}, config), { method: 'POST', url: graphqlEndpoint, data: { query, variables } }));
         });
     }
     // Core request method
@@ -216,7 +218,7 @@ class BaseApiClient {
             return url;
         const baseURL = this.getBaseURL();
         const fullUrl = `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
-        logger_service_1.logger.info('Building full URL', {
+        logger_service_1.logger.debug('Building full URL', {
             baseURL,
             url,
             fullUrl,
@@ -247,6 +249,31 @@ class BaseApiClient {
             timeout: config.timeout,
             headers: this.getDefaultHeaders()
         });
+    }
+    // Allow child classes to initialize HTTP client after properties are set
+    reconfigureHttpClient() {
+        if (!this.httpClient) {
+            // Initial setup
+            this.httpClient = axios_1.default.create({
+                baseURL: this.getBaseURL(),
+                timeout: this.config.timeout,
+                headers: this.getDefaultHeaders()
+            });
+            this.setupInterceptors();
+            logger_service_1.logger.debug('HTTP client initialized', {
+                baseURL: this.httpClient.defaults.baseURL,
+                integrationName: this.integrationName
+            });
+        }
+        else {
+            // Reconfiguration
+            this.httpClient.defaults.baseURL = this.getBaseURL();
+            this.httpClient.defaults.headers.common = Object.assign(Object.assign({}, this.httpClient.defaults.headers.common), this.getDefaultHeaders());
+            logger_service_1.logger.debug('HTTP client reconfigured', {
+                baseURL: this.httpClient.defaults.baseURL,
+                integrationName: this.integrationName
+            });
+        }
     }
     setupRateLimiter(config) {
         this.rateLimiter = new rate_limiter_flexible_1.RateLimiterMemory({
@@ -280,7 +307,7 @@ class BaseApiClient {
         // Request interceptor
         this.httpClient.interceptors.request.use((config) => {
             var _a;
-            logger_service_1.logger.info('HTTP Request', {
+            logger_service_1.logger.debug('HTTP Request', {
                 method: (_a = config.method) === null || _a === void 0 ? void 0 : _a.toUpperCase(),
                 url: config.url,
                 baseURL: config.baseURL,
@@ -297,16 +324,19 @@ class BaseApiClient {
         });
         // Response interceptor
         this.httpClient.interceptors.response.use((response) => {
-            logger_service_1.logger.info('Config', JSON.stringify(response.config));
-            logger_service_1.logger.info('HTTP Response', {
+            logger_service_1.logger.debug('HTTP Response', {
                 status: response.status,
                 url: response.config.url,
-                fullURL: response.config.baseURL ? `${response.config.baseURL}${response.config.url}` : response.config.url,
                 dataExists: !!response.data
             });
             return response;
         }, (error) => {
-            logger_service_1.logger.error('HTTP Response Error', JSON.stringify(error.response || error.message));
+            var _a, _b;
+            logger_service_1.logger.error('HTTP Response Error', {
+                status: (_a = error.response) === null || _a === void 0 ? void 0 : _a.status,
+                url: (_b = error.config) === null || _b === void 0 ? void 0 : _b.url,
+                error: error.message
+            });
             return Promise.reject(error);
         });
     }
