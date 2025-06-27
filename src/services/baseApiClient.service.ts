@@ -241,6 +241,7 @@ export abstract class BaseApiClient implements IApiClient {
         return response;
       } catch (error) {
         lastError = error as AxiosError;
+        logger.error('API request failed', JSON.stringify(error));
         
         // Check if this error should be retried
         if (retryCount < (retryConfig?.maxRetries || 0) && this.shouldRetry(lastError)) {
