@@ -1,4 +1,21 @@
-import { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+interface AxiosError extends Error {
+    response?: {
+        status: number;
+        data: any;
+        headers: any;
+    };
+    config?: any;
+    code?: string;
+}
+interface AxiosRequestConfig {
+    method?: string;
+    url?: string;
+    headers?: Record<string, any>;
+    data?: any;
+    timeout?: number;
+    baseURL?: string;
+    params?: any;
+}
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { IApiClient, RequestConfig } from '../common/interfaces/api-client.interface';
 import { BaseApiClientConfig, ApiRequestMetrics } from '../common/types/api-client.types';
@@ -6,7 +23,7 @@ import { CircuitBreaker } from './circuitBreaker.service';
 import { IntegrationRequestLogService } from './integrationRequestLog.service';
 import { ResourceName } from '../common';
 export declare abstract class BaseApiClient implements IApiClient {
-    protected httpClient: AxiosInstance;
+    protected httpClient: any;
     protected rateLimiter: RateLimiterMemory;
     protected queue: any;
     protected circuitBreaker: CircuitBreaker;
@@ -26,6 +43,12 @@ export declare abstract class BaseApiClient implements IApiClient {
     put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
     delete<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
     graphql<T>(query: string, variables?: any, config?: AxiosRequestConfig): Promise<T>;
+    protected processGraphQLResponse<T>(response: any, query?: string): T;
+    protected applyResponseProcessing(response: any, context?: {
+        isGraphQL?: boolean;
+        query?: string;
+        url?: string;
+    }): any;
     protected getGraphQLEndpoint?(): string;
     protected makeRequest<T>(requestConfig: RequestConfig): Promise<T>;
     private executeRequest;
@@ -47,4 +70,5 @@ export declare abstract class BaseApiClient implements IApiClient {
     getCircuitBreakerMetrics(): import("../common").CircuitBreakerMetrics;
     resetCircuitBreaker(): void;
 }
+export {};
 //# sourceMappingURL=baseApiClient.service.d.ts.map

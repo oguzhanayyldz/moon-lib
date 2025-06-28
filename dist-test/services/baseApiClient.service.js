@@ -45,7 +45,68 @@ class BaseApiClient {
     async graphql(query, variables, config) {
         // Use custom GraphQL endpoint if implemented by child class
         const graphqlEndpoint = this.getGraphQLEndpoint ? this.getGraphQLEndpoint() : '/graphql';
-        return this.makeRequest(Object.assign(Object.assign({}, config), { method: 'POST', url: graphqlEndpoint, data: { query, variables } }));
+        const response = await this.makeRequest(Object.assign(Object.assign({}, config), { method: 'POST', url: graphqlEndpoint, data: { query, variables } }));
+        // Handle GraphQL-specific response structure and errors
+        return this.processGraphQLResponse(response, query);
+    }
+    // Process GraphQL response - handles both standard HTTP response and GraphQL-specific structure
+    processGraphQLResponse(response, query) {
+        // Apply response processing pipeline if configured
+        const processedResponse = this.applyResponseProcessing(response, { isGraphQL: true, query });
+        // Check for GraphQL errors first
+        if (processedResponse && processedResponse.errors && Array.isArray(processedResponse.errors)) {
+            const errorMessage = processedResponse.errors.map((err) => err.message || err).join(', ');
+            logger_service_1.logger.error('GraphQL Response Errors', {
+                errors: processedResponse.errors,
+                query: (query === null || query === void 0 ? void 0 : query.substring(0, 100)) + '...',
+                integrationName: this.integrationName
+            });
+            throw new Error(`GraphQL errors: ${errorMessage}`);
+        }
+        // Handle different GraphQL response structures
+        if (processedResponse && typeof processedResponse === 'object') {
+            // Standard GraphQL response structure: { data: {...}, errors?: [...] }
+            if (processedResponse.data !== undefined) {
+                return processedResponse.data;
+            }
+            // Direct response (some GraphQL APIs might return data directly)
+            return processedResponse;
+        }
+        // Fallback - return as-is
+        return processedResponse;
+    }
+    // Apply response processing pipeline
+    applyResponseProcessing(response, context = {}) {
+        const processingConfig = this.config.responseProcessing;
+        // If no processing config, return as-is
+        if (!processingConfig) {
+            return response;
+        }
+        let processedResponse = response;
+        // Apply custom processors if configured
+        if (processingConfig.customProcessors) {
+            for (const processor of processingConfig.customProcessors) {
+                if (processor.condition(processedResponse, context)) {
+                    logger_service_1.logger.debug(`Applying response processor: ${processor.name}`, {
+                        integrationName: this.integrationName,
+                        context
+                    });
+                    processedResponse = processor.process(processedResponse, context);
+                }
+            }
+        }
+        // Auto-extract data if enabled (for nested API responses)
+        if (processingConfig.autoExtractData && processedResponse && typeof processedResponse === 'object') {
+            // Check for common nested structures
+            if (processedResponse.data !== undefined && !context.isGraphQL) {
+                logger_service_1.logger.debug('Auto-extracting data from nested response', {
+                    integrationName: this.integrationName,
+                    hasData: !!processedResponse.data
+                });
+                processedResponse = processedResponse.data;
+            }
+        }
+        return processedResponse;
     }
     // Core request method
     async makeRequest(requestConfig) {
@@ -277,15 +338,15 @@ class BaseApiClient {
     setupInterceptors() {
         // Request interceptor
         this.httpClient.interceptors.request.use((config) => {
-            var _a;
+            var _a, _b, _c;
             logger_service_1.logger.debug('HTTP Request', {
                 method: (_a = config.method) === null || _a === void 0 ? void 0 : _a.toUpperCase(),
                 url: config.url,
                 baseURL: config.baseURL,
                 fullURL: config.baseURL ? `${config.baseURL}${config.url}` : config.url,
                 headers: {
-                    'Content-Type': config.headers['Content-Type'],
-                    'X-Shopify-Access-Token': config.headers['X-Shopify-Access-Token'] ? '[REDACTED]' : undefined
+                    'Content-Type': (_b = config.headers) === null || _b === void 0 ? void 0 : _b['Content-Type'],
+                    'X-Shopify-Access-Token': ((_c = config.headers) === null || _c === void 0 ? void 0 : _c['X-Shopify-Access-Token']) ? '[REDACTED]' : undefined
                 }
             });
             return config;

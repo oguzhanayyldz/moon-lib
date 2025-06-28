@@ -1,4 +1,13 @@
-import { AxiosRequestConfig } from 'axios';
+// Local axios type definition for compatibility
+interface AxiosRequestConfig {
+  method?: string;
+  url?: string;
+  headers?: Record<string, any>;
+  data?: any;
+  timeout?: number;
+  baseURL?: string;
+  params?: any;
+}
 
 export interface IApiClient {
   get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
@@ -19,11 +28,11 @@ export interface IRequestLogger {
 
 export interface LogRequestParams {
   method: string;
-  url: string;
-  headers?: Record<string, any>;
-  body?: any;
+  endpoint: string;
+  requestHeaders?: Record<string, any>;
+  requestBody?: any;
   userId?: string;
-  integrationId?: string;
+  integrationName?: string;
 }
 
 export interface LogResponseParams {
@@ -48,4 +57,9 @@ export interface RequestConfig extends AxiosRequestConfig {
   skipRateLimit?: boolean;
   skipCircuitBreaker?: boolean;
   logRequest?: boolean;
+  method?: string;
+  url?: string;
+  headers?: Record<string, any>;
+  data?: any;
+  params?: any;
 }

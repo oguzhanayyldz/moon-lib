@@ -6,6 +6,18 @@ export interface BaseApiClientConfig {
     userId?: string;
     baseURL?: string;
     retries?: ApiRetryConfig;
+    responseProcessing?: ResponseProcessingConfig;
+}
+export interface ResponseProcessingConfig {
+    enableGraphQLProcessing?: boolean;
+    autoExtractData?: boolean;
+    preserveRawResponse?: boolean;
+    customProcessors?: ResponseProcessor[];
+}
+export interface ResponseProcessor {
+    name: string;
+    condition: (response: any, config: any) => boolean;
+    process: (response: any, config: any) => any;
 }
 export interface ApiRateLimitConfig {
     points: number;

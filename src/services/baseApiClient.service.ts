@@ -1,4 +1,36 @@
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios from 'axios';
+// Type definitions for axios compatibility
+interface AxiosInstance {
+  request<T = any>(config: any): Promise<AxiosResponse<T>>;
+  defaults: any;
+  interceptors: {
+    request: { use: (success: (config: any) => any, error: (error: any) => any) => void };
+    response: { use: (success: (response: any) => any, error: (error: any) => any) => void };
+  };
+}
+interface AxiosError extends Error {
+  response?: { status: number; data: any; headers: any };
+  config?: any;
+  code?: string;
+}
+interface AxiosRequestConfig {
+  method?: string;
+  url?: string;
+  headers?: Record<string, any>;
+  data?: any;
+  timeout?: number;
+  baseURL?: string;
+  params?: any;
+}
+interface AxiosResponse<T = any> {
+  data: T;
+  status: number;
+  headers: any;
+  config: any;
+}
+type InternalAxiosRequestConfig = AxiosRequestConfig & {
+  headers?: Record<string, any>;
+};
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 const PQueue = require('p-queue').default;
 
@@ -10,7 +42,8 @@ import {
   CircuitBreakerConfig,
   ApiRetryConfig,
   ApiRequestMetrics,
-  RateLimitExceededError 
+  RateLimitExceededError,
+  ResponseProcessingConfig 
 } from '../common/types/api-client.types';
 
 import { CircuitBreaker } from './circuitBreaker.service';
@@ -19,7 +52,7 @@ import { logger } from './logger.service';
 import { ResourceName } from '../common';
 
 export abstract class BaseApiClient implements IApiClient {
-  protected httpClient!: AxiosInstance;
+  protected httpClient!: any;
   protected rateLimiter!: RateLimiterMemory;
   protected queue!: any;
   protected circuitBreaker!: CircuitBreaker;
@@ -86,12 +119,85 @@ export abstract class BaseApiClient implements IApiClient {
     // Use custom GraphQL endpoint if implemented by child class
     const graphqlEndpoint = this.getGraphQLEndpoint ? this.getGraphQLEndpoint() : '/graphql';
     
-    return this.makeRequest<T>({
+    const response = await this.makeRequest<any>({
       ...config,
       method: 'POST',
       url: graphqlEndpoint,
       data: { query, variables }
     });
+
+    // Handle GraphQL-specific response structure and errors
+    return this.processGraphQLResponse<T>(response, query);
+  }
+
+  // Process GraphQL response - handles both standard HTTP response and GraphQL-specific structure
+  protected processGraphQLResponse<T>(response: any, query?: string): T {
+    // Apply response processing pipeline if configured
+    const processedResponse = this.applyResponseProcessing(response, { isGraphQL: true, query });
+    
+    // Check for GraphQL errors first
+    if (processedResponse && processedResponse.errors && Array.isArray(processedResponse.errors)) {
+      const errorMessage = processedResponse.errors.map((err: any) => err.message || err).join(', ');
+      logger.error('GraphQL Response Errors', {
+        errors: processedResponse.errors,
+        query: query?.substring(0, 100) + '...',
+        integrationName: this.integrationName
+      });
+      throw new Error(`GraphQL errors: ${errorMessage}`);
+    }
+
+    // Handle different GraphQL response structures
+    if (processedResponse && typeof processedResponse === 'object') {
+      // Standard GraphQL response structure: { data: {...}, errors?: [...] }
+      if (processedResponse.data !== undefined) {
+        return processedResponse.data as T;
+      }
+      
+      // Direct response (some GraphQL APIs might return data directly)
+      return processedResponse as T;
+    }
+
+    // Fallback - return as-is
+    return processedResponse as T;
+  }
+
+  // Apply response processing pipeline
+  protected applyResponseProcessing(response: any, context: { isGraphQL?: boolean; query?: string; url?: string } = {}): any {
+    const processingConfig = this.config.responseProcessing;
+    
+    // If no processing config, return as-is
+    if (!processingConfig) {
+      return response;
+    }
+
+    let processedResponse = response;
+
+    // Apply custom processors if configured
+    if (processingConfig.customProcessors) {
+      for (const processor of processingConfig.customProcessors) {
+        if (processor.condition(processedResponse, context)) {
+          logger.debug(`Applying response processor: ${processor.name}`, {
+            integrationName: this.integrationName,
+            context
+          });
+          processedResponse = processor.process(processedResponse, context);
+        }
+      }
+    }
+
+    // Auto-extract data if enabled (for nested API responses)
+    if (processingConfig.autoExtractData && processedResponse && typeof processedResponse === 'object') {
+      // Check for common nested structures
+      if (processedResponse.data !== undefined && !context.isGraphQL) {
+        logger.debug('Auto-extracting data from nested response', {
+          integrationName: this.integrationName,
+          hasData: !!processedResponse.data
+        });
+        processedResponse = processedResponse.data;
+      }
+    }
+
+    return processedResponse;
   }
 
   // Optional method for child classes to override GraphQL endpoint
@@ -183,7 +289,7 @@ export abstract class BaseApiClient implements IApiClient {
           span.setTag('http.url', requestConfig.url);
         }
 
-        const response = await this.httpClient.request<T>(requestConfig);
+        const response = await this.httpClient.request(requestConfig);
         
         if (span) {
           span.setTag('http.status_code', response.status);
@@ -366,20 +472,20 @@ export abstract class BaseApiClient implements IApiClient {
   private setupInterceptors(): void {
     // Request interceptor
     this.httpClient.interceptors.request.use(
-      (config) => {
+      (config: InternalAxiosRequestConfig) => {
         logger.debug('HTTP Request', {
           method: config.method?.toUpperCase(),
           url: config.url,
           baseURL: config.baseURL,
           fullURL: config.baseURL ? `${config.baseURL}${config.url}` : config.url,
           headers: {
-            'Content-Type': config.headers['Content-Type'],
-            'X-Shopify-Access-Token': config.headers['X-Shopify-Access-Token'] ? '[REDACTED]' : undefined
+            'Content-Type': config.headers?.['Content-Type'],
+            'X-Shopify-Access-Token': config.headers?.['X-Shopify-Access-Token'] ? '[REDACTED]' : undefined
           }
         });
         return config;
       },
-      (error) => {
+      (error: any) => {
         logger.error('HTTP Request Error', { error: error.message });
         return Promise.reject(error);
       }
@@ -387,7 +493,7 @@ export abstract class BaseApiClient implements IApiClient {
 
     // Response interceptor
     this.httpClient.interceptors.response.use(
-      (response) => {
+      (response: AxiosResponse) => {
         logger.debug('HTTP Response', {
           status: response.status,
           url: response.config.url,
@@ -395,7 +501,7 @@ export abstract class BaseApiClient implements IApiClient {
         });
         return response;
       },
-      (error) => {
+      (error: AxiosError) => {
         logger.error('HTTP Response Error', {
           status: error.response?.status,
           url: error.config?.url,
