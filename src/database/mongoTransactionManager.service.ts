@@ -39,6 +39,7 @@ export interface TransactionResult<T = any> {
 
 export class MongoTransactionManager {
     private static instance: MongoTransactionManager;
+    private connection: mongoose.Connection;
     
     // Default transaction options
     private defaultOptions: Required<TransactionOptions> = {
@@ -48,11 +49,14 @@ export class MongoTransactionManager {
         readPreference: 'primary'
     };
 
-    private constructor() {}
+    private constructor(connection?: mongoose.Connection) {
+        // Use provided connection or default to mongoose.connection
+        this.connection = connection || mongoose.connection;
+    }
 
-    public static getInstance(): MongoTransactionManager {
+    public static getInstance(connection?: mongoose.Connection): MongoTransactionManager {
         if (!MongoTransactionManager.instance) {
-            MongoTransactionManager.instance = new MongoTransactionManager();
+            MongoTransactionManager.instance = new MongoTransactionManager(connection);
         }
         return MongoTransactionManager.instance;
     }
@@ -107,7 +111,7 @@ export class MongoTransactionManager {
         
         logger.info(`🔵 MongoDB Transaction started - ID: ${transactionId}, Operations: ${operations.length}`);
 
-        const session = await mongoose.startSession();
+        const session = await this.connection.startSession();
 
         try {
             const result = await session.withTransaction(async () => {
@@ -211,7 +215,7 @@ export class MongoTransactionManager {
         
         logger.info(`🔵 Simple MongoDB Transaction started - ID: ${transactionId}`);
 
-        const session = await mongoose.startSession();
+        const session = await this.connection.startSession();
 
         try {
             const result = await session.withTransaction(operation, {
@@ -238,8 +242,10 @@ export class MongoTransactionManager {
     getStats() {
         return {
             defaultOptions: this.defaultOptions,
-            mongooseConnectionState: mongoose.connection.readyState,
-            mongooseConnectionName: mongoose.connection.name,
+            mongooseConnectionState: this.connection.readyState,
+            mongooseConnectionName: this.connection.name,
+            connectionHost: this.connection.host,
+            connectionPort: this.connection.port,
             features: {
                 multiDocumentTransactions: true,
                 changeStreams: true,
@@ -251,7 +257,7 @@ export class MongoTransactionManager {
     }
 }
 
-// Export singleton instance
+// Export singleton instance factory (deprecated - services should create their own instances)
 export const transactionManager = MongoTransactionManager.getInstance();
 
 /**
