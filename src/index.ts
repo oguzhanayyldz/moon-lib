@@ -47,6 +47,9 @@ export * from './utils/typeGuards.util';
 // Database - MongoDB Atlas Native Transactions
 export * from './database';
 
+// Middleware - Transaction Middleware
+export * from './middleware';
+
 // Jobs
 export * from './jobs/eventPublisher.job';
 export * from './jobs/deadLetterProcessor.job';
