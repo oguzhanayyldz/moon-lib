@@ -1,3 +1,2 @@
-// MongoDB Atlas Native Transaction Management
-export * from './mongoTransactionManager.service';
+// MongoDB Atlas Native Transaction Management  
 export * from './baseChangeStreamManager.service';
