@@ -94,7 +94,12 @@ export abstract class BaseChangeStreamManager {
                     // Default: attempt to restart the stream after delay
                     setTimeout(() => {
                         logger.info(`Attempting to restart change stream for ${collectionName}...`);
-                        this.startWatching(config);
+                        this.startWatching(config).catch((error) => {
+                            logger.error(`Failed to restart change stream for ${collectionName}:`, error);
+                            if (errorHandler) {
+                                errorHandler(error);
+                            }
+                        });
                     }, 5000);
                 }
             });
