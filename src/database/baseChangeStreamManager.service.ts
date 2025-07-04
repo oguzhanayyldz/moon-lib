@@ -15,8 +15,8 @@ import { logger } from '../services/logger.service';
 
 export interface ChangeStreamConfig {
     pipeline?: mongoose.PipelineStage[];
-    options?: mongoose.ChangeStreamOptions;
-    resumeToken?: mongoose.ResumeToken;
+    options?: any; // mongoose.ChangeStreamOptions not exported in v7
+    resumeToken?: any; // mongoose.ResumeToken not exported in v7
     connection?: mongoose.Connection;
 }
 
@@ -27,14 +27,14 @@ export interface ChangeEventHandler {
 export interface WatcherConfig {
     collectionName: string;
     pipeline?: mongoose.PipelineStage[];
-    options?: mongoose.ChangeStreamOptions;
+    options?: any; // mongoose.ChangeStreamOptions not exported in v7
     eventHandler: ChangeEventHandler;
     errorHandler?: (error: any) => void;
     connection?: mongoose.Connection;
 }
 
 export abstract class BaseChangeStreamManager {
-    protected watchers: Map<string, mongoose.ChangeStream> = new Map();
+    protected watchers: Map<string, any> = new Map(); // ChangeStream type changed in mongoose v7
     protected isInitialized: boolean = false;
     protected connection: mongoose.Connection;
 
@@ -60,10 +60,15 @@ export abstract class BaseChangeStreamManager {
         try {
             logger.info(`🔄 Starting change stream watcher - Collection: ${collectionName}, Watch ID: ${watchId}`);
 
+            // Check if connection is ready
+            if (connection.readyState !== 1) {
+                throw new Error(`MongoDB connection not ready. State: ${connection.readyState} (0=disconnected, 1=connected, 2=connecting, 3=disconnecting)`);
+            }
+
             // Get database from connection
             const db = connection.db;
             if (!db) {
-                throw new Error(`Database not available on connection: ${connection.name}`);
+                throw new Error(`Database not available on connection: ${connection.name || 'undefined'}`);
             }
 
             // Create change stream
@@ -96,9 +101,7 @@ export abstract class BaseChangeStreamManager {
                         logger.info(`Attempting to restart change stream for ${collectionName}...`);
                         this.startWatching(config).catch((error) => {
                             logger.error(`Failed to restart change stream for ${collectionName}:`, error);
-                            if (errorHandler) {
-                                errorHandler(error);
-                            }
+                            // No further errorHandler call here since it's already undefined in this branch
                         });
                     }, 5000);
                 }
@@ -145,7 +148,7 @@ export abstract class BaseChangeStreamManager {
             stopPromises.push(
                 watcher.close()
                     .then(() => logger.info(`✅ Stopped watcher: ${watchId}`))
-                    .catch((error) => logger.error(`Failed to stop watcher ${watchId}:`, error))
+                    .catch((error: any) => logger.error(`Failed to stop watcher ${watchId}:`, error))
             );
         }
         

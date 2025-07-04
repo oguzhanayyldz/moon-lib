@@ -14,12 +14,5 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-__exportStar(require("./errors/"), exports);
-__exportStar(require("./middlewares/"), exports);
-__exportStar(require("./events/"), exports);
-__exportStar(require("./types/"), exports);
-__exportStar(require("./methods/core"), exports);
-__exportStar(require("./methods/validator"), exports);
-__exportStar(require("./interfaces/"), exports);
-__exportStar(require("./core/"), exports);
-__exportStar(require("./strategies/"), exports);
+// MongoDB Atlas Native Transaction Management  
+__exportStar(require("./baseChangeStreamManager.service"), exports);

@@ -23,9 +23,9 @@ export interface TransactionOptions {
     /** Transaction timeout in milliseconds (default: 30000) */
     timeoutMs?: number;
     /** Read concern level (default: 'snapshot') */
-    readConcern?: mongoose.ReadConcernLevel;
+    readConcern?: string; // mongoose.ReadConcernLevel not exported in v7
     /** Write concern options */
-    writeConcern?: mongoose.WriteConcern;
+    writeConcern?: any; // mongoose.WriteConcern
     /** Read preference */
     readPreference?: string;
     /** Skip transaction for specific operations */
@@ -89,7 +89,7 @@ export const withTransaction = (options: TransactionOptions = {}) => {
             // Start transaction with options
             await session.startTransaction({
                 readPreference: mergedOptions.readPreference as any,
-                readConcern: { level: mergedOptions.readConcern },
+                readConcern: mergedOptions.readConcern as any,
                 writeConcern: mergedOptions.writeConcern,
                 maxCommitTimeMS: mergedOptions.timeoutMs
             });

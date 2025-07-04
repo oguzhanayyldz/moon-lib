@@ -67,9 +67,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
+                timestamp: Date;
                 id: mongoose.Types.ObjectId;
                 entity: string;
-                timestamp: Date;
                 reason?: string | undefined;
             } | undefined;
         }>> & mongoose.FlatRecord<{
@@ -81,9 +81,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
+                timestamp: Date;
                 id: mongoose.Types.ObjectId;
                 entity: string;
-                timestamp: Date;
                 reason?: string | undefined;
             } | undefined;
         }> & {
@@ -99,9 +99,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
+        timestamp: Date;
         id: mongoose.Types.ObjectId;
         entity: string;
-        timestamp: Date;
         reason?: string | undefined;
     } | undefined;
 }, mongoose.Document<unknown, {}, mongoose.FlatRecord<{
@@ -113,9 +113,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
+        timestamp: Date;
         id: mongoose.Types.ObjectId;
         entity: string;
-        timestamp: Date;
         reason?: string | undefined;
     } | undefined;
 }>> & mongoose.FlatRecord<{
@@ -127,9 +127,9 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
+        timestamp: Date;
         id: mongoose.Types.ObjectId;
         entity: string;
-        timestamp: Date;
         reason?: string | undefined;
     } | undefined;
 }> & {

@@ -25,6 +25,7 @@ export * from './services/integrationRouter.service';
 export * from './services/integrationRequestLog.service';
 export * from './services/baseApiClient.service';
 export * from './services/circuitBreaker.service';
+export * from './services/entityDeletionRegistry';
 
 // Security
 export * from './security/SecurityValidator';
@@ -101,6 +102,7 @@ export * from './common/middlewares';
 export * from './common/types';
 export * from './common/methods';
 export * from './common/core';
+export * from './common/strategies';
 
 // Model başlatma fonksiyonu
 export const initializeModels = (connection: mongoose.Connection): void => {

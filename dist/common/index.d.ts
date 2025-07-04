@@ -6,3 +6,4 @@ export * from './methods/core';
 export * from './methods/validator';
 export * from './interfaces/';
 export * from './core/';
+export * from './strategies/';
