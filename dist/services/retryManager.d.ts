@@ -33,4 +33,16 @@ export declare class RetryManager {
      * Bir sonraki deneme için bekleme süresini hesapla (ms cinsinden)
      */
     calculateBackoffDelay(retryCount: number): number;
+    /**
+     * Retry'ı planla - Redis'te delayed retry key'i oluştur
+     */
+    scheduleRetry(eventType: string, eventId: string, delayMs: number): Promise<void>;
+    /**
+     * Planlanmış retry'ı kontrol et
+     */
+    isRetryScheduled(eventType: string, eventId: string): Promise<boolean>;
+    /**
+     * Planlanmış retry'ı temizle
+     */
+    clearScheduledRetry(eventType: string, eventId: string): Promise<void>;
 }

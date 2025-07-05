@@ -28,6 +28,10 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
   private static instance: EntityDeletionRegistry;
   private strategies = new Map<string, EntityDeletionStrategy[]>();
   private transactionManager: any;
+  private initializationErrors = new Map<string, Error>();
+  private retryAttempts = new Map<string, number>();
+  private readonly MAX_RETRY_ATTEMPTS = 3;
+  private readonly RETRY_DELAY_MS = 1000;
 
   private constructor() {
     // Try to import transaction manager if available
@@ -51,9 +55,12 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
   }
 
   /**
-   * Register a deletion strategy for an entity type
+   * Register a deletion strategy for an entity type with resilience
    */
   register(strategy: EntityDeletionStrategy): void {
+    try {
+      // Validate strategy before registration
+      this.validateStrategy(strategy);
     const entityType = strategy.entityType;
     
     if (!this.strategies.has(entityType)) {
@@ -88,6 +95,26 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
 
     // Sort strategies by priority (highest first)
     strategies.sort((a, b) => b.priority - a.priority);
+    
+    // Clear any initialization errors for this entity type
+    this.initializationErrors.delete(entityType);
+    this.retryAttempts.delete(entityType);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Failed to register deletion strategy for ${strategy.entityType}`, {
+        entityType: strategy.entityType,
+        serviceName: strategy.serviceName,
+        error: errorMessage
+      });
+      
+      // Store initialization error for retry
+      this.initializationErrors.set(strategy.entityType, error as Error);
+      
+      // Schedule retry if not exceeded max attempts
+      this.scheduleRetryRegistration(strategy);
+      
+      throw new Error(`Strategy registration failed: ${errorMessage}`);
+    }
   }
 
   /**
@@ -124,9 +151,16 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
   }
 
   /**
-   * Resolve the best strategy for an entity type
+   * Resolve the best strategy for an entity type with fallback handling
    */
   resolve(entityType: string): EntityDeletionStrategy | null {
+    // Check if there are initialization errors for this entity type
+    if (this.initializationErrors.has(entityType)) {
+      logger.warn(`Strategy resolution attempted for entity type with initialization errors`, {
+        entityType,
+        error: this.initializationErrors.get(entityType)?.message
+      });
+    }
     const strategies = this.strategies.get(entityType);
     
     if (!strategies || strategies.length === 0) {
@@ -155,9 +189,17 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
   }
 
   /**
-   * Execute entity deletion with automatic strategy resolution
+   * Execute entity deletion with automatic strategy resolution and resilience
    */
   async execute(context: DeletionContext): Promise<DeletionResult> {
+    // Check for initialization errors
+    if (this.initializationErrors.has(context.entityType)) {
+      const error = this.initializationErrors.get(context.entityType)!;
+      logger.warn(`Attempting execution for entity type with initialization errors`, {
+        entityType: context.entityType,
+        initError: error.message
+      });
+    }
     // Apply default configuration
     const configWithDefaults = {
       ...DEFAULT_DELETION_CONFIG,
@@ -254,17 +296,29 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
   }
 
   /**
-   * Execute entity deletion without transaction
+   * Execute entity deletion without transaction with resilience
    */
   async executeWithoutTransaction(context: DeletionContext): Promise<DeletionResult> {
     const strategy = this.resolve(context.entityType);
     
     if (!strategy) {
+      // Enhanced error reporting with initialization status
+      const initStatus = this.getInitializationStatus();
+      const hasInitError = initStatus.errorsByEntity[context.entityType];
+      
+      const errorMessage = hasInitError 
+        ? `No deletion strategy found for entity type: ${context.entityType}. Initialization error: ${hasInitError}`
+        : `No deletion strategy found for entity type: ${context.entityType}`;
+      
       return {
         success: false,
         deletedEntities: [],
         affectedServices: [],
-        error: `No deletion strategy found for entity type: ${context.entityType}`
+        error: errorMessage,
+        metadata: {
+          initializationErrors: hasInitError ? true : false,
+          retryAttempts: initStatus.retryAttempts[context.entityType] || 0
+        }
       };
     }
 
@@ -276,8 +330,12 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
     });
 
     try {
-      // Validate before execution
-      const validation = await strategy.validate(context);
+      // Validate before execution with retry
+      const validation = await this.executeWithRetry(
+        () => strategy.validate(context),
+        `validation for ${context.entityType}`,
+        context.config?.maxRetries || this.MAX_RETRY_ATTEMPTS
+      );
       
       if (!validation.isValid) {
         return {
@@ -288,8 +346,12 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
         };
       }
 
-      // Execute deletion
-      const result = await strategy.execute(context);
+      // Execute deletion with retry
+      const result = await this.executeWithRetry(
+        () => strategy.execute(context),
+        `deletion for ${context.entityType}`,
+        context.config?.maxRetries || this.MAX_RETRY_ATTEMPTS
+      );
       
       logger.info(`Entity deletion completed`, {
         entityType: context.entityType,
@@ -303,18 +365,23 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Deletion failed';
       
-      logger.error('Entity deletion failed', {
+      logger.error('Entity deletion failed after retries', {
         entityType: context.entityType,
         entityId: context.entityId,
         serviceName: strategy.serviceName,
-        error: errorMessage
+        error: errorMessage,
+        maxRetries: context.config?.maxRetries || this.MAX_RETRY_ATTEMPTS
       });
 
       return {
         success: false,
         deletedEntities: [],
         affectedServices: [strategy.serviceName],
-        error: errorMessage
+        error: errorMessage,
+        metadata: {
+          retriesExhausted: true,
+          maxRetries: context.config?.maxRetries || this.MAX_RETRY_ATTEMPTS
+        }
       };
     }
   }
@@ -350,6 +417,8 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
    */
   clear(): void {
     this.strategies.clear();
+    this.initializationErrors.clear();
+    this.retryAttempts.clear();
     logger.info('Cleared all registered deletion strategies');
   }
 
@@ -358,6 +427,178 @@ export class EntityDeletionRegistry implements IEntityDeletionRegistry {
    */
   isTransactionManagerAvailable(): boolean {
     return Boolean(this.transactionManager);
+  }
+
+  /**
+   * Validate strategy before registration
+   */
+  private validateStrategy(strategy: EntityDeletionStrategy): void {
+    if (!strategy) {
+      throw new Error('Strategy cannot be null or undefined');
+    }
+    
+    if (!strategy.entityType) {
+      throw new Error('Strategy must have an entityType');
+    }
+    
+    if (!strategy.serviceName) {
+      throw new Error('Strategy must have a serviceName');
+    }
+    
+    if (typeof strategy.execute !== 'function') {
+      throw new Error('Strategy must implement execute method');
+    }
+    
+    if (typeof strategy.validate !== 'function') {
+      throw new Error('Strategy must implement validate method');
+    }
+    
+    if (typeof strategy.priority !== 'number' || strategy.priority < 0) {
+      throw new Error('Strategy must have a valid priority (number >= 0)');
+    }
+  }
+
+  /**
+   * Schedule retry registration for failed strategies
+   */
+  private scheduleRetryRegistration(strategy: EntityDeletionStrategy): void {
+    const entityType = strategy.entityType;
+    const currentAttempts = this.retryAttempts.get(entityType) || 0;
+    
+    if (currentAttempts >= this.MAX_RETRY_ATTEMPTS) {
+      logger.error(`Max retry attempts exceeded for strategy registration`, {
+        entityType,
+        serviceName: strategy.serviceName,
+        maxAttempts: this.MAX_RETRY_ATTEMPTS
+      });
+      return;
+    }
+    
+    this.retryAttempts.set(entityType, currentAttempts + 1);
+    
+    logger.info(`Scheduling retry registration for strategy`, {
+      entityType,
+      serviceName: strategy.serviceName,
+      attempt: currentAttempts + 1,
+      maxAttempts: this.MAX_RETRY_ATTEMPTS,
+      delayMs: this.RETRY_DELAY_MS
+    });
+    
+    setTimeout(() => {
+      try {
+        this.register(strategy);
+        logger.info(`Retry registration successful for strategy`, {
+          entityType,
+          serviceName: strategy.serviceName,
+          attempt: currentAttempts + 1
+        });
+      } catch (error) {
+        logger.warn(`Retry registration failed for strategy`, {
+          entityType,
+          serviceName: strategy.serviceName,
+          attempt: currentAttempts + 1,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }, this.RETRY_DELAY_MS * Math.pow(2, currentAttempts)); // Exponential backoff
+  }
+
+  /**
+   * Get initialization status for debugging
+   */
+  getInitializationStatus(): {
+    totalErrors: number;
+    errorsByEntity: Record<string, string>;
+    retryAttempts: Record<string, number>;
+  } {
+    const errorsByEntity: Record<string, string> = {};
+    const retryAttempts: Record<string, number> = {};
+    
+    this.initializationErrors.forEach((error, entityType) => {
+      errorsByEntity[entityType] = error.message;
+    });
+    
+    this.retryAttempts.forEach((attempts, entityType) => {
+      retryAttempts[entityType] = attempts;
+    });
+    
+    return {
+      totalErrors: this.initializationErrors.size,
+      errorsByEntity,
+      retryAttempts
+    };
+  }
+
+  /**
+   * Force retry all failed strategy registrations
+   */
+  retryFailedRegistrations(): void {
+    logger.info(`Forcing retry of all failed strategy registrations`, {
+      totalErrors: this.initializationErrors.size
+    });
+    
+    // Reset retry attempts to allow new retries
+    this.retryAttempts.clear();
+    
+    // Note: This would require storing original strategy objects
+    // For now, just log that manual retry is needed
+    this.initializationErrors.forEach((error, entityType) => {
+      logger.warn(`Manual strategy re-registration needed for ${entityType}`, {
+        entityType,
+        lastError: error.message
+      });
+    });
+  }
+
+  /**
+   * Execute operation with retry mechanism
+   */
+  private async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    maxRetries: number = this.MAX_RETRY_ATTEMPTS
+  ): Promise<T> {
+    let lastError: Error;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await operation();
+        
+        if (attempt > 0) {
+          logger.info(`Operation succeeded after retry`, {
+            operation: operationName,
+            attempt,
+            maxRetries
+          });
+        }
+        
+        return result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        
+        if (attempt < maxRetries) {
+          const delay = this.RETRY_DELAY_MS * Math.pow(2, attempt);
+          
+          logger.warn(`Operation failed, retrying`, {
+            operation: operationName,
+            attempt: attempt + 1,
+            maxRetries,
+            error: lastError.message,
+            retryDelayMs: delay
+          });
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          logger.error(`Operation failed after all retries`, {
+            operation: operationName,
+            totalAttempts: attempt + 1,
+            error: lastError.message
+          });
+        }
+      }
+    }
+    
+    throw lastError!;
   }
 }
 

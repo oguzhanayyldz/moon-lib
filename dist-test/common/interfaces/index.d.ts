@@ -8,4 +8,6 @@ export * from './product-export.interface';
 export * from './order-integration-created.interface';
 export * from './order-integration-status-updated.interface';
 export * from './api-client.interface';
+export * from './entity-deletion.interface';
+export * from './batch-deletion.interface';
 //# sourceMappingURL=index.d.ts.map

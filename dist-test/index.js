@@ -39,6 +39,10 @@ __exportStar(require("./services/integrationRouter.service"), exports);
 __exportStar(require("./services/integrationRequestLog.service"), exports);
 __exportStar(require("./services/baseApiClient.service"), exports);
 __exportStar(require("./services/circuitBreaker.service"), exports);
+__exportStar(require("./services/entityDeletionRegistry"), exports);
+__exportStar(require("./services/enhancedEntityDeletionRegistry"), exports);
+__exportStar(require("./services/batchProcessingEngine.service"), exports);
+__exportStar(require("./services/strategyCache.service"), exports);
 // Security
 __exportStar(require("./security/SecurityValidator"), exports);
 __exportStar(require("./security/RateLimiter"), exports);
@@ -53,6 +57,12 @@ __exportStar(require("./security-logger"), exports);
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);
+__exportStar(require("./utils/performanceMonitor.util"), exports);
+__exportStar(require("./utils/batchOperationHelpers.util"), exports);
+// Database - MongoDB Atlas Native Transactions
+__exportStar(require("./database"), exports);
+// Middleware - Transaction Middleware
+__exportStar(require("./middleware"), exports);
 // Jobs
 __exportStar(require("./jobs/eventPublisher.job"), exports);
 __exportStar(require("./jobs/deadLetterProcessor.job"), exports);
@@ -79,6 +89,7 @@ __exportStar(require("./events/publishers/orderCreated.publisher"), exports);
 __exportStar(require("./events/publishers/orderUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/orderStatusUpdated.publisher"), exports);
 __exportStar(require("./events/retryableListener"), exports);
+__exportStar(require("./events/listeners/BaseModernEntityDeletedListener"), exports);
 __exportStar(require("./events/publishers/deleteProductImagesCompletedPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/deleteProductImagesPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/importImagesFromUrlsCompletedPublisher.publisher"), exports);
@@ -102,6 +113,7 @@ __exportStar(require("./common/middlewares"), exports);
 __exportStar(require("./common/types"), exports);
 __exportStar(require("./common/methods"), exports);
 __exportStar(require("./common/core"), exports);
+__exportStar(require("./common/strategies"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);

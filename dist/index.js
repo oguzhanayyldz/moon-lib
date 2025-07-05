@@ -89,6 +89,7 @@ __exportStar(require("./events/publishers/orderCreated.publisher"), exports);
 __exportStar(require("./events/publishers/orderUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/orderStatusUpdated.publisher"), exports);
 __exportStar(require("./events/retryableListener"), exports);
+__exportStar(require("./events/listeners/BaseModernEntityDeletedListener"), exports);
 __exportStar(require("./events/publishers/deleteProductImagesCompletedPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/deleteProductImagesPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/importImagesFromUrlsCompletedPublisher.publisher"), exports);

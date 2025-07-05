@@ -81,4 +81,39 @@ export class RetryManager {
             30000 // Max 30 saniye
         );
     }
+
+    /**
+     * Retry'ı planla - Redis'te delayed retry key'i oluştur
+     */
+    async scheduleRetry(eventType: string, eventId: string, delayMs: number): Promise<void> {
+        const scheduleKey = `${this.keyPrefix}scheduled:${eventType}:${eventId}`;
+        const nextRetryAt = Date.now() + delayMs;
+        
+        await this.redisClient.set(scheduleKey, nextRetryAt.toString(), {
+            EX: Math.ceil(delayMs / 1000) + 60 // Delay + 1 dakika buffer
+        });
+    }
+
+    /**
+     * Planlanmış retry'ı kontrol et
+     */
+    async isRetryScheduled(eventType: string, eventId: string): Promise<boolean> {
+        const scheduleKey = `${this.keyPrefix}scheduled:${eventType}:${eventId}`;
+        const nextRetryAt = await this.redisClient.get(scheduleKey);
+        
+        if (!nextRetryAt) return false;
+        
+        const now = Date.now();
+        const scheduledTime = parseInt(nextRetryAt, 10);
+        
+        return now < scheduledTime;
+    }
+
+    /**
+     * Planlanmış retry'ı temizle
+     */
+    async clearScheduledRetry(eventType: string, eventId: string): Promise<void> {
+        const scheduleKey = `${this.keyPrefix}scheduled:${eventType}:${eventId}`;
+        await this.redisClient.del(scheduleKey);
+    }
 }

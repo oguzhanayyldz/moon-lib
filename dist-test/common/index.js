@@ -22,4 +22,5 @@ __exportStar(require("./methods/core"), exports);
 __exportStar(require("./methods/validator"), exports);
 __exportStar(require("./interfaces/"), exports);
 __exportStar(require("./core/"), exports);
+__exportStar(require("./strategies/"), exports);
 //# sourceMappingURL=index.js.map

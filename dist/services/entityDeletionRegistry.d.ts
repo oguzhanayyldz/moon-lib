@@ -10,13 +10,17 @@ export declare class EntityDeletionRegistry implements IEntityDeletionRegistry {
     private static instance;
     private strategies;
     private transactionManager;
+    private initializationErrors;
+    private retryAttempts;
+    private readonly MAX_RETRY_ATTEMPTS;
+    private readonly RETRY_DELAY_MS;
     private constructor();
     /**
      * Get the singleton instance of the registry
      */
     static getInstance(): EntityDeletionRegistry;
     /**
-     * Register a deletion strategy for an entity type
+     * Register a deletion strategy for an entity type with resilience
      */
     register(strategy: EntityDeletionStrategy): void;
     /**
@@ -24,7 +28,7 @@ export declare class EntityDeletionRegistry implements IEntityDeletionRegistry {
      */
     unregister(entityType: string, serviceName?: string): void;
     /**
-     * Resolve the best strategy for an entity type
+     * Resolve the best strategy for an entity type with fallback handling
      */
     resolve(entityType: string): EntityDeletionStrategy | null;
     /**
@@ -32,7 +36,7 @@ export declare class EntityDeletionRegistry implements IEntityDeletionRegistry {
      */
     getAllStrategies(): Map<string, EntityDeletionStrategy[]>;
     /**
-     * Execute entity deletion with automatic strategy resolution
+     * Execute entity deletion with automatic strategy resolution and resilience
      */
     execute(context: DeletionContext): Promise<DeletionResult>;
     /**
@@ -40,7 +44,7 @@ export declare class EntityDeletionRegistry implements IEntityDeletionRegistry {
      */
     executeWithTransaction(context: DeletionContext): Promise<DeletionResult>;
     /**
-     * Execute entity deletion without transaction
+     * Execute entity deletion without transaction with resilience
      */
     executeWithoutTransaction(context: DeletionContext): Promise<DeletionResult>;
     /**
@@ -63,5 +67,29 @@ export declare class EntityDeletionRegistry implements IEntityDeletionRegistry {
      * Check if transaction manager is available
      */
     isTransactionManagerAvailable(): boolean;
+    /**
+     * Validate strategy before registration
+     */
+    private validateStrategy;
+    /**
+     * Schedule retry registration for failed strategies
+     */
+    private scheduleRetryRegistration;
+    /**
+     * Get initialization status for debugging
+     */
+    getInitializationStatus(): {
+        totalErrors: number;
+        errorsByEntity: Record<string, string>;
+        retryAttempts: Record<string, number>;
+    };
+    /**
+     * Force retry all failed strategy registrations
+     */
+    retryFailedRegistrations(): void;
+    /**
+     * Execute operation with retry mechanism
+     */
+    private executeWithRetry;
 }
 export declare const entityDeletionRegistry: EntityDeletionRegistry;
