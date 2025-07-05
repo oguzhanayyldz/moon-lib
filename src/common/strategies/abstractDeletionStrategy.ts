@@ -8,11 +8,37 @@ import {
 import { logger } from '../../services/logger.service';
 
 /**
+ * Deletion type enumeration
+ */
+export enum DeletionType {
+  /** Soft delete - mark as deleted but keep in database */
+  SOFT = 'soft',
+  /** Hard delete - physically remove from database */
+  HARD = 'hard',
+  /** Cascade delete - delete with all dependencies */
+  CASCADE = 'cascade'
+}
+
+/**
+ * Entity ownership type
+ */
+export enum EntityOwnership {
+  /** Entity is native to this service */
+  NATIVE = 'native',
+  /** Entity is a copy from another service */
+  FOREIGN = 'foreign'
+}
+
+/**
  * Abstract base class for entity deletion strategies
  * 
  * Provides common functionality and patterns that all deletion strategies
  * can inherit and use. This includes tracing, logging, metrics collection,
  * and error handling.
+ * 
+ * Now supports cross-service deletion patterns:
+ * - Native entities: Soft delete (owned by service)
+ * - Foreign entities: Hard delete (copies from other services)
  */
 export abstract class AbstractDeletionStrategy implements EntityDeletionStrategy {
   protected readonly logger = logger;
@@ -22,7 +48,9 @@ export abstract class AbstractDeletionStrategy implements EntityDeletionStrategy
     public readonly entityType: string,
     public readonly serviceName: string,
     public readonly priority: number = 1,
-    public readonly version: string = '1.0.0'
+    public readonly version: string = '1.0.0',
+    public readonly ownership: EntityOwnership = EntityOwnership.NATIVE,
+    public readonly deletionType: DeletionType = DeletionType.SOFT
   ) {
     // Initialize tracer if available
     try {
@@ -324,5 +352,95 @@ export abstract class AbstractDeletionStrategy implements EntityDeletionStrategy
       enableDetailedLogging: false,
       ...context.config
     };
+  }
+
+  /**
+   * Determine if this entity is native to the current service
+   * 
+   * @returns Whether the entity is native to this service
+   */
+  isNativeEntity(): boolean {
+    return this.ownership === EntityOwnership.NATIVE;
+  }
+
+  /**
+   * Determine if this entity is foreign (from another service)
+   * 
+   * @returns Whether the entity is foreign
+   */
+  isForeignEntity(): boolean {
+    return this.ownership === EntityOwnership.FOREIGN;
+  }
+
+  /**
+   * Get the deletion method for this entity
+   * 
+   * @returns The deletion type (soft, hard, cascade)
+   */
+  getDeletionMethod(): DeletionType {
+    // Default behavior: Native entities use soft delete, foreign use hard delete
+    if (this.deletionType) {
+      return this.deletionType;
+    }
+    return this.isNativeEntity() ? DeletionType.SOFT : DeletionType.HARD;
+  }
+
+  /**
+   * Determine if this is a cross-service deletion
+   * 
+   * @param context Deletion context
+   * @returns Whether this is a cross-service deletion
+   */
+  isCrossServiceDeletion(context: DeletionContext): boolean {
+    return context.serviceName !== undefined && context.serviceName !== this.serviceName;
+  }
+
+  /**
+   * Get the originating service for this entity type
+   * Override this method in strategies that handle foreign entities
+   * 
+   * @returns The service that owns this entity type
+   */
+  getOriginatingService(): string {
+    return this.isNativeEntity() ? this.serviceName : 'unknown';
+  }
+
+  /**
+   * Validate cross-service deletion permissions
+   * 
+   * @param context Deletion context
+   * @returns Whether the deletion is allowed
+   */
+  protected validateCrossServiceDeletion(context: DeletionContext): boolean {
+    // Foreign entities can be deleted by any service
+    if (this.isForeignEntity()) {
+      return true;
+    }
+
+    // Native entities should only be soft-deleted by their owning service
+    if (this.isNativeEntity() && context.serviceName === this.serviceName) {
+      return true;
+    }
+
+    // Log warning for suspicious deletion attempts
+    this.logger.warn('Cross-service deletion attempt on native entity', {
+      entityType: this.entityType,
+      entityId: context.entityId,
+      owningService: this.serviceName,
+      requestingService: context.serviceName || 'unknown'
+    });
+
+    return false;
+  }
+
+  /**
+   * Helper method to determine deletion options based on ownership
+   * 
+   * @returns Deletion options object for Mongoose operations
+   */
+  protected getDeletionOptions(): { hardDelete?: boolean } {
+    return this.getDeletionMethod() === DeletionType.HARD 
+      ? { hardDelete: true } 
+      : {};
   }
 }

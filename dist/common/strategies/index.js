@@ -14,4 +14,9 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EntityOwnership = exports.DeletionType = void 0;
 __exportStar(require("./abstractDeletionStrategy"), exports);
+__exportStar(require("./abstractBatchDeletionStrategy"), exports);
+var abstractDeletionStrategy_1 = require("./abstractDeletionStrategy");
+Object.defineProperty(exports, "DeletionType", { enumerable: true, get: function () { return abstractDeletionStrategy_1.DeletionType; } });
+Object.defineProperty(exports, "EntityOwnership", { enumerable: true, get: function () { return abstractDeletionStrategy_1.EntityOwnership; } });

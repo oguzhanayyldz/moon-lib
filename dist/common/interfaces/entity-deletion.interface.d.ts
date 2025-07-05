@@ -37,6 +37,8 @@ export interface DeletionContext {
     entityId: string;
     /** ID of the user performing the deletion */
     userId?: string;
+    /** Unique request ID for tracking */
+    requestId?: string;
     /** Additional metadata for the deletion operation */
     metadata?: Record<string, any>;
     /** MongoDB session for transaction support (optional) */
@@ -123,6 +125,14 @@ export interface EntityDeletionStrategy<T = any> {
     readonly serviceName: string;
     /** Version of the strategy implementation */
     readonly version?: string;
+    /** Entity ownership (native/foreign) */
+    readonly ownership?: string;
+    /** Deletion type (soft/hard/cascade) */
+    readonly deletionType?: string;
+    /** Whether this strategy supports batch processing */
+    readonly supportsBatch?: boolean;
+    /** Maximum number of items that can be processed in a single batch */
+    readonly maxBatchSize?: number;
     /**
      * Check if this strategy can handle the given entity type and ID
      *
@@ -167,7 +177,45 @@ export interface EntityDeletionStrategy<T = any> {
      * @returns Estimated operation cost (for optimization)
      */
     estimateComplexity?(entityId: string): Promise<number>;
+    /**
+     * Process a batch of items (only for strategies that support batch processing)
+     *
+     * @param items Array of items to process
+     * @param context Batch deletion context
+     * @returns Promise that resolves to batch result
+     */
+    processBatch?(items: any[], context: any): Promise<any>;
+    /**
+     * Validate a batch of items before processing
+     *
+     * @param items Array of items to validate
+     * @param context Optional batch context
+     * @returns Promise that resolves to validation result
+     */
+    validateBatch?(items: any[], context?: any): Promise<any>;
+    /**
+     * Estimate processing time for a batch
+     *
+     * @param items Array of items to estimate
+     * @returns Promise that resolves to estimated time in milliseconds
+     */
+    estimateProcessingTime?(items: any[]): Promise<number>;
+    /**
+     * Check if the strategy can handle the given batch items
+     *
+     * @param items Array of items to check
+     * @returns Whether the strategy can handle all items
+     */
+    canHandleBatch?(items: any[]): boolean;
 }
+/**
+ * Type alias for strategies that support batch processing
+ * This is a subset of EntityDeletionStrategy with required batch properties
+ */
+export type BatchDeletionStrategy = EntityDeletionStrategy & {
+    readonly supportsBatch: true;
+    readonly maxBatchSize: number;
+};
 /**
  * Interface for registering and resolving entity deletion strategies
  */

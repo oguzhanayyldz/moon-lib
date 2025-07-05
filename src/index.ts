@@ -26,6 +26,9 @@ export * from './services/integrationRequestLog.service';
 export * from './services/baseApiClient.service';
 export * from './services/circuitBreaker.service';
 export * from './services/entityDeletionRegistry';
+export * from './services/enhancedEntityDeletionRegistry';
+export * from './services/batchProcessingEngine.service';
+export * from './services/strategyCache.service';
 
 // Security
 export * from './security/SecurityValidator';
@@ -44,6 +47,8 @@ export * from './security-logger';
 // Utils
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
+export * from './utils/performanceMonitor.util';
+export * from './utils/batchOperationHelpers.util';
 
 // Database - MongoDB Atlas Native Transactions
 export * from './database';

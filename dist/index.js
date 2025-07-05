@@ -40,6 +40,9 @@ __exportStar(require("./services/integrationRequestLog.service"), exports);
 __exportStar(require("./services/baseApiClient.service"), exports);
 __exportStar(require("./services/circuitBreaker.service"), exports);
 __exportStar(require("./services/entityDeletionRegistry"), exports);
+__exportStar(require("./services/enhancedEntityDeletionRegistry"), exports);
+__exportStar(require("./services/batchProcessingEngine.service"), exports);
+__exportStar(require("./services/strategyCache.service"), exports);
 // Security
 __exportStar(require("./security/SecurityValidator"), exports);
 __exportStar(require("./security/RateLimiter"), exports);
@@ -54,6 +57,8 @@ __exportStar(require("./security-logger"), exports);
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);
+__exportStar(require("./utils/performanceMonitor.util"), exports);
+__exportStar(require("./utils/batchOperationHelpers.util"), exports);
 // Database - MongoDB Atlas Native Transactions
 __exportStar(require("./database"), exports);
 // Middleware - Transaction Middleware
