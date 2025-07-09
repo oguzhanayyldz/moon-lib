@@ -7,11 +7,57 @@ export interface UserPayload {
     email: string;
     name: string;
     surname: string;
-    parentUser: string;
+    parentUser?: string;
     role: UserRole;
-    sessionId?: string; // Added sessionId for session tracking
+    sessionId?: string;
     isImpersonating?: boolean;
+    adminId?: string;        // Admin impersonation için
+    permissions?: any[];
+    // SubUser mode fields
+    isSubUserMode?: boolean;  // SubUser olarak login olundu mu
+    subUserId?: string;       // SubUser'ın gerçek ID'si
+    subUserEmail?: string;    // SubUser'ın email'i
+    subUserRole?: UserRole;   // SubUser'ın rolü (her zaman SubUser)
 }
+
+// Helper functions for SubUser context
+export const getEffectiveUserId = (user: UserPayload): string => {
+    // For SubUsers, return parent user ID for data access
+    // For regular users and admins, return their own ID
+    return user.role === UserRole.SubUser && user.parentUser ? user.parentUser : user.id;
+};
+
+export const getActualUserId = (user: UserPayload): string => {
+    // Always return the actual user ID for audit logging
+    return user.id;
+};
+
+export const isSubUser = (user: UserPayload): boolean => {
+    return user.role === UserRole.SubUser;
+};
+
+export const hasPermission = (user: UserPayload, resource: string, action: string): boolean => {
+    // Convert role to number to ensure type safety
+    const roleNumber = Number(user.role);
+    
+    // Admin and User roles have full access
+    if (roleNumber === UserRole.Admin || roleNumber === UserRole.User) {
+        // SubUser mode kontrolü - SubUser modunda ise permissions'a bak
+        if (user.isSubUserMode && user.permissions) {
+            const permission = user.permissions.find(p => p.resource === resource);
+            return permission ? permission.actions.includes(action) || permission.actions.includes('*') : false;
+        }
+        return true;
+    }
+
+    // Direct SubUser login (should not happen with new flow)
+    if (roleNumber === UserRole.SubUser && user.permissions) {
+        const permission = user.permissions.find(p => p.resource === resource);
+        return permission ? permission.actions.includes(action) || permission.actions.includes('*') : false;
+    }
+
+    return false;
+};
 
 declare global {
     namespace Express {
