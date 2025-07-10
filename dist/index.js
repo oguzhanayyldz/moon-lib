@@ -58,6 +58,7 @@ __exportStar(require("./security-logger"), exports);
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);
 __exportStar(require("./utils/performanceMonitor.util"), exports);
+__exportStar(require("./utils/audit-helper"), exports);
 __exportStar(require("./utils/batchOperationHelpers.util"), exports);
 // Database - MongoDB Atlas Native Transactions
 __exportStar(require("./database"), exports);

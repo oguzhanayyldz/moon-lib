@@ -29,6 +29,7 @@ export * from './security-logger';
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
 export * from './utils/performanceMonitor.util';
+export * from './utils/audit-helper';
 export * from './utils/batchOperationHelpers.util';
 export * from './database';
 export * from './middleware';
