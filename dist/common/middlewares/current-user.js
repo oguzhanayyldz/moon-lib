@@ -55,8 +55,10 @@ const currentUser = (req, res, next) => {
             // Check if Redis is available before attempting session validation
             try {
                 if (redisWrapper_service_1.redisWrapper && redisWrapper_service_1.redisWrapper.client) {
+                    // For SubUser mode, use subUserId for session tracking, otherwise use payload.id
+                    const sessionUserId = payload.isSubUserMode && payload.subUserId ? payload.subUserId : payload.id;
                     // Non-blocking session check - don't await
-                    redisWrapper_service_1.redisWrapper.client.hGet(`user_sessions:${payload.id}`, payload.sessionId)
+                    redisWrapper_service_1.redisWrapper.client.hGet(`user_sessions:${sessionUserId}`, payload.sessionId)
                         .then(isSessionValid => {
                         if (!isSessionValid) {
                             // Session invalidated, clear JWT (non-blocking)
@@ -67,7 +69,7 @@ const currentUser = (req, res, next) => {
                             try {
                                 const sessionData = JSON.parse(isSessionValid);
                                 sessionData.lastActivity = new Date();
-                                redisWrapper_service_1.redisWrapper.client.hSet(`user_sessions:${payload.id}`, payload.sessionId, JSON.stringify(sessionData));
+                                redisWrapper_service_1.redisWrapper.client.hSet(`user_sessions:${sessionUserId}`, payload.sessionId, JSON.stringify(sessionData));
                             }
                             catch (_a) {
                                 // If update fails, continue anyway
