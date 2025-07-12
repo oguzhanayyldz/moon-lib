@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '../types/user-role';
+import { redisWrapper } from '../../services/redisWrapper.service';
 
 export interface UserPayload {
     id: string;
@@ -74,6 +75,43 @@ export const currentUser = (req: Request, res: Response, next: NextFunction) => 
 
     try {
         const payload = jwt.verify(req.session.jwt, process.env.JWT_KEY!) as UserPayload;
+        
+        // Session validation - if sessionId exists in JWT and Redis is available (make it non-blocking)
+        if (payload.sessionId) {
+            // Check if Redis is available before attempting session validation
+            try {
+                if (redisWrapper && redisWrapper.client) {
+                    // Non-blocking session check - don't await
+                    redisWrapper.client.hGet(`user_sessions:${payload.id}`, payload.sessionId)
+                        .then(isSessionValid => {
+                            if (!isSessionValid) {
+                                // Session invalidated, clear JWT (non-blocking)
+                                req.session!.jwt = undefined;
+                            } else {
+                                // Update session activity (non-blocking)
+                                try {
+                                    const sessionData = JSON.parse(isSessionValid as string);
+                                    sessionData.lastActivity = new Date();
+                                    redisWrapper.client.hSet(`user_sessions:${payload.id}`, payload.sessionId!, JSON.stringify(sessionData));
+                                } catch {
+                                    // If update fails, continue anyway
+                                }
+                            }
+                        })
+                        .catch(err => {
+                            // Redis error - continue without session validation
+                            console.warn('Session validation failed, continuing:', err.message);
+                        });
+                } else {
+                    // Redis not available, skip session validation
+                    console.warn('Redis not available for session validation, continuing without it');
+                }
+            } catch (redisErr) {
+                // Redis wrapper not available, continue without session validation
+                console.warn('Redis not available for session validation, continuing without it');
+            }
+        }
+        
         req.currentUser = payload;
     } catch (err) {}
 
