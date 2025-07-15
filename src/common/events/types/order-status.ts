@@ -5,6 +5,7 @@ export enum OrderStatus {
     Pending = "pending",
 
     // Processing States
+    Paid = "paid",
     Processing = "processing",
     Preparing = "preparing",
     Prepared = "prepared",
@@ -54,6 +55,12 @@ export const ORDER_STATUS_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]
         OrderStatus.WaitingStock
     ],
     [OrderStatus.Comfirmed]: [
+        OrderStatus.Paid,
+        OrderStatus.Processing,
+        OrderStatus.OnHold,
+        OrderStatus.Cancelled
+    ],
+    [OrderStatus.Paid]: [
         OrderStatus.Processing,
         OrderStatus.OnHold,
         OrderStatus.Cancelled
@@ -123,6 +130,7 @@ export const ORDER_STATUS_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]
         OrderStatus.Cancelled
     ],
     [OrderStatus.WaitingPayment]: [
+        OrderStatus.Paid,
         OrderStatus.Comfirmed,
         OrderStatus.Cancelled
     ],
@@ -173,6 +181,7 @@ export const isActiveOrderStatus = (status: OrderStatus): boolean => {
  */
 export const isInFulfillmentProcess = (status: OrderStatus): boolean => {
     const fulfillmentStatuses = [
+        OrderStatus.Paid,
         OrderStatus.Processing,
         OrderStatus.Preparing,
         OrderStatus.Prepared,
