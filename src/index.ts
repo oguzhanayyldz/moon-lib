@@ -99,6 +99,7 @@ export * from './events/retryableListener';
 export * from './events/publishers/integrationCreated.publisher';
 export * from './events/publishers/userIntegrationSettings.publisher';
 export * from './events/publishers/orderIntegrationStatusUpdated.publisher';
+export * from './events/publishers/productMatched.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

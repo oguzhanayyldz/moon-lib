@@ -48,6 +48,7 @@ const logger_service_1 = require("../services/logger.service");
 const integrationCreated_publisher_1 = require("../events/publishers/integrationCreated.publisher");
 const userIntegrationSettings_publisher_1 = require("../events/publishers/userIntegrationSettings.publisher");
 const orderIntegrationStatusUpdated_publisher_1 = require("../events/publishers/orderIntegrationStatusUpdated.publisher");
+const productMatched_publisher_1 = require("../events/publishers/productMatched.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -299,6 +300,10 @@ class EventPublisherJob {
                 case common_1.Subjects.OrderIntegrationStatusUpdated:
                     yield new orderIntegrationStatusUpdated_publisher_1.OrderIntegrationStatusUpdatedPublisher(this.natsClient)
                         .publish(Object.assign({ requestId: event.id }, event.payload));
+                    break;
+                case common_1.Subjects.ProductMatched:
+                    yield new productMatched_publisher_1.ProductMatchedPublisher(this.natsClient)
+                        .publish(event.payload);
                     break;
                 default:
                     throw new Error(`Unknown event type: ${event.eventType}`);

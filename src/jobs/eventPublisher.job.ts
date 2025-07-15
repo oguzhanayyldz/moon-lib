@@ -38,6 +38,7 @@ import { logger } from '../services/logger.service';
 import { IntegrationCreatedPublisher } from '../events/publishers/integrationCreated.publisher';
 import { UserIntegrationSettingsPublisher } from '../events/publishers/userIntegrationSettings.publisher';
 import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/orderIntegrationStatusUpdated.publisher';
+import { ProductMatchedPublisher } from '../events/publishers/productMatched.publisher';
 
 
 export class EventPublisherJob {
@@ -312,6 +313,10 @@ export class EventPublisherJob {
             case Subjects.OrderIntegrationStatusUpdated:
                 await new OrderIntegrationStatusUpdatedPublisher(this.natsClient)
                     .publish({ requestId: event.id, ...event.payload });
+                break;
+            case Subjects.ProductMatched:
+                await new ProductMatchedPublisher(this.natsClient)
+                    .publish(event.payload);
                 break;
             default:
                 throw new Error(`Unknown event type: ${event.eventType}`);
