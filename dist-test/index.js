@@ -58,6 +58,7 @@ __exportStar(require("./security-logger"), exports);
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);
 __exportStar(require("./utils/performanceMonitor.util"), exports);
+__exportStar(require("./utils/audit-helper"), exports);
 __exportStar(require("./utils/batchOperationHelpers.util"), exports);
 // Database - MongoDB Atlas Native Transactions
 __exportStar(require("./database"), exports);
@@ -104,6 +105,7 @@ __exportStar(require("./events/retryableListener"), exports);
 __exportStar(require("./events/publishers/integrationCreated.publisher"), exports);
 __exportStar(require("./events/publishers/userIntegrationSettings.publisher"), exports);
 __exportStar(require("./events/publishers/orderIntegrationStatusUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/productMatched.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);

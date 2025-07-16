@@ -33,6 +33,7 @@ export declare enum Subjects {
     CatalogMappingCreated = "catalog.mapping.created",
     IntegrationCreated = "integration.created",
     UserIntegrationSettings = "user.integration.settings",
-    OrderIntegrationStatusUpdated = "order:integration:status:updated"
+    OrderIntegrationStatusUpdated = "order:integration:status:updated",
+    ProductMatched = "order:product:matched"
 }
 //# sourceMappingURL=subjects.d.ts.map

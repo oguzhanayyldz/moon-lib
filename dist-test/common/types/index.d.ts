@@ -16,4 +16,5 @@ export * from './stock-action-type';
 export * from './unit-type';
 export * from './user-role';
 export * from './api-client.types';
+export * from './permission.types';
 //# sourceMappingURL=index.d.ts.map
