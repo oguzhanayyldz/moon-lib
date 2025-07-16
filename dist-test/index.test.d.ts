@@ -251,6 +251,9 @@ export declare const OptimisticLockingUtil: {
     saveWithRetry: jest.Mock<any, any, any>;
     updateWithRetry: jest.Mock<any, any, any>;
     retryWithOptimisticLocking: jest.Mock<any, any, any>;
+    getSessionFromRequest: jest.Mock<any, any, any>;
+    isInTransaction: jest.Mock<any, any, any>;
+    getStats: jest.Mock<any, any, any>;
 };
 export declare const EventPublisher: {
     start: jest.Mock<any, any, any>;

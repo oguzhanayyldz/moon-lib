@@ -488,6 +488,27 @@ export const OptimisticLockingUtil = {
         }
 
         throw new Error(`${operationName}: Maximum retry attempts (${maxRetries}) reached`);
+    }),
+    getSessionFromRequest: jest.fn().mockImplementation((req) => {
+        return req?.dbSession || undefined;
+    }),
+    isInTransaction: jest.fn().mockImplementation((req) => {
+        return req?.dbSession?.inTransaction?.() || false;
+    }),
+    getStats: jest.fn().mockImplementation((req) => {
+        const hasSession = !!req?.dbSession;
+        const inTransaction = hasSession && req.dbSession.inTransaction?.();
+        const sessionId = hasSession ? req.dbSession.id : undefined;
+        
+        return {
+            hasSession,
+            inTransaction,
+            sessionId,
+            features: {
+                sessionAware: true,
+                contextAware: true
+            }
+        };
     })
 };
 

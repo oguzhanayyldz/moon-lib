@@ -477,6 +477,28 @@ exports.OptimisticLockingUtil = {
             }
         }
         throw new Error(`${operationName}: Maximum retry attempts (${maxRetries}) reached`);
+    }),
+    getSessionFromRequest: jest.fn().mockImplementation((req) => {
+        return (req === null || req === void 0 ? void 0 : req.dbSession) || undefined;
+    }),
+    isInTransaction: jest.fn().mockImplementation((req) => {
+        var _a, _b;
+        return ((_b = (_a = req === null || req === void 0 ? void 0 : req.dbSession) === null || _a === void 0 ? void 0 : _a.inTransaction) === null || _b === void 0 ? void 0 : _b.call(_a)) || false;
+    }),
+    getStats: jest.fn().mockImplementation((req) => {
+        var _a, _b;
+        const hasSession = !!(req === null || req === void 0 ? void 0 : req.dbSession);
+        const inTransaction = hasSession && ((_b = (_a = req.dbSession).inTransaction) === null || _b === void 0 ? void 0 : _b.call(_a));
+        const sessionId = hasSession ? req.dbSession.id : undefined;
+        return {
+            hasSession,
+            inTransaction,
+            sessionId,
+            features: {
+                sessionAware: true,
+                contextAware: true
+            }
+        };
     })
 };
 exports.EventPublisher = {
