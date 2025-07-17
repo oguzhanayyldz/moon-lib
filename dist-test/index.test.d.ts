@@ -1,5 +1,15 @@
 import { Subjects } from './index';
 export * from './index';
+export declare const EnhancedEntityDeletionRegistry: {
+    getInstance: jest.Mock<{
+        shutdown: jest.Mock<any, any, any>;
+        registerDeletionStrategy: jest.Mock<any, any, any>;
+        executeDeletion: jest.Mock<any, any, any>;
+        isStrategyRegistered: jest.Mock<any, any, any>;
+        getAvailableStrategies: jest.Mock<any, any, any>;
+        getMetrics: jest.Mock<any, any, any>;
+    }, [], any>;
+};
 export declare const createNatsWrapper: () => {
     client: {
         publish: jest.Mock<string, [subject: string, data: any, callback?: (() => void) | undefined], any>;
@@ -306,4 +316,8 @@ export declare const createRateLimiter: jest.Mock<any, any, any>;
 export declare const createBruteForceProtection: jest.Mock<any, any, any>;
 export declare const createSecurityHeaders: jest.Mock<any, any, any>;
 export declare const createSecurityManager: jest.Mock<any, any, any>;
+export declare const setTimeoutTracked: (callback: Function, delay: number) => number;
+export declare const setIntervalTracked: (callback: Function, delay: number) => number;
+export declare const cleanupTestEnvironment: () => Promise<void>;
+export declare const setupGlobalTestEnvironment: () => () => void;
 //# sourceMappingURL=index.test.d.ts.map

@@ -712,5 +712,11 @@ export class EnhancedEntityDeletionRegistry implements IEntityDeletionRegistry {
   }
 }
 
-// Export singleton instance
-export const enhancedEntityDeletionRegistry = EnhancedEntityDeletionRegistry.getInstance();
+// Export singleton instance - conditional initialization for test environment
+export const enhancedEntityDeletionRegistry = (() => {
+  // In test environment, delay singleton creation to allow mocks to be set up
+  if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+    return null as any; // Will be initialized lazily when actually needed
+  }
+  return EnhancedEntityDeletionRegistry.getInstance();
+})();

@@ -9,8 +9,156 @@
 
 import { Subjects } from './index';
 
-// Re-export everything from main index
+// Global test cleanup registry
+let testTimers: Set<any> = new Set();
+let originalSetInterval: any;
+let originalClearInterval: any;
+
+// Override setInterval to track all timers
+if (!originalSetInterval) {
+  originalSetInterval = global.setInterval;
+  originalClearInterval = global.clearInterval;
+  
+  global.setInterval = ((fn: any, delay: number, ...args: any[]) => {
+    const timer = originalSetInterval(fn, delay, ...args);
+    testTimers.add(timer);
+    return timer;
+  }) as any;
+  
+  global.clearInterval = ((timer: any) => {
+    testTimers.delete(timer);
+    return originalClearInterval(timer);
+  }) as any;
+}
+
+// Mock the BatchProcessingEngine to prevent interval creation during tests
+jest.mock('./services/batchProcessingEngine.service', () => {
+  class MockMemoryManager {
+    config = {};
+    isMonitoring = false;
+    monitoringInterval = null;
+
+    constructor(config: any) {
+      this.config = config;
+    }
+
+    startMonitoring() {
+      this.isMonitoring = true;
+      // Don't create real setInterval - completely mocked
+    }
+
+    stopMonitoring() {
+      this.isMonitoring = false;
+    }
+
+    checkMemoryUsage() {
+      return { used: 0, total: 0 };
+    }
+  }
+
+  class MockBatchProcessingEngine {
+    memoryManager: MockMemoryManager;
+    performanceMonitor: any;
+    
+    constructor() {
+      this.memoryManager = new MockMemoryManager({});
+      this.performanceMonitor = {
+        startMonitoring: jest.fn(),
+        stopMonitoring: jest.fn(),
+        collectMetrics: jest.fn(),
+        getMetrics: jest.fn(() => ({})),
+      };
+    }
+
+    start = jest.fn();
+    stop = jest.fn();
+    process = jest.fn();
+    queue = [];
+    isRunning = false;
+  }
+
+  return {
+    BatchProcessingEngine: MockBatchProcessingEngine,
+  };
+});
+
+// Mock PerformanceMonitor to prevent setInterval issues
+jest.mock('./utils/performanceMonitor.util', () => {
+  class MockPerformanceMonitor {
+    config = {};
+    metrics = {};
+    isMonitoring = false;
+    monitoringInterval = null;
+
+    constructor(config: any) {
+      this.config = config;
+    }
+
+    startMonitoring() {
+      this.isMonitoring = true;
+      // Don't create real setInterval - completely mocked
+    }
+
+    stopMonitoring() {
+      this.isMonitoring = false;
+    }
+
+    collectMetrics() {
+      return this.metrics;
+    }
+
+    getMetrics() {
+      return this.metrics;
+    }
+  }
+
+  return {
+    PerformanceMonitor: MockPerformanceMonitor,
+  };
+});
+
+// Mock problematic services first before importing
+const mockEnhancedEntityDeletionRegistry = {
+    getInstance: jest.fn(() => ({
+        shutdown: jest.fn().mockResolvedValue(undefined),
+        registerDeletionStrategy: jest.fn(),
+        executeDeletion: jest.fn().mockResolvedValue({ success: true }),
+        isStrategyRegistered: jest.fn().mockReturnValue(true),
+        getAvailableStrategies: jest.fn().mockReturnValue([]),
+        getMetrics: jest.fn().mockReturnValue({
+            totalDeletions: 0,
+            successfulDeletions: 0,
+            failedDeletions: 0,
+            averageExecutionTime: 0
+        })
+    }))
+};
+
+// Global cleanup function for all test timers
+global.cleanupAllTestTimers = () => {
+  // Clear all tracked timers
+  testTimers.forEach(timer => {
+    originalClearInterval(timer);
+  });
+  testTimers.clear();
+  
+  // Clear any remaining timers by brute force
+  const highestId = originalSetInterval(() => {}, 0) as any;
+  for (let i = 0; i < (highestId as number); i++) {
+    try {
+      originalClearInterval(i);
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+  originalClearInterval(highestId);
+};
+
+// Re-export everything from main index except problematic ones
 export * from './index';
+
+// 🧪 Test-specific overrides for problematic services
+export const EnhancedEntityDeletionRegistry = mockEnhancedEntityDeletionRegistry;
 
 // Test-specific service factories (override main exports)
 
@@ -533,7 +681,7 @@ export const RetryableListener = class MockRetryableListener {
 
     retryOptions: any;
     subject = Subjects.EntityDeleted;
-    queueGroupName = 'catalog-service';
+    queueGroupName = 'test-service';
 
     // RetryableListener'ın retry mantığını simüle et
     async onMessage(data: any, msg: any) {
@@ -835,3 +983,61 @@ export const createSecurityHeaders = jest.fn().mockImplementation((config: any) 
 export const createSecurityManager = jest.fn().mockImplementation((config: any, modules: any) => 
     new SecurityManager(config, modules)
 );
+
+// ✅ Global Test Cleanup System
+let globalTimers: any[] = [];
+let globalIntervals: any[] = [];
+
+// Timer tracking için wrapper functions
+export const setTimeoutTracked = (callback: Function, delay: number) => {
+    const timer = setTimeout(callback, delay);
+    globalTimers.push(timer);
+    return timer;
+};
+
+export const setIntervalTracked = (callback: Function, delay: number) => {
+    const interval = setInterval(callback, delay);
+    globalIntervals.push(interval);
+    return interval;
+};
+
+// Global cleanup function
+export const cleanupTestEnvironment = async () => {
+    try {
+        // Clear all tracked timers
+        globalTimers.forEach(timer => clearTimeout(timer));
+        globalTimers = [];
+        
+        // Clear all tracked intervals
+        globalIntervals.forEach(interval => clearInterval(interval));
+        globalIntervals = [];
+        
+        // Force garbage collection if available
+        if (global.gc) {
+            global.gc();
+        }
+        
+        // Small delay to let async operations complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        console.log('✅ Test environment cleanup completed');
+    } catch (error) {
+        console.error('❌ Test cleanup error:', error);
+    }
+};
+
+// Jest global setup/teardown hooks
+export const setupGlobalTestEnvironment = () => {
+    // Override global setTimeout and setInterval to track them
+    const originalSetTimeout = global.setTimeout;
+    const originalSetInterval = global.setInterval;
+    
+    global.setTimeout = setTimeoutTracked as any;
+    global.setInterval = setIntervalTracked as any;
+    
+    // Restore originals in cleanup
+    return () => {
+        global.setTimeout = originalSetTimeout;
+        global.setInterval = originalSetInterval;
+    };
+};

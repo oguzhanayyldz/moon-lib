@@ -22,10 +22,27 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = void 0;
+exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
 const index_1 = require("./index");
 // Re-export everything from main index
 __exportStar(require("./index"), exports);
+// 🧪 Test-specific overrides for problematic services
+exports.EnhancedEntityDeletionRegistry = {
+    getInstance: jest.fn(() => ({
+        shutdown: jest.fn().mockResolvedValue(undefined),
+        registerDeletionStrategy: jest.fn(),
+        executeDeletion: jest.fn().mockResolvedValue({ success: true }),
+        isStrategyRegistered: jest.fn().mockReturnValue(true),
+        getAvailableStrategies: jest.fn().mockReturnValue([]),
+        // Performance monitoring mock
+        getMetrics: jest.fn().mockReturnValue({
+            totalDeletions: 0,
+            successfulDeletions: 0,
+            failedDeletions: 0,
+            averageExecutionTime: 0
+        })
+    }))
+};
 // Test-specific service factories (override main exports)
 // NATS Wrapper - Test-friendly version
 const createNatsWrapper = () => ({
@@ -512,7 +529,7 @@ exports.EventPublisherJob = jest.fn().mockReturnValue(exports.EventPublisher);
 const RetryableListener = class MockRetryableListener {
     constructor(client, options = {}) {
         this.subject = index_1.Subjects.EntityDeleted;
-        this.queueGroupName = 'catalog-service';
+        this.queueGroupName = 'test-service';
         this.retryOptions = {
             maxRetries: (options === null || options === void 0 ? void 0 : options.maxRetries) || 3,
             deadLetterMaxRetries: (options === null || options === void 0 ? void 0 : options.deadLetterMaxRetries) || 5,
@@ -779,4 +796,56 @@ exports.createRateLimiter = jest.fn().mockImplementation((redisClient, config) =
 exports.createBruteForceProtection = jest.fn().mockImplementation((redisClient, config) => new exports.BruteForceProtection(redisClient, config));
 exports.createSecurityHeaders = jest.fn().mockImplementation((config) => new exports.SecurityHeaders(config));
 exports.createSecurityManager = jest.fn().mockImplementation((config, modules) => new exports.SecurityManager(config, modules));
+// ✅ Global Test Cleanup System
+let globalTimers = [];
+let globalIntervals = [];
+// Timer tracking için wrapper functions
+const setTimeoutTracked = (callback, delay) => {
+    const timer = setTimeout(callback, delay);
+    globalTimers.push(timer);
+    return timer;
+};
+exports.setTimeoutTracked = setTimeoutTracked;
+const setIntervalTracked = (callback, delay) => {
+    const interval = setInterval(callback, delay);
+    globalIntervals.push(interval);
+    return interval;
+};
+exports.setIntervalTracked = setIntervalTracked;
+// Global cleanup function
+const cleanupTestEnvironment = async () => {
+    try {
+        // Clear all tracked timers
+        globalTimers.forEach(timer => clearTimeout(timer));
+        globalTimers = [];
+        // Clear all tracked intervals
+        globalIntervals.forEach(interval => clearInterval(interval));
+        globalIntervals = [];
+        // Force garbage collection if available
+        if (global.gc) {
+            global.gc();
+        }
+        // Small delay to let async operations complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('✅ Test environment cleanup completed');
+    }
+    catch (error) {
+        console.error('❌ Test cleanup error:', error);
+    }
+};
+exports.cleanupTestEnvironment = cleanupTestEnvironment;
+// Jest global setup/teardown hooks
+const setupGlobalTestEnvironment = () => {
+    // Override global setTimeout and setInterval to track them
+    const originalSetTimeout = global.setTimeout;
+    const originalSetInterval = global.setInterval;
+    global.setTimeout = exports.setTimeoutTracked;
+    global.setInterval = exports.setIntervalTracked;
+    // Restore originals in cleanup
+    return () => {
+        global.setTimeout = originalSetTimeout;
+        global.setInterval = originalSetInterval;
+    };
+};
+exports.setupGlobalTestEnvironment = setupGlobalTestEnvironment;
 //# sourceMappingURL=index.test.js.map
