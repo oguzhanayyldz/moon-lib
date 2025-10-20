@@ -543,6 +543,12 @@ class EnhancedEntityDeletionRegistry {
     }
 }
 exports.EnhancedEntityDeletionRegistry = EnhancedEntityDeletionRegistry;
-// Export singleton instance
-exports.enhancedEntityDeletionRegistry = EnhancedEntityDeletionRegistry.getInstance();
+// Export singleton instance - conditional initialization for test environment
+exports.enhancedEntityDeletionRegistry = (() => {
+    // In test environment, delay singleton creation to allow mocks to be set up
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+        return null; // Will be initialized lazily when actually needed
+    }
+    return EnhancedEntityDeletionRegistry.getInstance();
+})();
 //# sourceMappingURL=enhancedEntityDeletionRegistry.js.map

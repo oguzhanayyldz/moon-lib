@@ -24,17 +24,100 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
 const index_1 = require("./index");
-// Re-export everything from main index
-__exportStar(require("./index"), exports);
-// 🧪 Test-specific overrides for problematic services
-exports.EnhancedEntityDeletionRegistry = {
+// Global test cleanup registry
+let testTimers = new Set();
+let originalSetInterval;
+let originalClearInterval;
+// Override setInterval to track all timers
+if (!originalSetInterval) {
+    originalSetInterval = global.setInterval;
+    originalClearInterval = global.clearInterval;
+    global.setInterval = ((fn, delay, ...args) => {
+        const timer = originalSetInterval(fn, delay, ...args);
+        testTimers.add(timer);
+        return timer;
+    });
+    global.clearInterval = ((timer) => {
+        testTimers.delete(timer);
+        return originalClearInterval(timer);
+    });
+}
+// Mock the BatchProcessingEngine to prevent interval creation during tests
+jest.mock('./services/batchProcessingEngine.service', () => {
+    class MockMemoryManager {
+        constructor(config) {
+            this.config = {};
+            this.isMonitoring = false;
+            this.monitoringInterval = null;
+            this.config = config;
+        }
+        startMonitoring() {
+            this.isMonitoring = true;
+            // Don't create real setInterval - completely mocked
+        }
+        stopMonitoring() {
+            this.isMonitoring = false;
+        }
+        checkMemoryUsage() {
+            return { used: 0, total: 0 };
+        }
+    }
+    class MockBatchProcessingEngine {
+        constructor() {
+            this.start = jest.fn();
+            this.stop = jest.fn();
+            this.process = jest.fn();
+            this.queue = [];
+            this.isRunning = false;
+            this.memoryManager = new MockMemoryManager({});
+            this.performanceMonitor = {
+                startMonitoring: jest.fn(),
+                stopMonitoring: jest.fn(),
+                collectMetrics: jest.fn(),
+                getMetrics: jest.fn(() => ({})),
+            };
+        }
+    }
+    return {
+        BatchProcessingEngine: MockBatchProcessingEngine,
+    };
+});
+// Mock PerformanceMonitor to prevent setInterval issues
+jest.mock('./utils/performanceMonitor.util', () => {
+    class MockPerformanceMonitor {
+        constructor(config) {
+            this.config = {};
+            this.metrics = {};
+            this.isMonitoring = false;
+            this.monitoringInterval = null;
+            this.config = config;
+        }
+        startMonitoring() {
+            this.isMonitoring = true;
+            // Don't create real setInterval - completely mocked
+        }
+        stopMonitoring() {
+            this.isMonitoring = false;
+        }
+        collectMetrics() {
+            return this.metrics;
+        }
+        getMetrics() {
+            return this.metrics;
+        }
+    }
+    return {
+        PerformanceMonitor: MockPerformanceMonitor,
+    };
+});
+// Mock problematic services first before importing
+const mockEnhancedEntityDeletionRegistry = {
     getInstance: jest.fn(() => ({
         shutdown: jest.fn().mockResolvedValue(undefined),
         registerDeletionStrategy: jest.fn(),
         executeDeletion: jest.fn().mockResolvedValue({ success: true }),
         isStrategyRegistered: jest.fn().mockReturnValue(true),
         getAvailableStrategies: jest.fn().mockReturnValue([]),
-        // Performance monitoring mock
         getMetrics: jest.fn().mockReturnValue({
             totalDeletions: 0,
             successfulDeletions: 0,
@@ -43,6 +126,29 @@ exports.EnhancedEntityDeletionRegistry = {
         })
     }))
 };
+// Global cleanup function for all test timers
+global.cleanupAllTestTimers = () => {
+    // Clear all tracked timers
+    testTimers.forEach(timer => {
+        originalClearInterval(timer);
+    });
+    testTimers.clear();
+    // Clear any remaining timers by brute force
+    const highestId = originalSetInterval(() => { }, 0);
+    for (let i = 0; i < highestId; i++) {
+        try {
+            originalClearInterval(i);
+        }
+        catch (e) {
+            // Ignore errors
+        }
+    }
+    originalClearInterval(highestId);
+};
+// Re-export everything from main index except problematic ones
+__exportStar(require("./index"), exports);
+// 🧪 Test-specific overrides for problematic services
+exports.EnhancedEntityDeletionRegistry = mockEnhancedEntityDeletionRegistry;
 // Test-specific service factories (override main exports)
 // NATS Wrapper - Test-friendly version
 const createNatsWrapper = () => ({
@@ -177,13 +283,20 @@ const createRedisWrapper = () => {
                 return Promise.resolve(0);
             }),
             // Hash operations - SessionTracker için gerekli
-            hSet: jest.fn((key, field, value) => {
+            hSet: jest.fn((key, fieldOrObject, value) => {
                 if (!mockStorage[key])
                     mockStorage[key] = {};
                 if (typeof mockStorage[key] !== 'object')
                     mockStorage[key] = {};
-                mockStorage[key][field] = value;
-                return Promise.resolve(1);
+                // Support both signatures: hSet(key, field, value) and hSet(key, object)
+                if (typeof fieldOrObject === 'object') {
+                    Object.assign(mockStorage[key], fieldOrObject);
+                    return Promise.resolve(Object.keys(fieldOrObject).length);
+                }
+                else {
+                    mockStorage[key][fieldOrObject] = value;
+                    return Promise.resolve(1);
+                }
             }),
             hGet: jest.fn((key, field) => {
                 if (!mockStorage[key] || typeof mockStorage[key] !== 'object')
@@ -214,6 +327,21 @@ const createRedisWrapper = () => {
                     return Promise.resolve([]);
                 const end = stop === -1 ? mockStorage[key].length : stop + 1;
                 return Promise.resolve(mockStorage[key].slice(start, end));
+            }),
+            // Additional operations for permission caching
+            keys: jest.fn((pattern) => {
+                const regexPattern = pattern.replace(/\*/g, '.*').replace(/\?/g, '.');
+                const regex = new RegExp(`^${regexPattern}$`);
+                const matchingKeys = Object.keys(mockStorage).filter(key => regex.test(key));
+                return Promise.resolve(matchingKeys);
+            }),
+            exists: jest.fn((key) => {
+                return Promise.resolve(mockStorage[key] !== undefined ? 1 : 0);
+            }),
+            ttl: jest.fn((key) => {
+                // Mock TTL - always return a value indicating key has TTL
+                // In real implementation, this would track expiration times
+                return Promise.resolve(mockStorage[key] !== undefined ? 300 : -2);
             }),
             quit: jest.fn().mockResolvedValue(undefined),
             on: jest.fn((event, handler) => { }) // Add event listener mock

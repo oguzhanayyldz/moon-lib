@@ -135,7 +135,7 @@ const mockEnhancedEntityDeletionRegistry = {
 };
 
 // Global cleanup function for all test timers
-global.cleanupAllTestTimers = () => {
+(global as any).cleanupAllTestTimers = () => {
   // Clear all tracked timers
   testTimers.forEach(timer => {
     originalClearInterval(timer);
@@ -293,11 +293,18 @@ export const createRedisWrapper = () => {
                 return Promise.resolve(0);
             }),
             // Hash operations - SessionTracker için gerekli
-            hSet: jest.fn((key: string, field: string, value: any) => {
+            hSet: jest.fn((key: string, fieldOrObject: string | Record<string, any>, value?: any) => {
                 if (!mockStorage[key]) mockStorage[key] = {};
                 if (typeof mockStorage[key] !== 'object') mockStorage[key] = {};
-                mockStorage[key][field] = value;
-                return Promise.resolve(1);
+
+                // Support both signatures: hSet(key, field, value) and hSet(key, object)
+                if (typeof fieldOrObject === 'object') {
+                    Object.assign(mockStorage[key], fieldOrObject);
+                    return Promise.resolve(Object.keys(fieldOrObject).length);
+                } else {
+                    mockStorage[key][fieldOrObject] = value;
+                    return Promise.resolve(1);
+                }
             }),
             hGet: jest.fn((key: string, field: string) => {
                 if (!mockStorage[key] || typeof mockStorage[key] !== 'object') return Promise.resolve(null);
@@ -325,6 +332,21 @@ export const createRedisWrapper = () => {
                 if (!Array.isArray(mockStorage[key])) return Promise.resolve([]);
                 const end = stop === -1 ? mockStorage[key].length : stop + 1;
                 return Promise.resolve(mockStorage[key].slice(start, end));
+            }),
+            // Additional operations for permission caching
+            keys: jest.fn((pattern: string) => {
+                const regexPattern = pattern.replace(/\*/g, '.*').replace(/\?/g, '.');
+                const regex = new RegExp(`^${regexPattern}$`);
+                const matchingKeys = Object.keys(mockStorage).filter(key => regex.test(key));
+                return Promise.resolve(matchingKeys);
+            }),
+            exists: jest.fn((key: string) => {
+                return Promise.resolve(mockStorage[key] !== undefined ? 1 : 0);
+            }),
+            ttl: jest.fn((key: string) => {
+                // Mock TTL - always return a value indicating key has TTL
+                // In real implementation, this would track expiration times
+                return Promise.resolve(mockStorage[key] !== undefined ? 300 : -2);
             }),
             quit: jest.fn().mockResolvedValue(undefined),
             on: jest.fn((event: string, handler: Function) => { }) // Add event listener mock
