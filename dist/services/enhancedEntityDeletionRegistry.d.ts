@@ -117,4 +117,4 @@ export declare class EnhancedEntityDeletionRegistry implements IEntityDeletionRe
      */
     shutdown(): Promise<void>;
 }
-export declare const enhancedEntityDeletionRegistry: EnhancedEntityDeletionRegistry;
+export declare const enhancedEntityDeletionRegistry: any;

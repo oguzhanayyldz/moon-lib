@@ -2,6 +2,7 @@ export declare enum OrderStatus {
     NewOrder = "newOrder",
     Comfirmed = "confirmed",
     Pending = "pending",
+    Paid = "paid",
     Processing = "processing",
     Preparing = "preparing",
     Prepared = "prepared",

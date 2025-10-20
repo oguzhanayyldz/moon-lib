@@ -8,6 +8,7 @@ var OrderStatus;
     OrderStatus["Comfirmed"] = "confirmed";
     OrderStatus["Pending"] = "pending";
     // Processing States
+    OrderStatus["Paid"] = "paid";
     OrderStatus["Processing"] = "processing";
     OrderStatus["Preparing"] = "preparing";
     OrderStatus["Prepared"] = "prepared";
@@ -50,6 +51,12 @@ exports.ORDER_STATUS_TRANSITIONS = {
         OrderStatus.WaitingStock
     ],
     [OrderStatus.Comfirmed]: [
+        OrderStatus.Paid,
+        OrderStatus.Processing,
+        OrderStatus.OnHold,
+        OrderStatus.Cancelled
+    ],
+    [OrderStatus.Paid]: [
         OrderStatus.Processing,
         OrderStatus.OnHold,
         OrderStatus.Cancelled
@@ -119,6 +126,7 @@ exports.ORDER_STATUS_TRANSITIONS = {
         OrderStatus.Cancelled
     ],
     [OrderStatus.WaitingPayment]: [
+        OrderStatus.Paid,
         OrderStatus.Comfirmed,
         OrderStatus.Cancelled
     ],
@@ -169,6 +177,7 @@ exports.isActiveOrderStatus = isActiveOrderStatus;
  */
 const isInFulfillmentProcess = (status) => {
     const fulfillmentStatuses = [
+        OrderStatus.Paid,
         OrderStatus.Processing,
         OrderStatus.Preparing,
         OrderStatus.Prepared,
