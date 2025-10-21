@@ -40,7 +40,7 @@ export const isSubUser = (user: UserPayload): boolean => {
 export const hasPermission = (user: UserPayload, resource: string, action: string): boolean => {
     // Convert role to number to ensure type safety
     const roleNumber = Number(user.role);
-    
+
     // Admin and User roles have full access
     if (roleNumber === UserRole.Admin || roleNumber === UserRole.User) {
         // SubUser mode kontrolü - SubUser modunda ise permissions'a bak
@@ -55,6 +55,72 @@ export const hasPermission = (user: UserPayload, resource: string, action: strin
     if (roleNumber === UserRole.SubUser && user.permissions) {
         const permission = user.permissions.find(p => p.resource === resource);
         return permission ? permission.actions.includes(action) || permission.actions.includes('*') : false;
+    }
+
+    return false;
+};
+
+/**
+ * Platform-aware permission check
+ * Integration ve Catalog gibi platform-specific resource'lar için kullanılır
+ *
+ * @param user - Current user payload
+ * @param resource - Resource name (integrations, catalogs, etc.)
+ * @param action - Action to perform (read, create, update, delete, trigger)
+ * @param platformName - Platform name to check (trendyol, shopify, etc.)
+ * @returns true if user has permission for this platform
+ */
+export const hasPlatformPermission = (
+    user: UserPayload,
+    resource: string,
+    action: string,
+    platformName?: string
+): boolean => {
+    // First check basic permission
+    if (!hasPermission(user, resource, action)) {
+        return false;
+    }
+
+    // If no platform check needed, return true
+    if (!platformName) {
+        return true;
+    }
+
+    // Convert role to number
+    const roleNumber = Number(user.role);
+
+    // Admin and User roles - check if SubUser mode
+    if (roleNumber === UserRole.Admin || roleNumber === UserRole.User) {
+        if (user.isSubUserMode && user.permissions) {
+            const permission = user.permissions.find(
+                p => p.resource === resource && (p.actions.includes(action) || p.actions.includes('*'))
+            );
+
+            // Check platform constraints
+            if (permission?.constraints?.platforms) {
+                return permission.constraints.platforms.includes(platformName);
+            }
+
+            // No platform constraint means all platforms allowed
+            return true;
+        }
+        // Not SubUser mode means full access
+        return true;
+    }
+
+    // Direct SubUser login
+    if (roleNumber === UserRole.SubUser && user.permissions) {
+        const permission = user.permissions.find(
+            p => p.resource === resource && (p.actions.includes(action) || p.actions.includes('*'))
+        );
+
+        // Check platform constraints
+        if (permission?.constraints?.platforms) {
+            return permission.constraints.platforms.includes(platformName);
+        }
+
+        // No platform constraint means all platforms allowed
+        return true;
     }
 
     return false;
