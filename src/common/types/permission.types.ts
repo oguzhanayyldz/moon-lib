@@ -5,6 +5,7 @@ export interface Permission {
     actions: string[];
     constraints?: {
         warehouses?: string[];
+        shelves?: string[];
         categories?: string[];
         priceRange?: {
             min: number;
@@ -24,6 +25,10 @@ export const PERMISSION_ACTIONS = {
 export const PERMISSION_RESOURCES = {
     PRODUCTS: 'products',
     ORDERS: 'orders',
+    CATEGORIES: 'categories',
+    BRANDS: 'brands',
+    WAREHOUSES: 'warehouses',
+    SHELVES: 'shelves',
     INVENTORY: 'inventory',
     PRICING: 'pricing',
     INTEGRATIONS: 'integrations',

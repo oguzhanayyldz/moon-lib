@@ -3,6 +3,7 @@ export interface Permission {
     actions: string[];
     constraints?: {
         warehouses?: string[];
+        shelves?: string[];
         categories?: string[];
         priceRange?: {
             min: number;
@@ -20,6 +21,10 @@ export declare const PERMISSION_ACTIONS: {
 export declare const PERMISSION_RESOURCES: {
     readonly PRODUCTS: "products";
     readonly ORDERS: "orders";
+    readonly CATEGORIES: "categories";
+    readonly BRANDS: "brands";
+    readonly WAREHOUSES: "warehouses";
+    readonly SHELVES: "shelves";
     readonly INVENTORY: "inventory";
     readonly PRICING: "pricing";
     readonly INTEGRATIONS: "integrations";

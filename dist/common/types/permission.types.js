@@ -12,6 +12,10 @@ exports.PERMISSION_ACTIONS = {
 exports.PERMISSION_RESOURCES = {
     PRODUCTS: 'products',
     ORDERS: 'orders',
+    CATEGORIES: 'categories',
+    BRANDS: 'brands',
+    WAREHOUSES: 'warehouses',
+    SHELVES: 'shelves',
     INVENTORY: 'inventory',
     PRICING: 'pricing',
     INTEGRATIONS: 'integrations',
