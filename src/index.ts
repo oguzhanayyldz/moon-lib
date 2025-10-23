@@ -41,6 +41,9 @@ export * from './security/MicroserviceSecurityService';
 // Security Logger
 export * from './security-logger';
 
+// Metrics
+export * from './metrics/EventMetrics';
+
 // Performance Optimizations
 // Redis connection pooling handled by redisWrapper.service
 
