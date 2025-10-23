@@ -64,5 +64,6 @@ export declare const inventorySecurityLogger: SecurityLogger;
 export declare const productsSecurityLogger: SecurityLogger;
 export declare const pricingSecurityLogger: SecurityLogger;
 export declare const integrationSecurityLogger: SecurityLogger;
+export declare const cdnSecurityLogger: SecurityLogger;
 export declare const shopifySecurityLogger: SecurityLogger;
 export declare const trendyolSecurityLogger: SecurityLogger;

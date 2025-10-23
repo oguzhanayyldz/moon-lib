@@ -7,7 +7,7 @@
  * and enable comprehensive security monitoring and alerting.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getEventSeverity = exports.SecurityEventSeverity = exports.SecurityEventType = exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.createSecurityLogger = exports.SecurityLogger = void 0;
+exports.getEventSeverity = exports.SecurityEventSeverity = exports.SecurityEventType = exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.cdnSecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.createSecurityLogger = exports.SecurityLogger = void 0;
 var SecurityLogger_1 = require("./SecurityLogger");
 Object.defineProperty(exports, "SecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.SecurityLogger; } });
 Object.defineProperty(exports, "createSecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.createSecurityLogger; } });
@@ -18,6 +18,7 @@ Object.defineProperty(exports, "inventorySecurityLogger", { enumerable: true, ge
 Object.defineProperty(exports, "productsSecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.productsSecurityLogger; } });
 Object.defineProperty(exports, "pricingSecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.pricingSecurityLogger; } });
 Object.defineProperty(exports, "integrationSecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.integrationSecurityLogger; } });
+Object.defineProperty(exports, "cdnSecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.cdnSecurityLogger; } });
 Object.defineProperty(exports, "shopifySecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.shopifySecurityLogger; } });
 Object.defineProperty(exports, "trendyolSecurityLogger", { enumerable: true, get: function () { return SecurityLogger_1.trendyolSecurityLogger; } });
 var SecurityEventTypes_1 = require("./SecurityEventTypes");

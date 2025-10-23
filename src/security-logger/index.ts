@@ -16,6 +16,7 @@ export {
     productsSecurityLogger,
     pricingSecurityLogger,
     integrationSecurityLogger,
+    cdnSecurityLogger,
     shopifySecurityLogger,
     trendyolSecurityLogger
 } from './SecurityLogger';

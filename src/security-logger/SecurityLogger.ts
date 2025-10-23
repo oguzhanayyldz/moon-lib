@@ -348,5 +348,6 @@ export const inventorySecurityLogger = new SecurityLogger('inventory');
 export const productsSecurityLogger = new SecurityLogger('products');
 export const pricingSecurityLogger = new SecurityLogger('pricing');
 export const integrationSecurityLogger = new SecurityLogger('integration');
+export const cdnSecurityLogger = new SecurityLogger('cdn');
 export const shopifySecurityLogger = new SecurityLogger('shopify');
 export const trendyolSecurityLogger = new SecurityLogger('trendyol');

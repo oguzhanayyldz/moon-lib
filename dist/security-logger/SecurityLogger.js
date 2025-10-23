@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.SecurityLogger = void 0;
+exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.cdnSecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.SecurityLogger = void 0;
 exports.createSecurityLogger = createSecurityLogger;
 const SecurityEventTypes_1 = require("./SecurityEventTypes");
 /**
@@ -205,5 +205,6 @@ exports.inventorySecurityLogger = new SecurityLogger('inventory');
 exports.productsSecurityLogger = new SecurityLogger('products');
 exports.pricingSecurityLogger = new SecurityLogger('pricing');
 exports.integrationSecurityLogger = new SecurityLogger('integration');
+exports.cdnSecurityLogger = new SecurityLogger('cdn');
 exports.shopifySecurityLogger = new SecurityLogger('shopify');
 exports.trendyolSecurityLogger = new SecurityLogger('trendyol');
