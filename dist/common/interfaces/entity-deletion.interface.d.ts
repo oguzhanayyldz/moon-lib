@@ -39,6 +39,8 @@ export interface DeletionContext {
     userId?: string;
     /** Unique request ID for tracking */
     requestId?: string;
+    /** Reason for the deletion operation (for logging and audit trail) */
+    reason?: string;
     /** Additional metadata for the deletion operation */
     metadata?: Record<string, any>;
     /** MongoDB session for transaction support (optional) */
