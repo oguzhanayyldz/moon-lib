@@ -7,6 +7,7 @@ exports.PERMISSION_ACTIONS = {
     CREATE: 'create',
     UPDATE: 'update',
     DELETE: 'delete',
+    TRIGGER: 'trigger',
     ALL: '*'
 };
 exports.PERMISSION_RESOURCES = {

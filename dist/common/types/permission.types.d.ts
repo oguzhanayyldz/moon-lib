@@ -5,6 +5,8 @@ export interface Permission {
         warehouses?: string[];
         shelves?: string[];
         categories?: string[];
+        platforms?: string[];
+        integrations?: string[];
         priceRange?: {
             min: number;
             max: number;
@@ -16,6 +18,7 @@ export declare const PERMISSION_ACTIONS: {
     readonly CREATE: "create";
     readonly UPDATE: "update";
     readonly DELETE: "delete";
+    readonly TRIGGER: "trigger";
     readonly ALL: "*";
 };
 export declare const PERMISSION_RESOURCES: {
