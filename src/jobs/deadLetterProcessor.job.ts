@@ -110,7 +110,12 @@ export class DeadLetterProcessorJob {
             
             // Tekrar çağır (batch işleme yerine sırayla)
             await this.processPendingEvents();
-        } catch (error) {
+        } catch (error: any) {
+            // MongoDB "not primary" hatalarını ayır - silent fail
+            if (error.code === 10107 || error.codeName === 'NotWritablePrimary') {
+                logger.warn('MongoDB not writable (secondary node detected), skipping this cycle');
+                return; // Bir sonraki cycle'da primary'e bağlanırsa dener
+            }
             logger.error('Error processing dead letter events:', error);
         }
     }
