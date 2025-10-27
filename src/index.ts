@@ -43,6 +43,7 @@ export * from './security-logger';
 
 // Metrics
 export * from './metrics/EventMetrics';
+export * from './middleware/httpMetrics';
 
 // Performance Optimizations
 // Redis connection pooling handled by redisWrapper.service

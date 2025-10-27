@@ -27,6 +27,7 @@ export * from './security/SecurityManager';
 export * from './security/MicroserviceSecurityService';
 export * from './security-logger';
 export * from './metrics/EventMetrics';
+export * from './middleware/httpMetrics';
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
 export * from './utils/performanceMonitor.util';
