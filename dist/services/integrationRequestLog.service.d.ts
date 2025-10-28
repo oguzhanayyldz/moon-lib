@@ -132,19 +132,19 @@ export declare class IntegrationRequestLogService {
      */
     private static sanitizeHeaders;
     /**
-     * Body'yi storage için hazırlar
-     * String ise parse edip object döndürür, object ise olduğu gibi döndürür
-     * MongoDB'de object olarak saklanır, frontend tarafında pretty-print yapılır
+     * JSON body'yi pretty-print formatına dönüştürür (okunabilir hale getirir)
+     * String ise parse edip tekrar format eder
+     * MongoDB'de string olarak saklanır
      */
     private static formatBodyForStorage;
     /**
-     * Request body'deki hassas bilgileri temizler ve object olarak döndürür
-     * MongoDB'de object olarak saklanır, route'da JSON.stringify ile string'e çevrilir
+     * Request body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * MongoDB'de string olarak saklanır
      */
     private static sanitizeRequestBody;
     /**
-     * Response body'deki hassas bilgileri temizler ve object olarak döndürür
-     * MongoDB'de object olarak saklanır, route'da JSON.stringify ile string'e çevrilir
+     * Response body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * MongoDB'de string olarak saklanır
      */
     private static sanitizeResponseBody;
     /**
