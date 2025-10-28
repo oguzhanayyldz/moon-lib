@@ -132,11 +132,16 @@ export declare class IntegrationRequestLogService {
      */
     private static sanitizeHeaders;
     /**
-     * Request body'deki hassas bilgileri temizler
+     * JSON body'yi pretty-print formatına dönüştürür (okunabilir hale getirir)
+     * String ise parse edip tekrar format eder
+     */
+    private static formatBodyForStorage;
+    /**
+     * Request body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
      */
     private static sanitizeRequestBody;
     /**
-     * Response body'deki hassas bilgileri temizler
+     * Response body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
      */
     private static sanitizeResponseBody;
     /**

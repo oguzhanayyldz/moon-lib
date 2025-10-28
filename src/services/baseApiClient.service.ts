@@ -9,7 +9,7 @@ interface AxiosInstance {
   };
 }
 interface AxiosError extends Error {
-  response?: { status: number; data: any; headers: any };
+  response?: { status: number; statusText?: string; data: any; headers: any };
   config?: any;
   code?: string;
 }
@@ -217,6 +217,16 @@ export abstract class BaseApiClient implements IApiClient {
       }
     };
 
+    // Enhanced request logging
+    logger.debug('Making API request', {
+      method: finalConfig.method?.toUpperCase(),
+      url: finalConfig.url,
+      hasRateLimit: !finalConfig.skipRateLimit,
+      hasCircuitBreaker: !finalConfig.skipCircuitBreaker,
+      hasLogRequest: finalConfig.logRequest !== false,
+      integrationName: this.integrationName
+    });
+
     try {
       // Rate limiting check (unless skipped)
       if (!finalConfig.skipRateLimit) {
@@ -235,41 +245,80 @@ export abstract class BaseApiClient implements IApiClient {
       // Log successful request
       if (finalConfig.logRequest !== false && this.logService) {
         const duration = Date.now() - startTime;
-        logId = await this.logRequest(finalConfig);
-        await this.logResponse(logId, {
-          status: response.status,
-          headers: response.headers,
-          body: response.data,
-          duration
-        });
+        try {
+          logId = await this.logRequest(finalConfig);
+          await this.logResponse(logId, {
+            responseStatus: response.status,
+            responseHeaders: response.headers,
+            responseBody: response.data,
+            duration
+          });
+        } catch (logError: any) {
+          logger.warn('Failed to log successful request', {
+            error: logError.message,
+            integrationName: this.integrationName
+          });
+        }
       }
 
       // Update metrics
       this.updateMetrics(true, Date.now() - startTime);
 
+      logger.debug('API request completed successfully', {
+        method: finalConfig.method,
+        url: finalConfig.url,
+        status: response.status,
+        duration: Date.now() - startTime,
+        integrationName: this.integrationName
+      });
+
       return response.data;
     } catch (error) {
+      const duration = Date.now() - startTime;
+
       // Log failed request
       if (requestConfig.logRequest !== false && this.logService) {
-        const duration = Date.now() - startTime;
-        if (!logId) {
-          logId = await this.logRequest(requestConfig);
+        try {
+          if (!logId) {
+            logId = await this.logRequest(requestConfig);
+          }
+          await this.logResponse(logId, {
+            responseStatus: (error as AxiosError).response?.status || 0,
+            responseHeaders: (error as AxiosError).response?.headers,
+            responseBody: (error as AxiosError).response?.data || (error as Error).message,
+            duration
+          });
+        } catch (logError: any) {
+          logger.warn('Failed to log failed request', {
+            error: logError.message,
+            integrationName: this.integrationName
+          });
         }
-        await this.logResponse(logId, {
-          status: (error as AxiosError).response?.status || 0,
-          headers: (error as AxiosError).response?.headers,
-          body: (error as AxiosError).response?.data || (error as Error).message,
-          duration
-        });
       }
 
       // Update metrics
-      this.updateMetrics(false, Date.now() - startTime);
+      this.updateMetrics(false, duration);
 
       // Handle custom error processing
       if (this.handleCustomError) {
-        this.handleCustomError(error as AxiosError);
+        try {
+          this.handleCustomError(error as AxiosError);
+        } catch (customErrorHandlingError: any) {
+          logger.warn('Custom error handler failed', {
+            error: customErrorHandlingError.message,
+            integrationName: this.integrationName
+          });
+        }
       }
+
+      logger.error('API request failed', {
+        method: requestConfig.method,
+        url: requestConfig.url,
+        status: (error as AxiosError).response?.status,
+        errorMessage: (error as Error).message,
+        duration,
+        integrationName: this.integrationName
+      });
 
       throw error;
     }
@@ -283,14 +332,14 @@ export abstract class BaseApiClient implements IApiClient {
     while (retryCount <= (retryConfig?.maxRetries || 0)) {
       try {
         const span = this.tracer?.startSpan(`api-request-${requestConfig.method?.toLowerCase()}`);
-        
+
         if (span) {
           span.setTag('http.method', requestConfig.method);
           span.setTag('http.url', requestConfig.url);
         }
 
         const response = await this.httpClient.request(requestConfig);
-        
+
         if (span) {
           span.setTag('http.status_code', response.status);
           span.finish();
@@ -299,16 +348,49 @@ export abstract class BaseApiClient implements IApiClient {
         return response;
       } catch (error) {
         lastError = error as AxiosError;
-        
+
+        // Enhanced error logging with defensive checks
+        logger.error('Request execution error', {
+          hasResponse: !!lastError.response,
+          status: lastError.response?.status,
+          statusText: lastError.response?.statusText,
+          code: lastError.code,
+          message: lastError.message,
+          method: requestConfig.method,
+          url: requestConfig.url,
+          integrationName: this.integrationName,
+          retryCount,
+          maxRetries: retryConfig?.maxRetries || 0
+        });
+
+        // Handle rate limit errors specifically
+        if (lastError.response?.status === 429) {
+          logger.warn('Rate limit detected (429), calling handleRateLimitError', {
+            integrationName: this.integrationName,
+            retryCount,
+            maxRetries: retryConfig?.maxRetries
+          });
+
+          try {
+            await this.handleRateLimitError(lastError);
+          } catch (rateLimitError: any) {
+            logger.error('handleRateLimitError failed', {
+              error: rateLimitError.message,
+              integrationName: this.integrationName
+            });
+          }
+        }
+
         // Check if this error should be retried
         if (retryCount < (retryConfig?.maxRetries || 0) && this.shouldRetry(lastError)) {
           retryCount++;
           const delay = this.calculateRetryDelay(retryCount, retryConfig);
-          
+
           logger.info(`Retrying request (attempt ${retryCount}/${retryConfig?.maxRetries}) after ${delay}ms`, {
             method: requestConfig.method,
             url: requestConfig.url,
-            error: lastError.message
+            error: lastError.message,
+            integrationName: this.integrationName
           });
 
           await this.sleep(delay);

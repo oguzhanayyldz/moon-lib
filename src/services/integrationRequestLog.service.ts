@@ -115,7 +115,7 @@ export class IntegrationRequestLogService {
      * Kullanıcının entegrasyon loglarını getirir
      */
     async getUserLogs(
-        userId: string, 
+        userId: string,
         integrationName?: ResourceName,
         page: number = 1,
         limit: number = 50,
@@ -131,19 +131,28 @@ export class IntegrationRequestLogService {
     ) {
         try {
             const query: any = { userId };
-            
+
             if (integrationName) {
                 query.integrationName = integrationName;
             }
-            
+
             if (filters?.method) {
                 query.method = filters.method;
             }
-            
+
             if (filters?.success !== undefined) {
-                query.success = filters.success;
+                // Success is a virtual field, filter by responseStatus instead
+                if (filters.success) {
+                    query.responseStatus = { $gte: 200, $lt: 300 };
+                } else {
+                    query.$or = [
+                        { responseStatus: { $exists: false } },
+                        { responseStatus: { $lt: 200 } },
+                        { responseStatus: { $gte: 300 } }
+                    ];
+                }
             }
-            
+
             if (filters?.search) {
                 query.$or = [
                     { endpoint: { $regex: filters.search, $options: 'i' } },
@@ -316,23 +325,32 @@ export class IntegrationRequestLogService {
     ) {
         try {
             const query: any = {};
-            
+
             if (integrationName) {
                 query.integrationName = integrationName;
             }
-            
+
             if (filters?.userId) {
                 query.userId = filters.userId;
             }
-            
+
             if (filters?.method) {
                 query.method = filters.method;
             }
-            
+
             if (filters?.success !== undefined) {
-                query.success = filters.success;
+                // Success is a virtual field, filter by responseStatus instead
+                if (filters.success) {
+                    query.responseStatus = { $gte: 200, $lt: 300 };
+                } else {
+                    query.$or = [
+                        { responseStatus: { $exists: false } },
+                        { responseStatus: { $lt: 200 } },
+                        { responseStatus: { $gte: 300 } }
+                    ];
+                }
             }
-            
+
             if (filters?.search) {
                 query.$or = [
                     { endpoint: { $regex: filters.search, $options: 'i' } },
@@ -589,29 +607,63 @@ export class IntegrationRequestLogService {
     }
 
     /**
-     * Request body'deki hassas bilgileri temizler
+     * JSON body'yi pretty-print formatına dönüştürür (okunabilir hale getirir)
+     * String ise parse edip tekrar format eder
      */
-    private static sanitizeRequestBody(body: Record<string, any>): Record<string, any> {
-        if (!body || typeof body !== 'object') return body;
-        
-        const sanitized = JSON.parse(JSON.stringify(body));
-        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token'];
-        
-        this.recursiveSanitize(sanitized, sensitiveKeys);
-        return sanitized;
+    private static formatBodyForStorage(body: any): any {
+        if (!body) return null;
+
+        // Eğer zaten string ise JSON parse etmeye çalış
+        if (typeof body === 'string') {
+            try {
+                body = JSON.parse(body);
+            } catch {
+                // Parse edilemiyorsa olduğu gibi döndür
+                return body;
+            }
+        }
+
+        // Object ise pretty-print JSON olarak döndür (2 space indentation)
+        if (typeof body === 'object') {
+            try {
+                return JSON.stringify(body, null, 2);
+            } catch {
+                // Stringify edilemiyorsa toString kullan
+                return String(body);
+            }
+        }
+
+        return body;
     }
 
     /**
-     * Response body'deki hassas bilgileri temizler
+     * Request body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
      */
-    private static sanitizeResponseBody(body: Record<string, any>): Record<string, any> {
-        if (!body || typeof body !== 'object') return body;
-        
+    private static sanitizeRequestBody(body: Record<string, any>): any {
+        if (!body || typeof body !== 'object') return this.formatBodyForStorage(body);
+
         const sanitized = JSON.parse(JSON.stringify(body));
         const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token'];
-        
+
         this.recursiveSanitize(sanitized, sensitiveKeys);
-        return sanitized;
+
+        // Pretty-print format
+        return this.formatBodyForStorage(sanitized);
+    }
+
+    /**
+     * Response body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     */
+    private static sanitizeResponseBody(body: Record<string, any>): any {
+        if (!body || typeof body !== 'object') return this.formatBodyForStorage(body);
+
+        const sanitized = JSON.parse(JSON.stringify(body));
+        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token'];
+
+        this.recursiveSanitize(sanitized, sensitiveKeys);
+
+        // Pretty-print format
+        return this.formatBodyForStorage(sanitized);
     }
 
     /**

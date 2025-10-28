@@ -130,11 +130,20 @@ class BaseApiClient {
     // Core request method
     makeRequest(requestConfig) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c;
+            var _a, _b, _c, _d, _e;
             const startTime = Date.now();
             let logId;
             // Merge default headers with request headers
             const finalConfig = Object.assign(Object.assign({}, requestConfig), { headers: Object.assign(Object.assign({}, this.getDefaultHeaders()), requestConfig.headers) });
+            // Enhanced request logging
+            logger_service_1.logger.debug('Making API request', {
+                method: (_a = finalConfig.method) === null || _a === void 0 ? void 0 : _a.toUpperCase(),
+                url: finalConfig.url,
+                hasRateLimit: !finalConfig.skipRateLimit,
+                hasCircuitBreaker: !finalConfig.skipCircuitBreaker,
+                hasLogRequest: finalConfig.logRequest !== false,
+                integrationName: this.integrationName
+            });
             try {
                 // Rate limiting check (unless skipped)
                 if (!finalConfig.skipRateLimit) {
@@ -152,45 +161,84 @@ class BaseApiClient {
                 // Log successful request
                 if (finalConfig.logRequest !== false && this.logService) {
                     const duration = Date.now() - startTime;
-                    logId = yield this.logRequest(finalConfig);
-                    yield this.logResponse(logId, {
-                        status: response.status,
-                        headers: response.headers,
-                        body: response.data,
-                        duration
-                    });
+                    try {
+                        logId = yield this.logRequest(finalConfig);
+                        yield this.logResponse(logId, {
+                            responseStatus: response.status,
+                            responseHeaders: response.headers,
+                            responseBody: response.data,
+                            duration
+                        });
+                    }
+                    catch (logError) {
+                        logger_service_1.logger.warn('Failed to log successful request', {
+                            error: logError.message,
+                            integrationName: this.integrationName
+                        });
+                    }
                 }
                 // Update metrics
                 this.updateMetrics(true, Date.now() - startTime);
+                logger_service_1.logger.debug('API request completed successfully', {
+                    method: finalConfig.method,
+                    url: finalConfig.url,
+                    status: response.status,
+                    duration: Date.now() - startTime,
+                    integrationName: this.integrationName
+                });
                 return response.data;
             }
             catch (error) {
+                const duration = Date.now() - startTime;
                 // Log failed request
                 if (requestConfig.logRequest !== false && this.logService) {
-                    const duration = Date.now() - startTime;
-                    if (!logId) {
-                        logId = yield this.logRequest(requestConfig);
+                    try {
+                        if (!logId) {
+                            logId = yield this.logRequest(requestConfig);
+                        }
+                        yield this.logResponse(logId, {
+                            responseStatus: ((_b = error.response) === null || _b === void 0 ? void 0 : _b.status) || 0,
+                            responseHeaders: (_c = error.response) === null || _c === void 0 ? void 0 : _c.headers,
+                            responseBody: ((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || error.message,
+                            duration
+                        });
                     }
-                    yield this.logResponse(logId, {
-                        status: ((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) || 0,
-                        headers: (_b = error.response) === null || _b === void 0 ? void 0 : _b.headers,
-                        body: ((_c = error.response) === null || _c === void 0 ? void 0 : _c.data) || error.message,
-                        duration
-                    });
+                    catch (logError) {
+                        logger_service_1.logger.warn('Failed to log failed request', {
+                            error: logError.message,
+                            integrationName: this.integrationName
+                        });
+                    }
                 }
                 // Update metrics
-                this.updateMetrics(false, Date.now() - startTime);
+                this.updateMetrics(false, duration);
                 // Handle custom error processing
                 if (this.handleCustomError) {
-                    this.handleCustomError(error);
+                    try {
+                        this.handleCustomError(error);
+                    }
+                    catch (customErrorHandlingError) {
+                        logger_service_1.logger.warn('Custom error handler failed', {
+                            error: customErrorHandlingError.message,
+                            integrationName: this.integrationName
+                        });
+                    }
                 }
+                logger_service_1.logger.error('API request failed', {
+                    method: requestConfig.method,
+                    url: requestConfig.url,
+                    status: (_e = error.response) === null || _e === void 0 ? void 0 : _e.status,
+                    errorMessage: error.message,
+                    duration,
+                    integrationName: this.integrationName
+                });
                 throw error;
             }
         });
     }
     executeRequest(requestConfig) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
+            var _a, _b, _c, _d, _e;
             let lastError;
             const retryConfig = this.config.retries;
             let retryCount = 0;
@@ -210,6 +258,36 @@ class BaseApiClient {
                 }
                 catch (error) {
                     lastError = error;
+                    // Enhanced error logging with defensive checks
+                    logger_service_1.logger.error('Request execution error', {
+                        hasResponse: !!lastError.response,
+                        status: (_c = lastError.response) === null || _c === void 0 ? void 0 : _c.status,
+                        statusText: (_d = lastError.response) === null || _d === void 0 ? void 0 : _d.statusText,
+                        code: lastError.code,
+                        message: lastError.message,
+                        method: requestConfig.method,
+                        url: requestConfig.url,
+                        integrationName: this.integrationName,
+                        retryCount,
+                        maxRetries: (retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries) || 0
+                    });
+                    // Handle rate limit errors specifically
+                    if (((_e = lastError.response) === null || _e === void 0 ? void 0 : _e.status) === 429) {
+                        logger_service_1.logger.warn('Rate limit detected (429), calling handleRateLimitError', {
+                            integrationName: this.integrationName,
+                            retryCount,
+                            maxRetries: retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries
+                        });
+                        try {
+                            yield this.handleRateLimitError(lastError);
+                        }
+                        catch (rateLimitError) {
+                            logger_service_1.logger.error('handleRateLimitError failed', {
+                                error: rateLimitError.message,
+                                integrationName: this.integrationName
+                            });
+                        }
+                    }
                     // Check if this error should be retried
                     if (retryCount < ((retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries) || 0) && this.shouldRetry(lastError)) {
                         retryCount++;
@@ -217,7 +295,8 @@ class BaseApiClient {
                         logger_service_1.logger.info(`Retrying request (attempt ${retryCount}/${retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries}) after ${delay}ms`, {
                             method: requestConfig.method,
                             url: requestConfig.url,
-                            error: lastError.message
+                            error: lastError.message,
+                            integrationName: this.integrationName
                         });
                         yield this.sleep(delay);
                         continue;

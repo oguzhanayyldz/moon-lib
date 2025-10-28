@@ -94,6 +94,16 @@ const integrationRequestLogSchemaDefinition = {
 
 const integrationRequestLogSchema = createBaseSchema(integrationRequestLogSchemaDefinition);
 
+// Virtual field: success - Computed from responseStatus
+integrationRequestLogSchema.virtual('success').get(function(this: IntegrationRequestLogDoc) {
+    if (!this.responseStatus) return false;
+    return this.responseStatus >= 200 && this.responseStatus < 300;
+});
+
+// Enable virtuals in JSON and object output
+integrationRequestLogSchema.set('toJSON', { virtuals: true });
+integrationRequestLogSchema.set('toObject', { virtuals: true });
+
 // Compound index for efficient queries
 integrationRequestLogSchema.index({ integrationName: 1, userId: 1, requestTime: -1 });
 integrationRequestLogSchema.index({ userId: 1, requestTime: -1 });

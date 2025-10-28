@@ -1,6 +1,7 @@
 interface AxiosError extends Error {
     response?: {
         status: number;
+        statusText?: string;
         data: any;
         headers: any;
     };
