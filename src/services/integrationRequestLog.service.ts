@@ -607,8 +607,9 @@ export class IntegrationRequestLogService {
     }
 
     /**
-     * JSON body'yi pretty-print formatına dönüştürür (okunabilir hale getirir)
-     * String ise parse edip tekrar format eder
+     * Body'yi storage için hazırlar
+     * String ise parse edip object döndürür, object ise olduğu gibi döndürür
+     * MongoDB'de object olarak saklanır, frontend tarafında pretty-print yapılır
      */
     private static formatBodyForStorage(body: any): any {
         if (!body) return null;
@@ -616,28 +617,24 @@ export class IntegrationRequestLogService {
         // Eğer zaten string ise JSON parse etmeye çalış
         if (typeof body === 'string') {
             try {
-                body = JSON.parse(body);
+                return JSON.parse(body);
             } catch {
-                // Parse edilemiyorsa olduğu gibi döndür
+                // Parse edilemiyorsa string olarak döndür
                 return body;
             }
         }
 
-        // Object ise pretty-print JSON olarak döndür (2 space indentation)
+        // Object ise olduğu gibi döndür (MongoDB Mixed type)
         if (typeof body === 'object') {
-            try {
-                return JSON.stringify(body, null, 2);
-            } catch {
-                // Stringify edilemiyorsa toString kullan
-                return String(body);
-            }
+            return body;
         }
 
         return body;
     }
 
     /**
-     * Request body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * Request body'deki hassas bilgileri temizler ve object olarak döndürür
+     * MongoDB'de object olarak saklanır, route'da JSON.stringify ile string'e çevrilir
      */
     private static sanitizeRequestBody(body: Record<string, any>): any {
         if (!body || typeof body !== 'object') return this.formatBodyForStorage(body);
@@ -647,12 +644,13 @@ export class IntegrationRequestLogService {
 
         this.recursiveSanitize(sanitized, sensitiveKeys);
 
-        // Pretty-print format
+        // Object olarak döndür (route'da stringify edilecek)
         return this.formatBodyForStorage(sanitized);
     }
 
     /**
-     * Response body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * Response body'deki hassas bilgileri temizler ve object olarak döndürür
+     * MongoDB'de object olarak saklanır, route'da JSON.stringify ile string'e çevrilir
      */
     private static sanitizeResponseBody(body: Record<string, any>): any {
         if (!body || typeof body !== 'object') return this.formatBodyForStorage(body);
@@ -662,7 +660,7 @@ export class IntegrationRequestLogService {
 
         this.recursiveSanitize(sanitized, sensitiveKeys);
 
-        // Pretty-print format
+        // Object olarak döndür (route'da stringify edilecek)
         return this.formatBodyForStorage(sanitized);
     }
 
