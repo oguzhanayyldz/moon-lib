@@ -14,30 +14,57 @@ class RedisWrapper {
         return this._client;
     }
 
-    async connect(url: string) {
+    async connect(url: string, timeoutMs: number = 10000) {
         try {
             // URL için önceden oluşturulmuş bir instance var mı kontrol et
             const existingClient = RedisWrapper.instances.get(url);
             if (existingClient) {
                 this._client = existingClient;
                 this._url = url;
+                logger.info(`Reusing existing Redis connection to ${url}`);
                 return;
             }
 
-            // Yeni bağlantı oluştur
-            const client: RedisClientType = createClient<{}, {}, {}>({ url })
-                .on('connect', () => logger.info(`Redis Client Connected to ${url}`))
-                .on('error', (err) => logger.error('Redis Client Error:', err));
+            logger.info(`Connecting to Redis at ${url} with ${timeoutMs}ms timeout...`);
 
-            await client.connect();
-            
+            // Yeni bağlantı oluştur - socket timeout ve reconnect strategy ile
+            const client: RedisClientType = createClient<{}, {}, {}>({
+                url,
+                socket: {
+                    connectTimeout: timeoutMs,
+                    reconnectStrategy: (retries) => {
+                        if (retries > 3) {
+                            logger.error(`Redis reconnection failed after ${retries} attempts`);
+                            return new Error('Max reconnection attempts reached');
+                        }
+                        const delay = Math.min(retries * 100, 3000);
+                        logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
+                        return delay;
+                    }
+                }
+            })
+                .on('connect', () => logger.info(`✅ Redis Client Connected to ${url}`))
+                .on('error', (err) => logger.error('❌ Redis Client Error:', err))
+                .on('reconnecting', () => logger.warn('🔄 Redis Client Reconnecting...'));
+
+            // Timeout wrapper ile connection
+            const connectWithTimeout = Promise.race([
+                client.connect(),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error(`Redis connection timeout after ${timeoutMs}ms`)), timeoutMs)
+                )
+            ]);
+
+            await connectWithTimeout;
+
             // Instance'ı kaydet
             this._client = client;
             this._url = url;
             RedisWrapper.instances.set(url, client);
+            logger.info(`✅ Successfully connected to Redis at ${url}`);
 
         } catch (error) {
-            logger.error('Failed to connect to Redis:', error);
+            logger.error('❌ Failed to connect to Redis:', error);
             throw error;
         }
     }
