@@ -164,9 +164,9 @@ class BaseApiClient {
                     try {
                         logId = yield this.logRequest(finalConfig);
                         yield this.logResponse(logId, {
-                            responseStatus: response.status,
-                            responseHeaders: response.headers,
-                            responseBody: response.data,
+                            responseStatus: (response === null || response === void 0 ? void 0 : response.status) || 0,
+                            responseHeaders: response === null || response === void 0 ? void 0 : response.headers,
+                            responseBody: response === null || response === void 0 ? void 0 : response.data,
                             duration
                         });
                     }
@@ -182,7 +182,7 @@ class BaseApiClient {
                 logger_service_1.logger.debug('API request completed successfully', {
                     method: finalConfig.method,
                     url: finalConfig.url,
-                    status: response.status,
+                    status: response === null || response === void 0 ? void 0 : response.status,
                     duration: Date.now() - startTime,
                     integrationName: this.integrationName
                 });
@@ -251,7 +251,9 @@ class BaseApiClient {
                     }
                     const response = yield this.httpClient.request(requestConfig);
                     if (span) {
-                        span.setTag('http.status_code', response.status);
+                        if (response === null || response === void 0 ? void 0 : response.status) {
+                            span.setTag('http.status_code', response.status);
+                        }
                         span.finish();
                     }
                     return response;

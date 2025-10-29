@@ -248,9 +248,9 @@ export abstract class BaseApiClient implements IApiClient {
         try {
           logId = await this.logRequest(finalConfig);
           await this.logResponse(logId, {
-            responseStatus: response.status,
-            responseHeaders: response.headers,
-            responseBody: response.data,
+            responseStatus: response?.status || 0,
+            responseHeaders: response?.headers,
+            responseBody: response?.data,
             duration
           });
         } catch (logError: any) {
@@ -267,7 +267,7 @@ export abstract class BaseApiClient implements IApiClient {
       logger.debug('API request completed successfully', {
         method: finalConfig.method,
         url: finalConfig.url,
-        status: response.status,
+        status: response?.status,
         duration: Date.now() - startTime,
         integrationName: this.integrationName
       });
@@ -341,7 +341,9 @@ export abstract class BaseApiClient implements IApiClient {
         const response = await this.httpClient.request(requestConfig);
 
         if (span) {
-          span.setTag('http.status_code', response.status);
+          if (response?.status) {
+            span.setTag('http.status_code', response.status);
+          }
           span.finish();
         }
 
