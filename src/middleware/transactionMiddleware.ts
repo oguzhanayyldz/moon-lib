@@ -51,8 +51,15 @@ declare global {
 }
 
 /**
+ * Cache for replica set status to avoid repeated checks
+ */
+let isReplicaSetCache: boolean | null = null;
+let replicaSetCheckTime: number = 0;
+const REPLICA_SET_CHECK_INTERVAL = 60000; // Re-check every 60 seconds
+
+/**
  * Transaction middleware factory
- * 
+ *
  * @param options Transaction configuration options
  * @returns Express middleware function
  */
@@ -69,6 +76,35 @@ export const withTransaction = (options: TransactionOptions = {}) => {
     return async (req: Request, res: Response, next: NextFunction) => {
         // Skip transaction if explicitly requested
         if (options.skipTransaction) {
+            return next();
+        }
+
+        // Check if MongoDB is running as a replica set (with caching)
+        const now = Date.now();
+        if (isReplicaSetCache === null || now - replicaSetCheckTime > REPLICA_SET_CHECK_INTERVAL) {
+            try {
+                const admin = mongoose.connection.db.admin();
+                await admin.replSetGetStatus();
+                isReplicaSetCache = true;
+                replicaSetCheckTime = now;
+                logger.info(`✅ Replica set detected - transactions enabled`);
+            } catch (error: any) {
+                // Not a replica set (standalone MongoDB)
+                if (error.message?.includes('replSet') || error.codeName === 'NoReplicationEnabled') {
+                    isReplicaSetCache = false;
+                    replicaSetCheckTime = now;
+                    logger.warn(`⚠️  Standalone MongoDB detected - transactions will be disabled`);
+                } else {
+                    // Different error, rethrow
+                    logger.error(`❌ Error checking replica set status:`, error);
+                    throw error;
+                }
+            }
+        }
+
+        // If standalone MongoDB, skip transaction but continue normal flow
+        if (!isReplicaSetCache) {
+            logger.debug(`➡️  Processing ${req.method} ${req.originalUrl} without transaction (standalone mode)`);
             return next();
         }
 
