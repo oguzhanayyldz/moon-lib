@@ -441,7 +441,7 @@ class BaseModernEntityDeletedListener extends __1.RetryableListener {
                         totalCount: data.list.length
                     });
                 }
-                // Rate limiting check (basic implementation)
+                // Rate limiting check with bulk operation support
                 const currentTime = Date.now();
                 const rateLimitKey = `entity_deletion_${this.serviceName}_${userId}`;
                 // Note: In a real implementation, you would use Redis or similar for rate limiting
@@ -451,8 +451,18 @@ class BaseModernEntityDeletedListener extends __1.RetryableListener {
                 }
                 const lastRequest = this.rateLimitCache.get(rateLimitKey) || 0;
                 const timeDiff = currentTime - lastRequest;
-                // Allow maximum 1 request per second per user per service
-                if (timeDiff < 1000) {
+                // Bulk operation detection: if multiple entities, use relaxed rate limit
+                // Single entity: 1 req/second, Bulk (2-10 entities): 100ms, Large bulk (>10): no limit
+                const isBulkOperation = data.list.length >= 2;
+                const isLargeBulk = data.list.length > 10;
+                let rateLimitMs = 1000; // Default: 1 request per second for single entities
+                if (isLargeBulk) {
+                    rateLimitMs = 0; // No rate limit for large bulk operations (admin bulk delete)
+                }
+                else if (isBulkOperation) {
+                    rateLimitMs = 100; // 100ms for small bulk operations (2-10 entities)
+                }
+                if (rateLimitMs > 0 && timeDiff < rateLimitMs) {
                     throw new Error('Rate limit exceeded: too many deletion requests');
                 }
                 this.rateLimitCache.set(rateLimitKey, currentTime);
