@@ -97,20 +97,20 @@ export const withTransaction = (options: TransactionOptions = {}) => {
             logger.debug(`🔄 Transaction context established - ID: ${transactionId}`);
 
             // Handle response end to commit transaction
-            const originalSend = res.send;
-            const originalJson = res.json;
+            const originalSend = res.send.bind(res);
+            const originalJson = res.json.bind(res);
             let transactionHandled = false;
 
-            const handleTransactionSuccess = async () => {
+            const handleTransactionSuccess = async (): Promise<void> => {
                 if (transactionHandled || !session || !session.inTransaction()) return;
                 transactionHandled = true;
 
                 try {
                     await session.commitTransaction();
                     const duration = Date.now() - req.transactionStartTime!;
-                    
-                    logger.info(`✅ Transaction committed successfully - ID: ${transactionId}, Duration: ${duration}ms, Status: ${res.statusCode}`);
-                    
+
+                    logger.info(`✅ Transaction committed BEFORE response - ID: ${transactionId}, Duration: ${duration}ms`);
+
                     // Call custom success handler
                     if (options.onSuccess) {
                         await options.onSuccess(session);
@@ -123,31 +123,51 @@ export const withTransaction = (options: TransactionOptions = {}) => {
                 }
             };
 
-            // Override response methods to trigger commit
+            // Override response methods to commit BEFORE sending response
             res.send = function(body: any) {
-                setImmediate(async () => {
-                    try {
-                        await handleTransactionSuccess();
-                    } catch (error) {
-                        logger.error(`❌ Post-response transaction handling failed - ID: ${transactionId}`, error);
-                    }
-                });
-                return originalSend.call(this, body);
+                // Start commit immediately, then send response
+                handleTransactionSuccess()
+                    .then(() => {
+                        // ✅ Commit successful, send response
+                        originalSend(body);
+                    })
+                    .catch((error) => {
+                        // ❌ Commit failed, send error response to client
+                        logger.error(`❌ Commit failed, sending error to client - ID: ${transactionId}`, error);
+                        res.status(500);
+                        originalJson.call(res, {
+                            error: 'Transaction commit failed',
+                            message: error.message,
+                            transactionId: transactionId
+                        });
+                    });
+
+                return res;
             };
 
             res.json = function(obj: any) {
-                setImmediate(async () => {
-                    try {
-                        await handleTransactionSuccess();
-                    } catch (error) {
-                        logger.error(`❌ Post-response transaction handling failed - ID: ${transactionId}`, error);
-                    }
-                });
-                return originalJson.call(this, obj);
+                // Start commit immediately, then send response
+                handleTransactionSuccess()
+                    .then(() => {
+                        // ✅ Commit successful, send response
+                        originalJson(obj);
+                    })
+                    .catch((error) => {
+                        // ❌ Commit failed, send error response to client
+                        logger.error(`❌ Commit failed, sending error to client - ID: ${transactionId}`, error);
+                        res.status(500);
+                        originalJson.call(res, {
+                            error: 'Transaction commit failed',
+                            message: error.message,
+                            transactionId: transactionId
+                        });
+                    });
+
+                return res;
             };
 
-            // Execute the route handler
-            await next();
+            // Execute the route handler (synchronous call)
+            next();
 
         } catch (error) {
             const duration = Date.now() - req.transactionStartTime!;

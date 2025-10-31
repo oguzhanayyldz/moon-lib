@@ -4,7 +4,7 @@ declare class RedisWrapper {
     private _client?;
     private _url?;
     get client(): RedisClientType;
-    connect(url: string): Promise<void>;
+    connect(url: string, timeoutMs?: number): Promise<void>;
     deleteOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<boolean>;
     setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: any): Promise<void>;
     getOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<{

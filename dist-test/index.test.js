@@ -644,6 +644,37 @@ exports.OptimisticLockingUtil = {
                 contextAware: true
             }
         };
+    }),
+    // Context-aware methods (new in Issue #252 fix)
+    saveWithContext: jest.fn().mockImplementation(async (doc, req, operationName) => {
+        // Extract session from request if available
+        const session = req === null || req === void 0 ? void 0 : req.dbSession;
+        // Mock save metodu - session varsa kullan
+        if (doc && typeof doc.save === 'function') {
+            return await doc.save(session ? { session } : {});
+        }
+        // Eğer save metodu yoksa mock bir sonuç döndür
+        return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
+    }),
+    updateWithContext: jest.fn().mockImplementation(async (model, id, updateData, req, operationName, options = {}) => {
+        // Extract session from request if available
+        const session = req === null || req === void 0 ? void 0 : req.dbSession;
+        const result = await model.findByIdAndUpdate(id, updateData, Object.assign(Object.assign({ new: true, omitUndefined: true }, (session ? { session } : {})), options));
+        if (!result) {
+            throw new Error(`Document not found: ${id}`);
+        }
+        return result;
+    }),
+    bulkWithContext: jest.fn().mockImplementation(async (model, operations, req, operationName, options = {}) => {
+        // Extract session from request if available
+        const session = req === null || req === void 0 ? void 0 : req.dbSession;
+        // Mock bulk operations
+        return {
+            insertedCount: operations.filter((op) => op.insertOne).length,
+            modifiedCount: operations.filter((op) => op.updateOne || op.updateMany).length,
+            deletedCount: operations.filter((op) => op.deleteOne || op.deleteMany).length,
+            matchedCount: operations.length
+        };
     })
 };
 exports.EventPublisher = {
@@ -777,6 +808,29 @@ const setupTestEnvironment = () => {
             return await doc.save();
         }
         return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
+    });
+    exports.OptimisticLockingUtil.saveWithContext = jest.fn().mockImplementation(async (doc, req, operationName) => {
+        const session = req === null || req === void 0 ? void 0 : req.dbSession;
+        if (doc && typeof doc.save === 'function') {
+            return await doc.save(session ? { session } : {});
+        }
+        return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
+    });
+    exports.OptimisticLockingUtil.updateWithContext = jest.fn().mockImplementation(async (model, id, updateData, req, operationName, options = {}) => {
+        const session = req === null || req === void 0 ? void 0 : req.dbSession;
+        const result = await model.findByIdAndUpdate(id, updateData, Object.assign(Object.assign({ new: true, omitUndefined: true }, (session ? { session } : {})), options));
+        if (!result) {
+            throw new Error(`Document not found: ${id}`);
+        }
+        return result;
+    });
+    exports.OptimisticLockingUtil.bulkWithContext = jest.fn().mockImplementation(async (model, operations, req, operationName, options = {}) => {
+        return {
+            insertedCount: operations.filter((op) => op.insertOne).length,
+            modifiedCount: operations.filter((op) => op.updateOne || op.updateMany).length,
+            deletedCount: operations.filter((op) => op.deleteOne || op.deleteMany).length,
+            matchedCount: operations.length
+        };
     });
     // Reset NATS publish mock
     exports.natsWrapper.client.publish = jest.fn().mockImplementation((subject, data, callback) => {

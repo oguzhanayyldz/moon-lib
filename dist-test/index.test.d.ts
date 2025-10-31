@@ -270,6 +270,9 @@ export declare const OptimisticLockingUtil: {
     getSessionFromRequest: jest.Mock<any, any, any>;
     isInTransaction: jest.Mock<any, any, any>;
     getStats: jest.Mock<any, any, any>;
+    saveWithContext: jest.Mock<any, any, any>;
+    updateWithContext: jest.Mock<any, any, any>;
+    bulkWithContext: jest.Mock<any, any, any>;
 };
 export declare const EventPublisher: {
     start: jest.Mock<any, any, any>;

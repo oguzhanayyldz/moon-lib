@@ -44,8 +44,8 @@ const withTransaction = (options = {}) => {
             });
             logger_service_1.logger.debug(`🔄 Transaction context established - ID: ${transactionId}`);
             // Handle response end to commit transaction
-            const originalSend = res.send;
-            const originalJson = res.json;
+            const originalSend = res.send.bind(res);
+            const originalJson = res.json.bind(res);
             let transactionHandled = false;
             const handleTransactionSuccess = async () => {
                 if (transactionHandled || !session || !session.inTransaction())
@@ -54,7 +54,7 @@ const withTransaction = (options = {}) => {
                 try {
                     await session.commitTransaction();
                     const duration = Date.now() - req.transactionStartTime;
-                    logger_service_1.logger.info(`✅ Transaction committed successfully - ID: ${transactionId}, Duration: ${duration}ms, Status: ${res.statusCode}`);
+                    logger_service_1.logger.info(`✅ Transaction committed BEFORE response - ID: ${transactionId}, Duration: ${duration}ms`);
                     // Call custom success handler
                     if (options.onSuccess) {
                         await options.onSuccess(session);
@@ -68,31 +68,47 @@ const withTransaction = (options = {}) => {
                     await session.endSession();
                 }
             };
-            // Override response methods to trigger commit
+            // Override response methods to commit BEFORE sending response
             res.send = function (body) {
-                setImmediate(async () => {
-                    try {
-                        await handleTransactionSuccess();
-                    }
-                    catch (error) {
-                        logger_service_1.logger.error(`❌ Post-response transaction handling failed - ID: ${transactionId}`, error);
-                    }
+                // Start commit immediately, then send response
+                handleTransactionSuccess()
+                    .then(() => {
+                    // ✅ Commit successful, send response
+                    originalSend(body);
+                })
+                    .catch((error) => {
+                    // ❌ Commit failed, send error response to client
+                    logger_service_1.logger.error(`❌ Commit failed, sending error to client - ID: ${transactionId}`, error);
+                    res.status(500);
+                    originalJson.call(res, {
+                        error: 'Transaction commit failed',
+                        message: error.message,
+                        transactionId: transactionId
+                    });
                 });
-                return originalSend.call(this, body);
+                return res;
             };
             res.json = function (obj) {
-                setImmediate(async () => {
-                    try {
-                        await handleTransactionSuccess();
-                    }
-                    catch (error) {
-                        logger_service_1.logger.error(`❌ Post-response transaction handling failed - ID: ${transactionId}`, error);
-                    }
+                // Start commit immediately, then send response
+                handleTransactionSuccess()
+                    .then(() => {
+                    // ✅ Commit successful, send response
+                    originalJson(obj);
+                })
+                    .catch((error) => {
+                    // ❌ Commit failed, send error response to client
+                    logger_service_1.logger.error(`❌ Commit failed, sending error to client - ID: ${transactionId}`, error);
+                    res.status(500);
+                    originalJson.call(res, {
+                        error: 'Transaction commit failed',
+                        message: error.message,
+                        transactionId: transactionId
+                    });
                 });
-                return originalJson.call(this, obj);
+                return res;
             };
-            // Execute the route handler
-            await next();
+            // Execute the route handler (synchronous call)
+            next();
         }
         catch (error) {
             const duration = Date.now() - req.transactionStartTime;

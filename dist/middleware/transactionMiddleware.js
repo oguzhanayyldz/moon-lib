@@ -53,8 +53,8 @@ const withTransaction = (options = {}) => {
             });
             logger_service_1.logger.debug(`🔄 Transaction context established - ID: ${transactionId}`);
             // Handle response end to commit transaction
-            const originalSend = res.send;
-            const originalJson = res.json;
+            const originalSend = res.send.bind(res);
+            const originalJson = res.json.bind(res);
             let transactionHandled = false;
             const handleTransactionSuccess = () => __awaiter(void 0, void 0, void 0, function* () {
                 if (transactionHandled || !session || !session.inTransaction())
@@ -63,7 +63,7 @@ const withTransaction = (options = {}) => {
                 try {
                     yield session.commitTransaction();
                     const duration = Date.now() - req.transactionStartTime;
-                    logger_service_1.logger.info(`✅ Transaction committed successfully - ID: ${transactionId}, Duration: ${duration}ms, Status: ${res.statusCode}`);
+                    logger_service_1.logger.info(`✅ Transaction committed BEFORE response - ID: ${transactionId}, Duration: ${duration}ms`);
                     // Call custom success handler
                     if (options.onSuccess) {
                         yield options.onSuccess(session);
@@ -77,31 +77,47 @@ const withTransaction = (options = {}) => {
                     yield session.endSession();
                 }
             });
-            // Override response methods to trigger commit
+            // Override response methods to commit BEFORE sending response
             res.send = function (body) {
-                setImmediate(() => __awaiter(this, void 0, void 0, function* () {
-                    try {
-                        yield handleTransactionSuccess();
-                    }
-                    catch (error) {
-                        logger_service_1.logger.error(`❌ Post-response transaction handling failed - ID: ${transactionId}`, error);
-                    }
-                }));
-                return originalSend.call(this, body);
+                // Start commit immediately, then send response
+                handleTransactionSuccess()
+                    .then(() => {
+                    // ✅ Commit successful, send response
+                    originalSend(body);
+                })
+                    .catch((error) => {
+                    // ❌ Commit failed, send error response to client
+                    logger_service_1.logger.error(`❌ Commit failed, sending error to client - ID: ${transactionId}`, error);
+                    res.status(500);
+                    originalJson.call(res, {
+                        error: 'Transaction commit failed',
+                        message: error.message,
+                        transactionId: transactionId
+                    });
+                });
+                return res;
             };
             res.json = function (obj) {
-                setImmediate(() => __awaiter(this, void 0, void 0, function* () {
-                    try {
-                        yield handleTransactionSuccess();
-                    }
-                    catch (error) {
-                        logger_service_1.logger.error(`❌ Post-response transaction handling failed - ID: ${transactionId}`, error);
-                    }
-                }));
-                return originalJson.call(this, obj);
+                // Start commit immediately, then send response
+                handleTransactionSuccess()
+                    .then(() => {
+                    // ✅ Commit successful, send response
+                    originalJson(obj);
+                })
+                    .catch((error) => {
+                    // ❌ Commit failed, send error response to client
+                    logger_service_1.logger.error(`❌ Commit failed, sending error to client - ID: ${transactionId}`, error);
+                    res.status(500);
+                    originalJson.call(res, {
+                        error: 'Transaction commit failed',
+                        message: error.message,
+                        transactionId: transactionId
+                    });
+                });
+                return res;
             };
-            // Execute the route handler
-            yield next();
+            // Execute the route handler (synchronous call)
+            next();
         }
         catch (error) {
             const duration = Date.now() - req.transactionStartTime;

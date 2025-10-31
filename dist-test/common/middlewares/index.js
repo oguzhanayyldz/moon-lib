@@ -21,5 +21,6 @@ __exportStar(require("./require-auth-admin"), exports);
 __exportStar(require("./validate-request"), exports);
 __exportStar(require("./validate-body"), exports);
 __exportStar(require("./require-permission"), exports);
+__exportStar(require("./require-platform-permission"), exports);
 __exportStar(require("./sub-user-context"), exports);
 //# sourceMappingURL=index.js.map

@@ -10,6 +10,7 @@ const deadLetter_schema_1 = require("../models/deadLetter.schema");
 const mongoose_1 = __importDefault(require("mongoose"));
 const redisWrapper_service_1 = require("../services/redisWrapper.service");
 const logger_service_1 = require("../services/logger.service");
+const EventMetrics_1 = require("../metrics/EventMetrics");
 /**
  * Retry özellikli temel listener sınıfı
  */
@@ -88,6 +89,9 @@ class RetryableListener extends common_1.Listener {
         const eventId = this.getEventId(data);
         const eventType = this.subject;
         const span = this.createTraceSpan(eventType, eventId);
+        // Start timer for metrics
+        const startTime = Date.now();
+        const serviceName = process.env.SERVICE_NAME || 'unknown';
         try {
             // Distributed lock ile işlemi gerçekleştir (etkinse)
             if (this.options.enableLock) {
@@ -100,6 +104,20 @@ class RetryableListener extends common_1.Listener {
                     await this.retryManager.resetRetryCount(eventType, eventId);
                     span.setTag('success', true);
                     span.setTag('lock.success', true);
+                    // Record success metrics
+                    const duration = (Date.now() - startTime) / 1000;
+                    EventMetrics_1.EventMetrics.eventProcessingDuration.observe({
+                        service: serviceName,
+                        event_type: eventType,
+                        queue_group: this.queueGroupName,
+                        status: 'success'
+                    }, duration);
+                    EventMetrics_1.EventMetrics.eventProcessingTotal.inc({
+                        service: serviceName,
+                        event_type: eventType,
+                        queue_group: this.queueGroupName,
+                        status: 'success'
+                    });
                     msg.ack();
                     return;
                 }
@@ -120,6 +138,20 @@ class RetryableListener extends common_1.Listener {
             // Başarılı işlemede retry sayacını sıfırla
             await this.retryManager.resetRetryCount(eventType, eventId);
             span.setTag('success', true);
+            // Record success metrics
+            const duration = (Date.now() - startTime) / 1000;
+            EventMetrics_1.EventMetrics.eventProcessingDuration.observe({
+                service: serviceName,
+                event_type: eventType,
+                queue_group: this.queueGroupName,
+                status: 'success'
+            }, duration);
+            EventMetrics_1.EventMetrics.eventProcessingTotal.inc({
+                service: serviceName,
+                event_type: eventType,
+                queue_group: this.queueGroupName,
+                status: 'success'
+            });
             msg.ack();
         }
         catch (error) {
@@ -127,6 +159,20 @@ class RetryableListener extends common_1.Listener {
             span.setTag('error', true);
             span.setTag('error.message', error.message);
             logger_service_1.logger.error(`Error processing ${eventType}:${eventId}:`, error);
+            // Record error metrics
+            const duration = (Date.now() - startTime) / 1000;
+            EventMetrics_1.EventMetrics.eventProcessingDuration.observe({
+                service: serviceName,
+                event_type: eventType,
+                queue_group: this.queueGroupName,
+                status: 'error'
+            }, duration);
+            EventMetrics_1.EventMetrics.eventProcessingTotal.inc({
+                service: serviceName,
+                event_type: eventType,
+                queue_group: this.queueGroupName,
+                status: 'error'
+            });
             // MongoDB duplicate key hatası kontrolü
             const isDuplicateKeyError = this.isDuplicateKeyError(error);
             if (isDuplicateKeyError) {
@@ -145,6 +191,13 @@ class RetryableListener extends common_1.Listener {
                 if (await this.retryManager.shouldRetry(eventType, eventId)) {
                     logger_service_1.logger.info(`Redis retry ${retryCount}/${this.options.maxRetries} for ${eventType}:${eventId}`);
                     span.setTag('retry.scheduled', true);
+                    // Record retry metrics
+                    EventMetrics_1.EventMetrics.eventRetryTotal.inc({
+                        service: serviceName,
+                        event_type: eventType,
+                        retry_reason: error.message.substring(0, 100), // Limit length
+                        retry_count: retryCount.toString()
+                    });
                     // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
                 }
                 else {
@@ -153,6 +206,12 @@ class RetryableListener extends common_1.Listener {
                         try {
                             await this.moveToDeadLetterQueue(data, error, retryCount);
                             span.setTag('dead_letter.saved', true);
+                            // Record DLQ metrics
+                            EventMetrics_1.EventMetrics.eventDlqTotal.inc({
+                                service: serviceName,
+                                event_type: eventType,
+                                failure_reason: error.message.substring(0, 100) // Limit length
+                            });
                         }
                         catch (dlqError) {
                             logger_service_1.logger.error('Failed to save to dead letter queue:', dlqError);

@@ -20,6 +20,17 @@ export declare const getEffectiveUserId: (user: UserPayload) => string;
 export declare const getActualUserId: (user: UserPayload) => string;
 export declare const isSubUser: (user: UserPayload) => boolean;
 export declare const hasPermission: (user: UserPayload, resource: string, action: string) => boolean;
+/**
+ * Platform-aware permission check
+ * Integration ve Catalog gibi platform-specific resource'lar için kullanılır
+ *
+ * @param user - Current user payload
+ * @param resource - Resource name (integrations, catalogs, etc.)
+ * @param action - Action to perform (read, create, update, delete, trigger)
+ * @param platformName - Platform name to check (trendyol, shopify, etc.)
+ * @returns true if user has permission for this platform
+ */
+export declare const hasPlatformPermission: (user: UserPayload, resource: string, action: string, platformName?: string) => boolean;
 declare global {
     namespace Express {
         interface Request {

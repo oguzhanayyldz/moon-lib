@@ -52,6 +52,9 @@ __exportStar(require("./security/SecurityManager"), exports);
 __exportStar(require("./security/MicroserviceSecurityService"), exports);
 // Security Logger
 __exportStar(require("./security-logger"), exports);
+// Metrics
+__exportStar(require("./metrics/EventMetrics"), exports);
+__exportStar(require("./middleware/httpMetrics"), exports);
 // Performance Optimizations
 // Redis connection pooling handled by redisWrapper.service
 // Utils
@@ -60,6 +63,7 @@ __exportStar(require("./utils/typeGuards.util"), exports);
 __exportStar(require("./utils/performanceMonitor.util"), exports);
 __exportStar(require("./utils/audit-helper"), exports);
 __exportStar(require("./utils/batchOperationHelpers.util"), exports);
+__exportStar(require("./utils/redisFailoverManager"), exports);
 // Database - MongoDB Atlas Native Transactions
 __exportStar(require("./database"), exports);
 // Middleware - Transaction Middleware

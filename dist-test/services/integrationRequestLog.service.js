@@ -92,7 +92,17 @@ class IntegrationRequestLogService {
                 query.method = filters.method;
             }
             if ((filters === null || filters === void 0 ? void 0 : filters.success) !== undefined) {
-                query.success = filters.success;
+                // Success is a virtual field, filter by responseStatus instead
+                if (filters.success) {
+                    query.responseStatus = { $gte: 200, $lt: 300 };
+                }
+                else {
+                    query.$or = [
+                        { responseStatus: { $exists: false } },
+                        { responseStatus: { $lt: 200 } },
+                        { responseStatus: { $gte: 300 } }
+                    ];
+                }
             }
             if (filters === null || filters === void 0 ? void 0 : filters.search) {
                 query.$or = [
@@ -242,7 +252,17 @@ class IntegrationRequestLogService {
                 query.method = filters.method;
             }
             if ((filters === null || filters === void 0 ? void 0 : filters.success) !== undefined) {
-                query.success = filters.success;
+                // Success is a virtual field, filter by responseStatus instead
+                if (filters.success) {
+                    query.responseStatus = { $gte: 200, $lt: 300 };
+                }
+                else {
+                    query.$or = [
+                        { responseStatus: { $exists: false } },
+                        { responseStatus: { $lt: 200 } },
+                        { responseStatus: { $gte: 300 } }
+                    ];
+                }
             }
             if (filters === null || filters === void 0 ? void 0 : filters.search) {
                 query.$or = [
@@ -455,26 +475,60 @@ class IntegrationRequestLogService {
         return sanitized;
     }
     /**
-     * Request body'deki hassas bilgileri temizler
+     * JSON body'yi pretty-print formatına dönüştürür (okunabilir hale getirir)
+     * String ise parse edip tekrar format eder
+     * MongoDB'de string olarak saklanır
+     */
+    static formatBodyForStorage(body) {
+        if (!body)
+            return null;
+        // Eğer zaten string ise JSON parse etmeye çalış
+        if (typeof body === 'string') {
+            try {
+                body = JSON.parse(body);
+            }
+            catch (_a) {
+                // Parse edilemiyorsa olduğu gibi döndür
+                return body;
+            }
+        }
+        // Object ise pretty-print JSON olarak döndür (2 space indentation)
+        if (typeof body === 'object') {
+            try {
+                return JSON.stringify(body, null, 2);
+            }
+            catch (_b) {
+                // Stringify edilemiyorsa toString kullan
+                return String(body);
+            }
+        }
+        return body;
+    }
+    /**
+     * Request body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * MongoDB'de string olarak saklanır
      */
     static sanitizeRequestBody(body) {
         if (!body || typeof body !== 'object')
-            return body;
+            return this.formatBodyForStorage(body);
         const sanitized = JSON.parse(JSON.stringify(body));
         const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token'];
         this.recursiveSanitize(sanitized, sensitiveKeys);
-        return sanitized;
+        // Pretty-print format
+        return this.formatBodyForStorage(sanitized);
     }
     /**
-     * Response body'deki hassas bilgileri temizler
+     * Response body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * MongoDB'de string olarak saklanır
      */
     static sanitizeResponseBody(body) {
         if (!body || typeof body !== 'object')
-            return body;
+            return this.formatBodyForStorage(body);
         const sanitized = JSON.parse(JSON.stringify(body));
         const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token'];
         this.recursiveSanitize(sanitized, sensitiveKeys);
-        return sanitized;
+        // Pretty-print format
+        return this.formatBodyForStorage(sanitized);
     }
     /**
      * Nested objelerde hassas bilgileri temizler

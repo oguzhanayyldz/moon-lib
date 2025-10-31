@@ -669,7 +669,7 @@ export const OptimisticLockingUtil = {
         const hasSession = !!req?.dbSession;
         const inTransaction = hasSession && req.dbSession.inTransaction?.();
         const sessionId = hasSession ? req.dbSession.id : undefined;
-        
+
         return {
             hasSession,
             inTransaction,
@@ -679,7 +679,51 @@ export const OptimisticLockingUtil = {
                 contextAware: true
             }
         };
-    })
+    }),
+    // Context-aware methods (new in Issue #252 fix)
+    saveWithContext: jest.fn().mockImplementation(async (doc, req, operationName) => {
+        // Extract session from request if available
+        const session = req?.dbSession;
+
+        // Mock save metodu - session varsa kullan
+        if (doc && typeof doc.save === 'function') {
+            return await doc.save(session ? { session } : {});
+        }
+        // Eğer save metodu yoksa mock bir sonuç döndür
+        return { ...doc, _id: doc.id || 'mock-id' };
+    }),
+    updateWithContext: jest.fn().mockImplementation(
+        async (model, id, updateData, req, operationName, options = {}) => {
+            // Extract session from request if available
+            const session = req?.dbSession;
+
+            const result = await model.findByIdAndUpdate(
+                id,
+                updateData,
+                { new: true, omitUndefined: true, ...(session ? { session } : {}), ...options }
+            );
+
+            if (!result) {
+                throw new Error(`Document not found: ${id}`);
+            }
+
+            return result;
+        }
+    ),
+    bulkWithContext: jest.fn().mockImplementation(
+        async (model, operations, req, operationName, options = {}) => {
+            // Extract session from request if available
+            const session = req?.dbSession;
+
+            // Mock bulk operations
+            return {
+                insertedCount: operations.filter((op: any) => op.insertOne).length,
+                modifiedCount: operations.filter((op: any) => op.updateOne || op.updateMany).length,
+                deletedCount: operations.filter((op: any) => op.deleteOne || op.deleteMany).length,
+                matchedCount: operations.length
+            };
+        }
+    )
 };
 
 export const EventPublisher = {
@@ -832,6 +876,40 @@ export const setupTestEnvironment = () => {
         }
         return { ...doc, _id: doc.id || 'mock-id' };
     });
+
+    OptimisticLockingUtil.saveWithContext = jest.fn().mockImplementation(async (doc, req, operationName) => {
+        const session = req?.dbSession;
+        if (doc && typeof doc.save === 'function') {
+            return await doc.save(session ? { session } : {});
+        }
+        return { ...doc, _id: doc.id || 'mock-id' };
+    });
+
+    OptimisticLockingUtil.updateWithContext = jest.fn().mockImplementation(
+        async (model, id, updateData, req, operationName, options = {}) => {
+            const session = req?.dbSession;
+            const result = await model.findByIdAndUpdate(
+                id,
+                updateData,
+                { new: true, omitUndefined: true, ...(session ? { session } : {}), ...options }
+            );
+            if (!result) {
+                throw new Error(`Document not found: ${id}`);
+            }
+            return result;
+        }
+    );
+
+    OptimisticLockingUtil.bulkWithContext = jest.fn().mockImplementation(
+        async (model, operations, req, operationName, options = {}) => {
+            return {
+                insertedCount: operations.filter((op: any) => op.insertOne).length,
+                modifiedCount: operations.filter((op: any) => op.updateOne || op.updateMany).length,
+                deletedCount: operations.filter((op: any) => op.deleteOne || op.deleteMany).length,
+                matchedCount: operations.length
+            };
+        }
+    );
     
     // Reset NATS publish mock
     natsWrapper.client.publish = jest.fn().mockImplementation((subject: string, data: string, callback: () => void) => {

@@ -7,11 +7,16 @@ exports.PERMISSION_ACTIONS = {
     CREATE: 'create',
     UPDATE: 'update',
     DELETE: 'delete',
+    TRIGGER: 'trigger',
     ALL: '*'
 };
 exports.PERMISSION_RESOURCES = {
     PRODUCTS: 'products',
     ORDERS: 'orders',
+    CATEGORIES: 'categories',
+    BRANDS: 'brands',
+    WAREHOUSES: 'warehouses',
+    SHELVES: 'shelves',
     INVENTORY: 'inventory',
     PRICING: 'pricing',
     INTEGRATIONS: 'integrations',
