@@ -14,7 +14,7 @@ class RedisWrapper {
         return this._client;
     }
 
-    async connect(url: string, timeoutMs: number = 10000) {
+    async connect(url: string, timeoutMs: number = 30000): Promise<void> {
         try {
             // URL için önceden oluşturulmuş bir instance var mı kontrol et
             const existingClient = RedisWrapper.instances.get(url);
@@ -22,46 +22,94 @@ class RedisWrapper {
                 this._client = existingClient;
                 this._url = url;
                 logger.info(`Reusing existing Redis connection to ${url}`);
+                // Mevcut bağlantının hala çalıştığını doğrula
+                try {
+                    await existingClient.ping();
+                    logger.info('✅ Existing Redis connection validated');
+                } catch (pingError) {
+                    logger.warn('⚠️ Existing connection failed ping test, removing and reconnecting...');
+                    RedisWrapper.instances.delete(url);
+                    this._client = undefined;
+                    this._url = undefined;
+                    // Recursive call to create new connection
+                    return this.connect(url, timeoutMs);
+                }
                 return;
             }
 
             logger.info(`Connecting to Redis at ${url} with ${timeoutMs}ms timeout...`);
 
-            // Yeni bağlantı oluştur - socket timeout ve reconnect strategy ile
+            // Connection error handling flag
+            let connectionFailed = false;
+            let connectionError: Error | null = null;
+
+            // Yeni bağlantı oluştur - socket timeout, keepalive ve geliştirilmiş reconnect strategy ile
             const client: RedisClientType = createClient<{}, {}, {}>({
                 url,
                 socket: {
                     connectTimeout: timeoutMs,
+                    keepAlive: 30000, // 30 saniyede bir keepalive paketi gönder
+                    noDelay: true, // TCP Nagle algoritmasını devre dışı bırak (düşük latency için)
                     reconnectStrategy: (retries) => {
-                        if (retries > 3) {
+                        // Max 10 deneme ile daha dayanıklı reconnect
+                        if (retries > 10) {
                             logger.error(`Redis reconnection failed after ${retries} attempts`);
                             return new Error('Max reconnection attempts reached');
                         }
-                        const delay = Math.min(retries * 100, 3000);
-                        logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
+                        // Exponential backoff with max 30 seconds
+                        const delay = Math.min(Math.pow(2, retries) * 1000, 30000);
+                        logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries}/10)`);
                         return delay;
                     }
                 }
             })
                 .on('connect', () => logger.info(`✅ Redis Client Connected to ${url}`))
-                .on('error', (err) => logger.error('❌ Redis Client Error:', err))
-                .on('reconnecting', () => logger.warn('🔄 Redis Client Reconnecting...'));
+                .on('error', (err) => {
+                    logger.error('❌ Redis Client Error:', err);
+                    connectionError = err as Error;
+                    connectionFailed = true;
+                })
+                .on('reconnecting', () => logger.warn('🔄 Redis Client Reconnecting...'))
+                .on('end', () => logger.warn('⚠️ Redis connection ended'));
 
-            // Timeout wrapper ile connection
-            const connectWithTimeout = Promise.race([
-                client.connect(),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error(`Redis connection timeout after ${timeoutMs}ms`)), timeoutMs)
-                )
-            ]);
+            // Timeout wrapper ile connection - improved error handling
+            try {
+                await Promise.race([
+                    client.connect(),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error(`Redis connection timeout after ${timeoutMs}ms`)), timeoutMs)
+                    )
+                ]);
 
-            await connectWithTimeout;
+                // Connection başarılı, şimdi ping test yap
+                logger.info('🔍 Validating Redis connection with ping test...');
+                await client.ping();
+                logger.info('✅ Redis connection validated successfully');
 
-            // Instance'ı kaydet
-            this._client = client;
-            this._url = url;
-            RedisWrapper.instances.set(url, client);
-            logger.info(`✅ Successfully connected to Redis at ${url}`);
+                // Instance'ı kaydet
+                this._client = client;
+                this._url = url;
+                RedisWrapper.instances.set(url, client);
+                logger.info(`✅ Successfully connected to Redis at ${url}`);
+
+            } catch (connectError) {
+                // Connection failed, cleanup client
+                logger.error('❌ Redis connection or validation failed, cleaning up...');
+                try {
+                    if (client.isOpen) {
+                        await client.quit();
+                    }
+                } catch (quitError) {
+                    logger.warn('Failed to quit client during cleanup:', quitError);
+                }
+                throw connectError;
+            }
+
+            // Check if async error occurred during connection
+            if (connectionFailed && connectionError) {
+                logger.error('❌ Async connection error detected:', connectionError);
+                throw connectionError;
+            }
 
         } catch (error) {
             logger.error('❌ Failed to connect to Redis:', error);

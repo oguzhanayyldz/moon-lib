@@ -33,6 +33,7 @@ export * from './utils/typeGuards.util';
 export * from './utils/performanceMonitor.util';
 export * from './utils/audit-helper';
 export * from './utils/batchOperationHelpers.util';
+export * from './utils/redisFailoverManager';
 export * from './database';
 export * from './middleware';
 export * from './jobs/eventPublisher.job';

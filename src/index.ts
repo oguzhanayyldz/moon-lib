@@ -54,6 +54,7 @@ export * from './utils/typeGuards.util';
 export * from './utils/performanceMonitor.util';
 export * from './utils/audit-helper';
 export * from './utils/batchOperationHelpers.util';
+export * from './utils/redisFailoverManager';
 
 // Database - MongoDB Atlas Native Transactions
 export * from './database';
