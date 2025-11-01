@@ -10,6 +10,7 @@ export interface DeadLetterAttrs extends BaseAttrs {
     retryCount: number;
     maxRetries: number;
     service: string;
+    environment?: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
     processorId?: string;
@@ -30,6 +31,7 @@ export interface DeadLetterDoc extends BaseDoc {
     retryCount: number;
     maxRetries: number;
     service: string;
+    environment: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
     status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -69,6 +71,13 @@ const deadLetterSchemaDefination = {
         type: String,
         required: true,
     },
+    environment: {
+        type: String,
+        required: true,
+        default: () => process.env.NODE_ENV || 'production',
+        enum: ['production', 'development', 'test'],
+        index: true
+    },
     nextRetryAt: {
         type: Date,
         required: true,
@@ -94,6 +103,10 @@ const deadLetterSchemaDefination = {
 };
 
 const deadLetterSchema = createBaseSchema(deadLetterSchemaDefination);
+
+// Compound index for optimal query performance
+// Optimizes: { status: 'pending', environment: 'production', retryCount: { $lt: maxRetries } }
+deadLetterSchema.index({ status: 1, environment: 1, retryCount: 1, nextRetryAt: 1 });
 
 export function createDeadLetterModel(connection: mongoose.Connection) {
     try {

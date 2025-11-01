@@ -83,6 +83,7 @@ interface EventPayloadMap {
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;
     payload: EventPayloadMap[T];
+    environment?: 'production' | 'development' | 'test';
     status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount?: number;
     lastAttempt?: Date;
@@ -94,6 +95,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
 export interface OutboxDoc extends BaseDoc {
     eventType: string;
     payload: any;
+    environment: 'production' | 'development' | 'test';
     status: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount: number;
     lastAttempt?: Date;
@@ -108,6 +110,13 @@ export interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> { }
 const outboxSchemaDefination = {
     eventType: { type: String, required: true },
     payload: { type: mongoose.Schema.Types.Mixed, required: true },
+    environment: {
+        type: String,
+        required: true,
+        default: () => process.env.NODE_ENV || 'production',
+        enum: ['production', 'development', 'test'],
+        index: true
+    },
     status: {
         type: String,
         required: true,
@@ -128,6 +137,10 @@ const outboxSchemaDefination = {
 };
 
 const outboxSchema = createBaseSchema(outboxSchemaDefination);
+
+// Compound index for optimal query performance
+// Optimizes: { status: 'pending', environment: 'production', retryCount: { $lt: 5 } }
+outboxSchema.index({ status: 1, environment: 1, retryCount: 1, createdAt: 1 });
 
 export function createOutboxModel(connection: mongoose.Connection) {
     try {

@@ -11,6 +11,13 @@ const common_1 = require("../common");
 const outboxSchemaDefination = {
     eventType: { type: String, required: true },
     payload: { type: mongoose_1.default.Schema.Types.Mixed, required: true },
+    environment: {
+        type: String,
+        required: true,
+        default: () => process.env.NODE_ENV || 'production',
+        enum: ['production', 'development', 'test'],
+        index: true
+    },
     status: {
         type: String,
         required: true,
@@ -30,6 +37,9 @@ const outboxSchemaDefination = {
     }
 };
 const outboxSchema = (0, base_schema_1.createBaseSchema)(outboxSchemaDefination);
+// Compound index for optimal query performance
+// Optimizes: { status: 'pending', environment: 'production', retryCount: { $lt: 5 } }
+outboxSchema.index({ status: 1, environment: 1, retryCount: 1, createdAt: 1 });
 function createOutboxModel(connection) {
     try {
         return connection.model('Outbox');

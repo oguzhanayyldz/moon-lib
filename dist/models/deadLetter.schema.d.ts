@@ -8,6 +8,7 @@ export interface DeadLetterAttrs extends BaseAttrs {
     retryCount: number;
     maxRetries: number;
     service: string;
+    environment?: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
     processorId?: string;
@@ -24,6 +25,7 @@ export interface DeadLetterDoc extends BaseDoc {
     retryCount: number;
     maxRetries: number;
     service: string;
+    environment: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
     status: 'pending' | 'processing' | 'completed' | 'failed';

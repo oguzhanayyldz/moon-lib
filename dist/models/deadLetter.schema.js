@@ -37,6 +37,13 @@ const deadLetterSchemaDefination = {
         type: String,
         required: true,
     },
+    environment: {
+        type: String,
+        required: true,
+        default: () => process.env.NODE_ENV || 'production',
+        enum: ['production', 'development', 'test'],
+        index: true
+    },
     nextRetryAt: {
         type: Date,
         required: true,
@@ -61,6 +68,9 @@ const deadLetterSchemaDefination = {
     }
 };
 const deadLetterSchema = (0, base_schema_1.default)(deadLetterSchemaDefination);
+// Compound index for optimal query performance
+// Optimizes: { status: 'pending', environment: 'production', retryCount: { $lt: maxRetries } }
+deadLetterSchema.index({ status: 1, environment: 1, retryCount: 1, nextRetryAt: 1 });
 function createDeadLetterModel(connection) {
     try {
         return connection.model('DeadLetter');

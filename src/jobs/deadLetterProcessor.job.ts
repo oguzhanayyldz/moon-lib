@@ -67,13 +67,17 @@ export class DeadLetterProcessorJob {
         try {
             // İşleme süresi (10 dakika)
             const processingTimeout = new Date(Date.now() - 10 * 60 * 1000);
-            
+
             // İşleyiciyi tanımla
             const processorId = process.env.POD_NAME || Math.random().toString(36).substring(2, 15);
-            
+
+            // Sadece bu environment'a ait eventleri al
+            const currentEnvironment = process.env.NODE_ENV || 'production';
+
             // Bul ve güncelle - atomik işlem
             const event = await this.deadLetterModel.findOneAndUpdate(
                 {
+                    environment: currentEnvironment,
                     $or: [
                         // Pending durumundaki event'ler
                         {
@@ -197,9 +201,11 @@ export class DeadLetterProcessorJob {
      */
     private async releaseStuckEvents(): Promise<void> {
         const stuckTimeout = new Date(Date.now() - 10 * 60 * 1000); // 10 dakika
-        
+        const currentEnvironment = process.env.NODE_ENV || 'production';
+
         const result = await this.deadLetterModel.updateMany(
             {
+                environment: currentEnvironment,
                 status: 'processing',
                 processingStartedAt: { $lt: stuckTimeout }
             },
