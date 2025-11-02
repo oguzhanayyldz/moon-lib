@@ -284,10 +284,46 @@ export abstract class BaseApiClient implements IApiClient {
           if (!logId) {
             logId = await this.logRequest(requestConfig);
           }
+
+          // Enhanced error parsing - child classes (like ShopifyApiClient) may return structured error objects
+          let responseStatus = (error as AxiosError).response?.status || 500; // Default to 500 instead of 0
+          let responseBody: any = (error as AxiosError).response?.data || (error as Error).message;
+
+          // Try to parse enhanced error objects (JSON-stringified errors from child classes)
+          if ((error as Error).message && !((error as AxiosError).response)) {
+            try {
+              const parsedError = JSON.parse((error as Error).message);
+
+              // Check if this is an enhanced error object with statusCode and message
+              if (parsedError && typeof parsedError === 'object' && parsedError.statusCode && parsedError.message) {
+                responseStatus = parsedError.statusCode;
+
+                // Build user-friendly error message
+                const errorType = parsedError.type ? `[${parsedError.type}] ` : '';
+                const errorMessage = parsedError.message;
+                const errorDetails = parsedError.details ? ` - ${JSON.stringify(parsedError.details)}` : '';
+
+                responseBody = `${errorType}${errorMessage}${errorDetails}`;
+
+                logger.debug('Enhanced error parsed successfully', {
+                  originalStatus: 0,
+                  parsedStatus: responseStatus,
+                  errorType: parsedError.type,
+                  integrationName: this.integrationName
+                });
+              }
+            } catch (parseError) {
+              // Not a JSON error or parsing failed - keep original values
+              logger.debug('Error message is not enhanced JSON format, using original', {
+                integrationName: this.integrationName
+              });
+            }
+          }
+
           await this.logResponse(logId, {
-            responseStatus: (error as AxiosError).response?.status || 0,
+            responseStatus,
             responseHeaders: (error as AxiosError).response?.headers,
-            responseBody: (error as AxiosError).response?.data || (error as Error).message,
+            responseBody,
             duration
           });
         } catch (logError: any) {

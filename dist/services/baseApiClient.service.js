@@ -198,10 +198,40 @@ class BaseApiClient {
                         if (!logId) {
                             logId = yield this.logRequest(requestConfig);
                         }
+                        // Enhanced error parsing - child classes (like ShopifyApiClient) may return structured error objects
+                        let responseStatus = ((_b = error.response) === null || _b === void 0 ? void 0 : _b.status) || 500; // Default to 500 instead of 0
+                        let responseBody = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.data) || error.message;
+                        // Try to parse enhanced error objects (JSON-stringified errors from child classes)
+                        if (error.message && !(error.response)) {
+                            try {
+                                const parsedError = JSON.parse(error.message);
+                                // Check if this is an enhanced error object with statusCode and message
+                                if (parsedError && typeof parsedError === 'object' && parsedError.statusCode && parsedError.message) {
+                                    responseStatus = parsedError.statusCode;
+                                    // Build user-friendly error message
+                                    const errorType = parsedError.type ? `[${parsedError.type}] ` : '';
+                                    const errorMessage = parsedError.message;
+                                    const errorDetails = parsedError.details ? ` - ${JSON.stringify(parsedError.details)}` : '';
+                                    responseBody = `${errorType}${errorMessage}${errorDetails}`;
+                                    logger_service_1.logger.debug('Enhanced error parsed successfully', {
+                                        originalStatus: 0,
+                                        parsedStatus: responseStatus,
+                                        errorType: parsedError.type,
+                                        integrationName: this.integrationName
+                                    });
+                                }
+                            }
+                            catch (parseError) {
+                                // Not a JSON error or parsing failed - keep original values
+                                logger_service_1.logger.debug('Error message is not enhanced JSON format, using original', {
+                                    integrationName: this.integrationName
+                                });
+                            }
+                        }
                         yield this.logResponse(logId, {
-                            responseStatus: ((_b = error.response) === null || _b === void 0 ? void 0 : _b.status) || 0,
-                            responseHeaders: (_c = error.response) === null || _c === void 0 ? void 0 : _c.headers,
-                            responseBody: ((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || error.message,
+                            responseStatus,
+                            responseHeaders: (_d = error.response) === null || _d === void 0 ? void 0 : _d.headers,
+                            responseBody,
                             duration
                         });
                     }
