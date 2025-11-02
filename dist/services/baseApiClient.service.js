@@ -115,8 +115,10 @@ class BaseApiClient {
             }
         }
         // Auto-extract data if enabled (for nested API responses)
-        if (processingConfig.autoExtractData && processedResponse && typeof processedResponse === 'object') {
+        // Enhanced with null/undefined safety checks to prevent errors when API times out
+        if (processingConfig.autoExtractData && processedResponse !== null && processedResponse !== undefined && typeof processedResponse === 'object') {
             // Check for common nested structures
+            // Use optional chaining to prevent "Cannot read properties of undefined" errors
             if (processedResponse.data !== undefined && !context.isGraphQL) {
                 logger_service_1.logger.debug('Auto-extracting data from nested response', {
                     integrationName: this.integrationName,
