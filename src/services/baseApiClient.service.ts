@@ -132,11 +132,34 @@ export abstract class BaseApiClient implements IApiClient {
 
   // Process GraphQL response - handles both standard HTTP response and GraphQL-specific structure
   protected processGraphQLResponse<T>(response: any, query?: string): T {
+    // Null/undefined response check - enhanced safety
+    if (response === null || response === undefined) {
+      const errorMsg = 'GraphQL API returned null or undefined response';
+      logger.error(errorMsg, {
+        query: query?.substring(0, 100) + '...',
+        integrationName: this.integrationName,
+        receivedResponse: response
+      });
+      throw new Error(errorMsg);
+    }
+
     // Apply response processing pipeline if configured
     const processedResponse = this.applyResponseProcessing(response, { isGraphQL: true, query });
-    
+
+    // Null/undefined after processing check
+    if (processedResponse === null || processedResponse === undefined) {
+      const errorMsg = 'GraphQL response became null/undefined after processing';
+      logger.error(errorMsg, {
+        query: query?.substring(0, 100) + '...',
+        integrationName: this.integrationName,
+        originalResponse: response,
+        processedResponse
+      });
+      throw new Error(errorMsg);
+    }
+
     // Check for GraphQL errors first
-    if (processedResponse && processedResponse.errors && Array.isArray(processedResponse.errors)) {
+    if (processedResponse.errors && Array.isArray(processedResponse.errors)) {
       const errorMessage = processedResponse.errors.map((err: any) => err.message || err).join(', ');
       logger.error('GraphQL Response Errors', {
         errors: processedResponse.errors,
@@ -147,18 +170,25 @@ export abstract class BaseApiClient implements IApiClient {
     }
 
     // Handle different GraphQL response structures
-    if (processedResponse && typeof processedResponse === 'object') {
+    if (typeof processedResponse === 'object') {
       // Standard GraphQL response structure: { data: {...}, errors?: [...] }
       if (processedResponse.data !== undefined) {
         return processedResponse.data as T;
       }
-      
+
       // Direct response (some GraphQL APIs might return data directly)
       return processedResponse as T;
     }
 
-    // Fallback - return as-is
-    return processedResponse as T;
+    // Invalid response type
+    const errorMsg = `GraphQL response is not an object: ${typeof processedResponse}`;
+    logger.error(errorMsg, {
+      query: query?.substring(0, 100) + '...',
+      integrationName: this.integrationName,
+      responseType: typeof processedResponse,
+      response: processedResponse
+    });
+    throw new Error(errorMsg);
   }
 
   // Apply response processing pipeline
