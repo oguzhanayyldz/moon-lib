@@ -14,6 +14,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseApiClient = void 0;
 const axios_1 = __importDefault(require("axios"));
+const http_1 = __importDefault(require("http"));
+const https_1 = __importDefault(require("https"));
 const rate_limiter_flexible_1 = require("rate-limiter-flexible");
 const PQueue = require('p-queue').default;
 const api_client_types_1 = require("../common/types/api-client.types");
@@ -455,11 +457,25 @@ class BaseApiClient {
     // Allow child classes to initialize HTTP client after properties are set
     reconfigureHttpClient() {
         if (!this.httpClient) {
-            // Initial setup
+            // Initial setup with HTTP Keep-Alive agents for persistent connections
+            const httpAgent = new http_1.default.Agent({
+                keepAlive: true,
+                keepAliveMsecs: 60000, // Keep connection alive for 60 seconds
+                maxSockets: 50, // Max concurrent connections
+                maxFreeSockets: 10 // Max idle connections to keep open
+            });
+            const httpsAgent = new https_1.default.Agent({
+                keepAlive: true,
+                keepAliveMsecs: 60000,
+                maxSockets: 50,
+                maxFreeSockets: 10
+            });
             this.httpClient = axios_1.default.create({
                 baseURL: this.getBaseURL(),
                 timeout: this.config.timeout,
-                headers: this.getDefaultHeaders()
+                headers: this.getDefaultHeaders(),
+                httpAgent: httpAgent,
+                httpsAgent: httpsAgent
             });
             this.setupInterceptors();
             logger_service_1.logger.debug('HTTP client initialized', {

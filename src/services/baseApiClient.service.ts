@@ -1,4 +1,6 @@
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 // Type definitions for axios compatibility
 interface AxiosInstance {
   request<T = any>(config: any): Promise<AxiosResponse<T>>;
@@ -562,11 +564,27 @@ export abstract class BaseApiClient implements IApiClient {
   // Allow child classes to initialize HTTP client after properties are set
   public reconfigureHttpClient(): void {
     if (!this.httpClient) {
-      // Initial setup
+      // Initial setup with HTTP Keep-Alive agents for persistent connections
+      const httpAgent = new http.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 60000, // Keep connection alive for 60 seconds
+        maxSockets: 50, // Max concurrent connections
+        maxFreeSockets: 10 // Max idle connections to keep open
+      });
+
+      const httpsAgent = new https.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 60000,
+        maxSockets: 50,
+        maxFreeSockets: 10
+      });
+
       this.httpClient = axios.create({
         baseURL: this.getBaseURL(),
         timeout: this.config.timeout,
-        headers: this.getDefaultHeaders()
+        headers: this.getDefaultHeaders(),
+        httpAgent: httpAgent,
+        httpsAgent: httpsAgent
       });
       this.setupInterceptors();
       
