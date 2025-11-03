@@ -68,12 +68,18 @@ class EventPublisherJob {
     }
     async processEvents() {
         try {
+            // Sadece bu environment'a ait pending eventleri al
+            const currentEnvironment = process.env.NODE_ENV || 'production';
             const pendingEvents = await this.outboxModel.find({
                 status: 'pending',
+                environment: currentEnvironment,
                 retryCount: { $lt: 5 }
             })
                 .sort({ createdAt: 1 })
                 .limit(10);
+            if (pendingEvents.length > 0) {
+                logger_service_1.logger.debug(`Processing ${pendingEvents.length} events for environment: ${currentEnvironment}`);
+            }
             for (const event of pendingEvents) {
                 try {
                     // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle

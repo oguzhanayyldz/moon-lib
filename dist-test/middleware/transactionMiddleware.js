@@ -7,6 +7,12 @@ exports.TransactionControl = exports.getTransactionStats = exports.withReadOnlyT
 const mongoose_1 = __importDefault(require("mongoose"));
 const logger_service_1 = require("../services/logger.service");
 /**
+ * Cache for replica set status to avoid repeated checks
+ */
+let isReplicaSetCache = null;
+let replicaSetCheckTime = 0;
+const REPLICA_SET_CHECK_INTERVAL = 60000; // Re-check every 60 seconds
+/**
  * Transaction middleware factory
  *
  * @param options Transaction configuration options
@@ -21,8 +27,38 @@ const withTransaction = (options = {}) => {
     };
     const mergedOptions = Object.assign(Object.assign({}, defaultOptions), options);
     return async (req, res, next) => {
+        var _a;
         // Skip transaction if explicitly requested
         if (options.skipTransaction) {
+            return next();
+        }
+        // Check if MongoDB is running as a replica set (with caching)
+        const now = Date.now();
+        if (isReplicaSetCache === null || now - replicaSetCheckTime > REPLICA_SET_CHECK_INTERVAL) {
+            try {
+                const admin = mongoose_1.default.connection.db.admin();
+                await admin.replSetGetStatus();
+                isReplicaSetCache = true;
+                replicaSetCheckTime = now;
+                logger_service_1.logger.info(`✅ Replica set detected - transactions enabled`);
+            }
+            catch (error) {
+                // Not a replica set (standalone MongoDB)
+                if (((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('replSet')) || error.codeName === 'NoReplicationEnabled') {
+                    isReplicaSetCache = false;
+                    replicaSetCheckTime = now;
+                    logger_service_1.logger.warn(`⚠️  Standalone MongoDB detected - transactions will be disabled`);
+                }
+                else {
+                    // Different error, rethrow
+                    logger_service_1.logger.error(`❌ Error checking replica set status:`, error);
+                    throw error;
+                }
+            }
+        }
+        // If standalone MongoDB, skip transaction but continue normal flow
+        if (!isReplicaSetCache) {
+            logger_service_1.logger.debug(`➡️  Processing ${req.method} ${req.originalUrl} without transaction (standalone mode)`);
             return next();
         }
         // Generate transaction ID for tracking

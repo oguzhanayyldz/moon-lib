@@ -15,6 +15,7 @@ export interface LogIntegrationResponseOptions {
     responseHeaders?: Record<string, any>;
     responseBody?: Record<string, any>;
     errorMessage?: string;
+    duration?: number;
 }
 export declare class IntegrationRequestLogService {
     private connection;
@@ -26,6 +27,12 @@ export declare class IntegrationRequestLogService {
     logRequest(options: LogIntegrationRequestOptions): Promise<string>;
     /**
      * Entegrasyon yanıtı alındığında log kaydını günceller
+     *
+     * Duration handling:
+     * - If options.duration is provided (real HTTP request duration from caller), use it
+     * - Otherwise, calculate duration from requestTime to responseTime (log write duration)
+     *
+     * Note: For accurate HTTP request timing, caller should pass the real duration
      */
     logResponse(logId: string, options: LogIntegrationResponseOptions): Promise<void>;
     /**

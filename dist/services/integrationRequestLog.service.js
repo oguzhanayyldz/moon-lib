@@ -57,9 +57,16 @@ class IntegrationRequestLogService {
     }
     /**
      * Entegrasyon yanıtı alındığında log kaydını günceller
+     *
+     * Duration handling:
+     * - If options.duration is provided (real HTTP request duration from caller), use it
+     * - Otherwise, calculate duration from requestTime to responseTime (log write duration)
+     *
+     * Note: For accurate HTTP request timing, caller should pass the real duration
      */
     logResponse(logId, options) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 const responseTime = new Date();
                 // Hassas bilgileri temizle
@@ -70,7 +77,9 @@ class IntegrationRequestLogService {
                     logger_service_1.logger.warn(`Integration request log not found for ID: ${logId}`);
                     return;
                 }
-                const duration = responseTime.getTime() - logEntry.requestTime.getTime();
+                // Use provided duration if available (real HTTP request duration)
+                // Otherwise calculate from timestamps (backward compatibility)
+                const duration = (_a = options.duration) !== null && _a !== void 0 ? _a : (responseTime.getTime() - logEntry.requestTime.getTime());
                 yield this.IntegrationRequestLogModel.findByIdAndUpdate(logId, {
                     responseStatus: options.responseStatus,
                     responseHeaders: sanitizedResponseHeaders,
@@ -83,6 +92,7 @@ class IntegrationRequestLogService {
                     logId,
                     responseStatus: options.responseStatus,
                     duration,
+                    durationSource: options.duration ? 'caller' : 'calculated',
                     hasError: !!options.errorMessage
                 });
             }

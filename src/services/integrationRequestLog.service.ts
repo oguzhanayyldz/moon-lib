@@ -18,6 +18,7 @@ export interface LogIntegrationResponseOptions {
     responseHeaders?: Record<string, any>;
     responseBody?: Record<string, any>;
     errorMessage?: string;
+    duration?: number; // Optional: Real HTTP request duration from caller (ms)
 }
 
 export class IntegrationRequestLogService {
@@ -73,22 +74,30 @@ export class IntegrationRequestLogService {
 
     /**
      * Entegrasyon yanıtı alındığında log kaydını günceller
+     *
+     * Duration handling:
+     * - If options.duration is provided (real HTTP request duration from caller), use it
+     * - Otherwise, calculate duration from requestTime to responseTime (log write duration)
+     *
+     * Note: For accurate HTTP request timing, caller should pass the real duration
      */
     async logResponse(logId: string, options: LogIntegrationResponseOptions): Promise<void> {
         try {
             const responseTime = new Date();
-            
+
             // Hassas bilgileri temizle
             const sanitizedResponseHeaders = IntegrationRequestLogService.sanitizeHeaders(options.responseHeaders || {});
             const sanitizedResponseBody = IntegrationRequestLogService.sanitizeResponseBody(options.responseBody || {});
-            
+
             const logEntry = await this.IntegrationRequestLogModel.findById(logId);
             if (!logEntry) {
                 logger.warn(`Integration request log not found for ID: ${logId}`);
                 return;
             }
 
-            const duration = responseTime.getTime() - logEntry.requestTime.getTime();
+            // Use provided duration if available (real HTTP request duration)
+            // Otherwise calculate from timestamps (backward compatibility)
+            const duration = options.duration ?? (responseTime.getTime() - logEntry.requestTime.getTime());
 
             await this.IntegrationRequestLogModel.findByIdAndUpdate(logId, {
                 responseStatus: options.responseStatus,
@@ -103,6 +112,7 @@ export class IntegrationRequestLogService {
                 logId,
                 responseStatus: options.responseStatus,
                 duration,
+                durationSource: options.duration ? 'caller' : 'calculated',
                 hasError: !!options.errorMessage
             });
         } catch (error) {

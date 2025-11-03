@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseApiClient = void 0;
 const axios_1 = __importDefault(require("axios"));
+const http_1 = __importDefault(require("http"));
+const https_1 = __importDefault(require("https"));
 const rate_limiter_flexible_1 = require("rate-limiter-flexible");
 const PQueue = require('p-queue').default;
 const api_client_types_1 = require("../common/types/api-client.types");
@@ -51,10 +53,31 @@ class BaseApiClient {
     }
     // Process GraphQL response - handles both standard HTTP response and GraphQL-specific structure
     processGraphQLResponse(response, query) {
+        // Null/undefined response check - enhanced safety
+        if (response === null || response === undefined) {
+            const errorMsg = 'GraphQL API returned null or undefined response';
+            logger_service_1.logger.error(errorMsg, {
+                query: (query === null || query === void 0 ? void 0 : query.substring(0, 100)) + '...',
+                integrationName: this.integrationName,
+                receivedResponse: response
+            });
+            throw new Error(errorMsg);
+        }
         // Apply response processing pipeline if configured
         const processedResponse = this.applyResponseProcessing(response, { isGraphQL: true, query });
+        // Null/undefined after processing check
+        if (processedResponse === null || processedResponse === undefined) {
+            const errorMsg = 'GraphQL response became null/undefined after processing';
+            logger_service_1.logger.error(errorMsg, {
+                query: (query === null || query === void 0 ? void 0 : query.substring(0, 100)) + '...',
+                integrationName: this.integrationName,
+                originalResponse: response,
+                processedResponse
+            });
+            throw new Error(errorMsg);
+        }
         // Check for GraphQL errors first
-        if (processedResponse && processedResponse.errors && Array.isArray(processedResponse.errors)) {
+        if (processedResponse.errors && Array.isArray(processedResponse.errors)) {
             const errorMessage = processedResponse.errors.map((err) => err.message || err).join(', ');
             logger_service_1.logger.error('GraphQL Response Errors', {
                 errors: processedResponse.errors,
@@ -64,7 +87,7 @@ class BaseApiClient {
             throw new Error(`GraphQL errors: ${errorMessage}`);
         }
         // Handle different GraphQL response structures
-        if (processedResponse && typeof processedResponse === 'object') {
+        if (typeof processedResponse === 'object') {
             // Standard GraphQL response structure: { data: {...}, errors?: [...] }
             if (processedResponse.data !== undefined) {
                 return processedResponse.data;
@@ -72,8 +95,15 @@ class BaseApiClient {
             // Direct response (some GraphQL APIs might return data directly)
             return processedResponse;
         }
-        // Fallback - return as-is
-        return processedResponse;
+        // Invalid response type
+        const errorMsg = `GraphQL response is not an object: ${typeof processedResponse}`;
+        logger_service_1.logger.error(errorMsg, {
+            query: (query === null || query === void 0 ? void 0 : query.substring(0, 100)) + '...',
+            integrationName: this.integrationName,
+            responseType: typeof processedResponse,
+            response: processedResponse
+        });
+        throw new Error(errorMsg);
     }
     // Apply response processing pipeline
     applyResponseProcessing(response, context = {}) {
@@ -96,8 +126,10 @@ class BaseApiClient {
             }
         }
         // Auto-extract data if enabled (for nested API responses)
-        if (processingConfig.autoExtractData && processedResponse && typeof processedResponse === 'object') {
+        // Enhanced with null/undefined safety checks to prevent errors when API times out
+        if (processingConfig.autoExtractData && processedResponse !== null && processedResponse !== undefined && typeof processedResponse === 'object') {
             // Check for common nested structures
+            // Use optional chaining to prevent "Cannot read properties of undefined" errors
             if (processedResponse.data !== undefined && !context.isGraphQL) {
                 logger_service_1.logger.debug('Auto-extracting data from nested response', {
                     integrationName: this.integrationName,
@@ -176,10 +208,40 @@ class BaseApiClient {
                     if (!logId) {
                         logId = await this.logRequest(requestConfig);
                     }
+                    // Enhanced error parsing - child classes (like ShopifyApiClient) may return structured error objects
+                    let responseStatus = ((_b = error.response) === null || _b === void 0 ? void 0 : _b.status) || 500; // Default to 500 instead of 0
+                    let responseBody = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.data) || error.message;
+                    // Try to parse enhanced error objects (JSON-stringified errors from child classes)
+                    if (error.message && !(error.response)) {
+                        try {
+                            const parsedError = JSON.parse(error.message);
+                            // Check if this is an enhanced error object with statusCode and message
+                            if (parsedError && typeof parsedError === 'object' && parsedError.statusCode && parsedError.message) {
+                                responseStatus = parsedError.statusCode;
+                                // Build user-friendly error message
+                                const errorType = parsedError.type ? `[${parsedError.type}] ` : '';
+                                const errorMessage = parsedError.message;
+                                const errorDetails = parsedError.details ? ` - ${JSON.stringify(parsedError.details)}` : '';
+                                responseBody = `${errorType}${errorMessage}${errorDetails}`;
+                                logger_service_1.logger.debug('Enhanced error parsed successfully', {
+                                    originalStatus: 0,
+                                    parsedStatus: responseStatus,
+                                    errorType: parsedError.type,
+                                    integrationName: this.integrationName
+                                });
+                            }
+                        }
+                        catch (parseError) {
+                            // Not a JSON error or parsing failed - keep original values
+                            logger_service_1.logger.debug('Error message is not enhanced JSON format, using original', {
+                                integrationName: this.integrationName
+                            });
+                        }
+                    }
                     await this.logResponse(logId, {
-                        responseStatus: ((_b = error.response) === null || _b === void 0 ? void 0 : _b.status) || 0,
-                        responseHeaders: (_c = error.response) === null || _c === void 0 ? void 0 : _c.headers,
-                        responseBody: ((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || error.message,
+                        responseStatus,
+                        responseHeaders: (_d = error.response) === null || _d === void 0 ? void 0 : _d.headers,
+                        responseBody,
                         duration
                     });
                 }
@@ -366,11 +428,28 @@ class BaseApiClient {
     // Allow child classes to initialize HTTP client after properties are set
     reconfigureHttpClient() {
         if (!this.httpClient) {
-            // Initial setup
+            // Initial setup with HTTP Keep-Alive agents for persistent connections
+            const httpAgent = new http_1.default.Agent({
+                keepAlive: true,
+                keepAliveMsecs: 300000, // Keep connection alive for 5 minutes (increased from 60s for better performance)
+                maxSockets: 50, // Max concurrent connections
+                maxFreeSockets: 10, // Max idle connections to keep open
+                timeout: 30000 // 30 second connection timeout (prevents long hangs)
+            });
+            const httpsAgent = new https_1.default.Agent({
+                keepAlive: true,
+                keepAliveMsecs: 300000, // 5 minutes Keep-Alive
+                maxSockets: 50,
+                maxFreeSockets: 10,
+                timeout: 30000, // 30 second connection timeout
+                family: 4 // Force IPv4 (prevents IPv6 DNS lookup delays)
+            });
             this.httpClient = axios_1.default.create({
                 baseURL: this.getBaseURL(),
                 timeout: this.config.timeout,
-                headers: this.getDefaultHeaders()
+                headers: this.getDefaultHeaders(),
+                httpAgent: httpAgent,
+                httpsAgent: httpsAgent
             });
             this.setupInterceptors();
             logger_service_1.logger.debug('HTTP client initialized', {
