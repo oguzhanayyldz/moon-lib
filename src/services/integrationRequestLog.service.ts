@@ -19,6 +19,7 @@ export interface LogIntegrationResponseOptions {
     responseBody?: Record<string, any>;
     errorMessage?: string;
     duration?: number; // Optional: Real HTTP request duration from caller (ms)
+    metadata?: Record<string, any>; // Optional: Additional metadata (e.g., rate limit info)
 }
 
 export class IntegrationRequestLogService {
@@ -99,14 +100,22 @@ export class IntegrationRequestLogService {
             // Otherwise calculate from timestamps (backward compatibility)
             const duration = options.duration ?? (responseTime.getTime() - logEntry.requestTime.getTime());
 
-            await this.IntegrationRequestLogModel.findByIdAndUpdate(logId, {
+            // Metadata'yı da kaydet (rate limit bilgileri vs.)
+            const updateData: any = {
                 responseStatus: options.responseStatus,
                 responseHeaders: sanitizedResponseHeaders,
                 responseBody: sanitizedResponseBody,
                 errorMessage: options.errorMessage,
                 duration,
                 responseTime
-            });
+            };
+
+            // Metadata varsa ekle
+            if (options.metadata) {
+                updateData.metadata = options.metadata;
+            }
+
+            await this.IntegrationRequestLogModel.findByIdAndUpdate(logId, updateData);
 
             logger.debug(`Integration response logged`, {
                 logId,

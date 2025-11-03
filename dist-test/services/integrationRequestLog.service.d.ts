@@ -16,6 +16,7 @@ export interface LogIntegrationResponseOptions {
     responseBody?: Record<string, any>;
     errorMessage?: string;
     duration?: number;
+    metadata?: Record<string, any>;
 }
 export declare class IntegrationRequestLogService {
     private connection;

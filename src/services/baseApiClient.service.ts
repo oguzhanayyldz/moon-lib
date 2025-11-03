@@ -352,11 +352,31 @@ export abstract class BaseApiClient implements IApiClient {
             }
           }
 
+          // Rate limit metadata ekle (429 hatası için)
+          let metadata: Record<string, any> | undefined;
+          if (responseStatus === 429) {
+            const headers = (error as AxiosError).response?.headers || {};
+            metadata = {
+              rateLimitExceeded: true,
+              limit: headers['x-ratelimit-limit'],
+              remaining: headers['x-ratelimit-remaining'],
+              resetTime: headers['x-ratelimit-reset'],
+              retryAfter: headers['x-ratelimit-retryafter'] || responseBody?.retryAfter
+            };
+
+            logger.warn('Rate limit exceeded, metadata added to log', {
+              metadata,
+              integrationName: this.integrationName,
+              endpoint: requestConfig.url
+            });
+          }
+
           await this.logResponse(logId, {
             responseStatus,
             responseHeaders: (error as AxiosError).response?.headers,
             responseBody,
-            duration
+            duration,
+            metadata
           });
         } catch (logError: any) {
           logger.warn('Failed to log failed request', {

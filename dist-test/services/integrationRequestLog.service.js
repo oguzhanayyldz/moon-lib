@@ -68,14 +68,20 @@ class IntegrationRequestLogService {
             // Use provided duration if available (real HTTP request duration)
             // Otherwise calculate from timestamps (backward compatibility)
             const duration = (_a = options.duration) !== null && _a !== void 0 ? _a : (responseTime.getTime() - logEntry.requestTime.getTime());
-            await this.IntegrationRequestLogModel.findByIdAndUpdate(logId, {
+            // Metadata'yı da kaydet (rate limit bilgileri vs.)
+            const updateData = {
                 responseStatus: options.responseStatus,
                 responseHeaders: sanitizedResponseHeaders,
                 responseBody: sanitizedResponseBody,
                 errorMessage: options.errorMessage,
                 duration,
                 responseTime
-            });
+            };
+            // Metadata varsa ekle
+            if (options.metadata) {
+                updateData.metadata = options.metadata;
+            }
+            await this.IntegrationRequestLogModel.findByIdAndUpdate(logId, updateData);
             logger_service_1.logger.debug(`Integration response logged`, {
                 logId,
                 responseStatus: options.responseStatus,

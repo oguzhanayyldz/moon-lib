@@ -162,7 +162,7 @@ class BaseApiClient {
     // Core request method
     makeRequest(requestConfig) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             const startTime = Date.now();
             let logId;
             // Merge default headers with request headers
@@ -258,11 +258,29 @@ class BaseApiClient {
                                 });
                             }
                         }
+                        // Rate limit metadata ekle (429 hatası için)
+                        let metadata;
+                        if (responseStatus === 429) {
+                            const headers = ((_d = error.response) === null || _d === void 0 ? void 0 : _d.headers) || {};
+                            metadata = {
+                                rateLimitExceeded: true,
+                                limit: headers['x-ratelimit-limit'],
+                                remaining: headers['x-ratelimit-remaining'],
+                                resetTime: headers['x-ratelimit-reset'],
+                                retryAfter: headers['x-ratelimit-retryafter'] || (responseBody === null || responseBody === void 0 ? void 0 : responseBody.retryAfter)
+                            };
+                            logger_service_1.logger.warn('Rate limit exceeded, metadata added to log', {
+                                metadata,
+                                integrationName: this.integrationName,
+                                endpoint: requestConfig.url
+                            });
+                        }
                         yield this.logResponse(logId, {
                             responseStatus,
-                            responseHeaders: (_d = error.response) === null || _d === void 0 ? void 0 : _d.headers,
+                            responseHeaders: (_e = error.response) === null || _e === void 0 ? void 0 : _e.headers,
                             responseBody,
-                            duration
+                            duration,
+                            metadata
                         });
                     }
                     catch (logError) {
@@ -289,7 +307,7 @@ class BaseApiClient {
                 logger_service_1.logger.error('API request failed', {
                     method: requestConfig.method,
                     url: requestConfig.url,
-                    status: (_e = error.response) === null || _e === void 0 ? void 0 : _e.status,
+                    status: (_f = error.response) === null || _f === void 0 ? void 0 : _f.status,
                     errorMessage: error.message,
                     duration,
                     integrationName: this.integrationName
