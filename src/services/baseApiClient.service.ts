@@ -567,16 +567,19 @@ export abstract class BaseApiClient implements IApiClient {
       // Initial setup with HTTP Keep-Alive agents for persistent connections
       const httpAgent = new http.Agent({
         keepAlive: true,
-        keepAliveMsecs: 60000, // Keep connection alive for 60 seconds
+        keepAliveMsecs: 300000, // Keep connection alive for 5 minutes (increased from 60s for better performance)
         maxSockets: 50, // Max concurrent connections
-        maxFreeSockets: 10 // Max idle connections to keep open
+        maxFreeSockets: 10, // Max idle connections to keep open
+        timeout: 30000 // 30 second connection timeout (prevents long hangs)
       });
 
       const httpsAgent = new https.Agent({
         keepAlive: true,
-        keepAliveMsecs: 60000,
+        keepAliveMsecs: 300000, // 5 minutes Keep-Alive
         maxSockets: 50,
-        maxFreeSockets: 10
+        maxFreeSockets: 10,
+        timeout: 30000, // 30 second connection timeout
+        family: 4 // Force IPv4 (prevents IPv6 DNS lookup delays)
       });
 
       this.httpClient = axios.create({
