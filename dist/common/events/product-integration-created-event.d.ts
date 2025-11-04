@@ -15,6 +15,7 @@ export interface ProductIntegrationCreatedEvent {
 export interface ProductUpdateConfiguration {
     enabled: boolean;
     source: string;
+    cdnStrategy?: 'platform' | 'own';
     fields: {
         name: boolean;
         description: boolean;

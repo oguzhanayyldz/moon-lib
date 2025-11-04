@@ -18,6 +18,7 @@ export interface ProductIntegrationCreatedEvent {
 export interface ProductUpdateConfiguration {
     enabled: boolean;
     source: string;  // Hangi platform için güncelleme yapılacak
+    cdnStrategy?: 'platform' | 'own';  // Görsel depolama stratejisi (varsayılan: 'platform')
     fields: {
         name: boolean;
         description: boolean;
@@ -30,6 +31,6 @@ export interface ProductUpdateConfiguration {
         images: boolean;
         combinations: boolean;
         category: boolean;
-        brand: boolean;        
+        brand: boolean;
     };
 }
