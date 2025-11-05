@@ -226,7 +226,21 @@ class BaseModernEntityDeletedListener extends __1.RetryableListener {
                     }
                 }
                 else {
-                    // Step 2: Fallback to legacy implementation
+                    // Step 2: Check if this entity is managed by this service
+                    const isEntityManagedByService = this.isEntityManagedByService(entity.entity);
+                    if (!isEntityManagedByService) {
+                        // This entity is not managed by this service, skip silently
+                        __1.logger.debug(`Entity ${entity.entity} not managed by ${this.serviceName}, skipping deletion`, {
+                            entityType: entity.entity,
+                            entityId: entity.entityId,
+                            serviceName: this.serviceName
+                        });
+                        span === null || span === void 0 ? void 0 : span.setTag('strategy.used', false);
+                        span === null || span === void 0 ? void 0 : span.setTag('entity.skipped', true);
+                        span === null || span === void 0 ? void 0 : span.setTag('skip.reason', 'entity-not-managed-by-service');
+                        return; // Skip silently without error
+                    }
+                    // Step 3: Fallback to legacy implementation (only for managed entities)
                     __1.logger.warn(`No strategy found for ${entity.entity} in ${this.serviceName} service, falling back to legacy implementation`, {
                         entityType: entity.entity,
                         entityId: entity.entityId,

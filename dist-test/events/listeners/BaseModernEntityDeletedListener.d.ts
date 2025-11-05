@@ -195,6 +195,27 @@ export declare abstract class BaseModernEntityDeletedListener extends RetryableL
      */
     generateApiDocumentation(): string;
     /**
+     * Check if an entity is managed by this service
+     *
+     * This method determines if a given entity type is within the responsibility
+     * of this service. If an entity is not managed by the service, deletion events
+     * for that entity will be silently skipped.
+     *
+     * @param entityType - The entity type to check (e.g., 'product', 'productimage')
+     * @returns true if the service manages this entity, false otherwise
+     *
+     * @example
+     * // Catalog service implementation
+     * protected isEntityManagedByService(entityType: string): boolean {
+     *   const managedEntities = [
+     *     'catalogmapping', 'categorymapping', 'product', 'combination',
+     *     'user', 'order', 'productstock', 'packageproductlink', 'relationproductlink'
+     *   ];
+     *   return managedEntities.includes(entityType.toLowerCase());
+     * }
+     */
+    protected abstract isEntityManagedByService(entityType: string): boolean;
+    /**
      * Legacy fallback implementation - must be implemented by subclasses
      * This method should handle entity deletion using the old switch-case pattern
      */

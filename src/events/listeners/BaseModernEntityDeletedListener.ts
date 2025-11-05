@@ -265,7 +265,25 @@ export abstract class BaseModernEntityDeletedListener extends RetryableListener<
           }
         }
       } else {
-        // Step 2: Fallback to legacy implementation
+        // Step 2: Check if this entity is managed by this service
+        const isEntityManagedByService = this.isEntityManagedByService(entity.entity);
+
+        if (!isEntityManagedByService) {
+          // This entity is not managed by this service, skip silently
+          logger.debug(`Entity ${entity.entity} not managed by ${this.serviceName}, skipping deletion`, {
+            entityType: entity.entity,
+            entityId: entity.entityId,
+            serviceName: this.serviceName
+          });
+
+          span?.setTag('strategy.used', false);
+          span?.setTag('entity.skipped', true);
+          span?.setTag('skip.reason', 'entity-not-managed-by-service');
+
+          return; // Skip silently without error
+        }
+
+        // Step 3: Fallback to legacy implementation (only for managed entities)
         logger.warn(`No strategy found for ${entity.entity} in ${this.serviceName} service, falling back to legacy implementation`, {
           entityType: entity.entity,
           entityId: entity.entityId,
@@ -1011,6 +1029,28 @@ console.log('Initialization errors:', resilience.initializationStatus.totalError
 *Generated on ${new Date().toISOString()} by ${this.serviceName} Modern Entity Deletion Service*
 `;
   }
+
+  /**
+   * Check if an entity is managed by this service
+   *
+   * This method determines if a given entity type is within the responsibility
+   * of this service. If an entity is not managed by the service, deletion events
+   * for that entity will be silently skipped.
+   *
+   * @param entityType - The entity type to check (e.g., 'product', 'productimage')
+   * @returns true if the service manages this entity, false otherwise
+   *
+   * @example
+   * // Catalog service implementation
+   * protected isEntityManagedByService(entityType: string): boolean {
+   *   const managedEntities = [
+   *     'catalogmapping', 'categorymapping', 'product', 'combination',
+   *     'user', 'order', 'productstock', 'packageproductlink', 'relationproductlink'
+   *   ];
+   *   return managedEntities.includes(entityType.toLowerCase());
+   * }
+   */
+  protected abstract isEntityManagedByService(entityType: string): boolean;
 
   /**
    * Legacy fallback implementation - must be implemented by subclasses
