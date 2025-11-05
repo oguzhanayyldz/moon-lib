@@ -6,6 +6,8 @@ export class NatsWrapper {
     private _client?: Stan;
     private _isConnected: boolean = false;
     private _reconnectInterval: number = 5000;
+    private _reconnectAttempts: number = 0;
+    private _maxReconnectAttempts: number = 10;
 
     get client() {
         if (!this._client) {
@@ -25,6 +27,7 @@ export class NatsWrapper {
             this._client.on('connect', () => {
                 logger.info('Connected to NATS');
                 this._isConnected = true;
+                this._reconnectAttempts = 0; // Reset reconnection attempts on successful connection
             });
 
             this._client.on('disconnect', () => {
@@ -44,10 +47,29 @@ export class NatsWrapper {
     }
 
     private attemptReconnect(clusterId: string, clientId: string, url: string) {
+        // Check if max reconnection attempts reached
+        if (this._reconnectAttempts >= this._maxReconnectAttempts) {
+            logger.error(`❌ Max reconnect attempts (${this._maxReconnectAttempts}) reached. Stopping reconnection.`);
+            logger.error('⚠️ Service may be degraded. Please check NATS server status.');
+            return;
+        }
+
+        this._reconnectAttempts++;
+
+        // Exponential backoff: increase delay with each attempt (max 30 seconds)
+        const backoffTime = Math.min(this._reconnectInterval * this._reconnectAttempts, 30000);
+
         setTimeout(() => {
-            logger.info('Attempting to reconnect to NATS...');
-            this.connect(clusterId, clientId, url);
-        }, this._reconnectInterval);
+            logger.info(`🔄 Attempting to reconnect to NATS (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})...`);
+            this.connect(clusterId, clientId, url)
+                .then(() => {
+                    logger.info('✅ NATS reconnection successful');
+                })
+                .catch(err => {
+                    logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, err);
+                    // attemptReconnect will be called again from connect() error handler if needed
+                });
+        }, backoffTime);
     }
 
     /**

@@ -20,6 +20,8 @@ class NatsWrapper {
     constructor() {
         this._isConnected = false;
         this._reconnectInterval = 5000;
+        this._reconnectAttempts = 0;
+        this._maxReconnectAttempts = 10;
     }
     get client() {
         if (!this._client) {
@@ -37,6 +39,7 @@ class NatsWrapper {
                 this._client.on('connect', () => {
                     logger_service_1.logger.info('Connected to NATS');
                     this._isConnected = true;
+                    this._reconnectAttempts = 0; // Reset reconnection attempts on successful connection
                 });
                 this._client.on('disconnect', () => {
                     logger_service_1.logger.info('Disconnected from NATS');
@@ -55,10 +58,26 @@ class NatsWrapper {
         });
     }
     attemptReconnect(clusterId, clientId, url) {
+        // Check if max reconnection attempts reached
+        if (this._reconnectAttempts >= this._maxReconnectAttempts) {
+            logger_service_1.logger.error(`❌ Max reconnect attempts (${this._maxReconnectAttempts}) reached. Stopping reconnection.`);
+            logger_service_1.logger.error('⚠️ Service may be degraded. Please check NATS server status.');
+            return;
+        }
+        this._reconnectAttempts++;
+        // Exponential backoff: increase delay with each attempt (max 30 seconds)
+        const backoffTime = Math.min(this._reconnectInterval * this._reconnectAttempts, 30000);
         setTimeout(() => {
-            logger_service_1.logger.info('Attempting to reconnect to NATS...');
-            this.connect(clusterId, clientId, url);
-        }, this._reconnectInterval);
+            logger_service_1.logger.info(`🔄 Attempting to reconnect to NATS (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})...`);
+            this.connect(clusterId, clientId, url)
+                .then(() => {
+                logger_service_1.logger.info('✅ NATS reconnection successful');
+            })
+                .catch(err => {
+                logger_service_1.logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, err);
+                // attemptReconnect will be called again from connect() error handler if needed
+            });
+        }, backoffTime);
     }
     /**
      * Request-Reply pattern implementasyonu

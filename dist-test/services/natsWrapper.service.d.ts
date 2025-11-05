@@ -3,6 +3,8 @@ export declare class NatsWrapper {
     private _client?;
     private _isConnected;
     private _reconnectInterval;
+    private _reconnectAttempts;
+    private _maxReconnectAttempts;
     get client(): nats.Stan;
     get isConnected(): boolean;
     connect(clusterId: string, clientId: string, url: string): Promise<void>;
