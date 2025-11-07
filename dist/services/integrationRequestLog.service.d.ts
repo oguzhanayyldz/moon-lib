@@ -1,9 +1,11 @@
 import { IntegrationRequestLogDoc } from '../models/integrationRequestLog.schema';
 import { ResourceName } from '../common';
+import { OperationType } from '../enums/operation-type.enum';
 import mongoose from 'mongoose';
 export interface LogIntegrationRequestOptions {
     integrationName: ResourceName;
     userId: string;
+    operationType?: OperationType;
     method: string;
     endpoint: string;
     requestHeaders?: Record<string, any>;
@@ -40,9 +42,11 @@ export declare class IntegrationRequestLogService {
      * Kullanıcının entegrasyon loglarını getirir
      */
     getUserLogs(userId: string, integrationName?: ResourceName, page?: number, limit?: number, sortField?: string, sortOrder?: string, filters?: {
+        operationType?: OperationType;
         method?: string;
         success?: boolean;
         search?: string;
+        advancedSearch?: string;
         startDate?: Date;
         endDate?: Date;
     }): Promise<{
@@ -88,9 +92,11 @@ export declare class IntegrationRequestLogService {
      */
     getAdminLogs(integrationName?: ResourceName, page?: number, limit?: number, sortField?: string, sortOrder?: 'asc' | 'desc', filters?: {
         userId?: string;
+        operationType?: OperationType;
         method?: string;
         success?: boolean;
         search?: string;
+        advancedSearch?: string;
     }): Promise<{
         logs: (mongoose.FlattenMaps<IntegrationRequestLogDoc> & {
             _id: mongoose.Types.ObjectId;

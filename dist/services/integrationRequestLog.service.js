@@ -10,6 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IntegrationRequestLogService = void 0;
+const interpreter_factory_1 = require("./response-interpreters/interpreter.factory");
 const logger_service_1 = require("./logger.service");
 class IntegrationRequestLogService {
     constructor(connection) {
@@ -31,6 +32,7 @@ class IntegrationRequestLogService {
                 const logData = {
                     integrationName: options.integrationName,
                     userId: options.userId,
+                    operationType: options.operationType,
                     method: options.method,
                     endpoint: options.endpoint,
                     requestHeaders: sanitizedHeaders,
@@ -93,13 +95,37 @@ class IntegrationRequestLogService {
                 if (options.metadata) {
                     updateData.metadata = options.metadata;
                 }
+                // Response interpretation: Yanıtı yorumla ve kaydet
+                if (logEntry.operationType && options.responseBody) {
+                    try {
+                        const interpreter = interpreter_factory_1.ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
+                        if (interpreter) {
+                            const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
+                            if (interpretedResponse) {
+                                updateData.interpretedResponse = interpretedResponse;
+                                logger_service_1.logger.debug('Response interpreted successfully', {
+                                    logId,
+                                    operationType: logEntry.operationType,
+                                    summary: interpretedResponse.summary
+                                });
+                            }
+                        }
+                    }
+                    catch (interpretError) {
+                        logger_service_1.logger.warn('Failed to interpret response, continuing without interpretation', {
+                            logId,
+                            error: interpretError.message
+                        });
+                    }
+                }
                 yield this.IntegrationRequestLogModel.findByIdAndUpdate(logId, updateData);
                 logger_service_1.logger.debug(`Integration response logged`, {
                     logId,
                     responseStatus: options.responseStatus,
                     duration,
                     durationSource: options.duration ? 'caller' : 'calculated',
-                    hasError: !!options.errorMessage
+                    hasError: !!options.errorMessage,
+                    hasInterpretation: !!updateData.interpretedResponse
                 });
             }
             catch (error) {
@@ -117,6 +143,9 @@ class IntegrationRequestLogService {
                 const query = { userId };
                 if (integrationName) {
                     query.integrationName = integrationName;
+                }
+                if (filters === null || filters === void 0 ? void 0 : filters.operationType) {
+                    query.operationType = filters.operationType;
                 }
                 if (filters === null || filters === void 0 ? void 0 : filters.method) {
                     query.method = filters.method;
@@ -139,6 +168,20 @@ class IntegrationRequestLogService {
                         { endpoint: { $regex: filters.search, $options: 'i' } },
                         { 'metadata.description': { $regex: filters.search, $options: 'i' } }
                     ];
+                }
+                // Advanced search: requestBody ve responseBody içinde JSON arama
+                if (filters === null || filters === void 0 ? void 0 : filters.advancedSearch) {
+                    // MongoDB $where ile nested search yapmak yerine,
+                    // text-based search yapalım (performans için)
+                    const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                    query.$and = query.$and || [];
+                    query.$and.push({
+                        $or: [
+                            { requestBody: searchRegex },
+                            { responseBody: searchRegex },
+                            { endpoint: searchRegex }
+                        ]
+                    });
                 }
                 // Tarih aralığı filtresi
                 if ((filters === null || filters === void 0 ? void 0 : filters.startDate) || (filters === null || filters === void 0 ? void 0 : filters.endDate)) {
@@ -286,6 +329,9 @@ class IntegrationRequestLogService {
                 if (filters === null || filters === void 0 ? void 0 : filters.userId) {
                     query.userId = filters.userId;
                 }
+                if (filters === null || filters === void 0 ? void 0 : filters.operationType) {
+                    query.operationType = filters.operationType;
+                }
                 if (filters === null || filters === void 0 ? void 0 : filters.method) {
                     query.method = filters.method;
                 }
@@ -307,6 +353,18 @@ class IntegrationRequestLogService {
                         { endpoint: { $regex: filters.search, $options: 'i' } },
                         { 'metadata.description': { $regex: filters.search, $options: 'i' } }
                     ];
+                }
+                // Advanced search: requestBody ve responseBody içinde JSON arama
+                if (filters === null || filters === void 0 ? void 0 : filters.advancedSearch) {
+                    const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                    query.$and = query.$and || [];
+                    query.$and.push({
+                        $or: [
+                            { requestBody: searchRegex },
+                            { responseBody: searchRegex },
+                            { endpoint: searchRegex }
+                        ]
+                    });
                 }
                 const skip = (page - 1) * limit;
                 const sortObj = {};

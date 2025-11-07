@@ -28,6 +28,7 @@ export interface LogRequestParams {
     requestBody?: any;
     userId?: string;
     integrationName?: string;
+    operationType?: any;
 }
 export interface LogResponseParams {
     status: number;
@@ -48,6 +49,7 @@ export interface RequestConfig extends AxiosRequestConfig {
     skipRateLimit?: boolean;
     skipCircuitBreaker?: boolean;
     logRequest?: boolean;
+    operationType?: any;
     method?: string;
     url?: string;
     headers?: Record<string, any>;

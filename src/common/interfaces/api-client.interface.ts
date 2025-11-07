@@ -33,6 +33,7 @@ export interface LogRequestParams {
   requestBody?: any;
   userId?: string;
   integrationName?: string;
+  operationType?: any; // OperationType enum - imported from enums
 }
 
 export interface LogResponseParams {
@@ -57,6 +58,7 @@ export interface RequestConfig extends AxiosRequestConfig {
   skipRateLimit?: boolean;
   skipCircuitBreaker?: boolean;
   logRequest?: boolean;
+  operationType?: any; // OperationType enum - işlem kategorisi
   method?: string;
   url?: string;
   headers?: Record<string, any>;

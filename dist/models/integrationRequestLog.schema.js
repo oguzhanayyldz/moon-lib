@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createIntegrationRequestLogModel = createIntegrationRequestLogModel;
 const mongoose_1 = __importDefault(require("mongoose"));
 const common_1 = require("../common");
+const operation_type_enum_1 = require("../enums/operation-type.enum");
 const base_schema_1 = require("./base/base.schema");
 const integrationRequestLogSchemaDefinition = {
     integrationName: {
@@ -16,6 +17,12 @@ const integrationRequestLogSchemaDefinition = {
     userId: {
         type: String,
         required: true,
+        index: true
+    },
+    operationType: {
+        type: String,
+        required: false, // Eski kayıtlar için nullable
+        enum: Object.values(operation_type_enum_1.OperationType),
         index: true
     },
     method: {
@@ -41,6 +48,17 @@ const integrationRequestLogSchemaDefinition = {
     },
     responseBody: {
         type: mongoose_1.default.Schema.Types.Mixed
+    },
+    interpretedResponse: {
+        type: {
+            summary: { type: String, required: true },
+            success: { type: Boolean, required: true },
+            successCount: { type: Number, required: false },
+            failureCount: { type: Number, required: false },
+            details: { type: mongoose_1.default.Schema.Types.Mixed, required: false },
+            parsedAt: { type: Date, required: true }
+        },
+        required: false
     },
     errorMessage: {
         type: String
@@ -74,6 +92,9 @@ integrationRequestLogSchema.set('toObject', { virtuals: true });
 integrationRequestLogSchema.index({ integrationName: 1, userId: 1, requestTime: -1 });
 integrationRequestLogSchema.index({ userId: 1, requestTime: -1 });
 integrationRequestLogSchema.index({ integrationName: 1, requestTime: -1 });
+// OperationType için yeni index'ler
+integrationRequestLogSchema.index({ operationType: 1, userId: 1, requestTime: -1 });
+integrationRequestLogSchema.index({ operationType: 1, integrationName: 1, requestTime: -1 });
 function createIntegrationRequestLogModel(connection) {
     connection.model('IntegrationRequestLog', integrationRequestLogSchema);
 }

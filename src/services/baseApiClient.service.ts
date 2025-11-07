@@ -100,24 +100,24 @@ export abstract class BaseApiClient implements IApiClient {
   protected handleCustomError?(error: AxiosError): void;
 
   // Public API methods
-  async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  async get<T>(url: string, config?: RequestConfig): Promise<T> {
     return this.makeRequest<T>({ ...config, method: 'GET', url });
   }
 
-  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async post<T>(url: string, data?: any, config?: RequestConfig): Promise<T> {
     return this.makeRequest<T>({ ...config, method: 'POST', url, data });
   }
 
-  async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async put<T>(url: string, data?: any, config?: RequestConfig): Promise<T> {
     return this.makeRequest<T>({ ...config, method: 'PUT', url, data });
   }
 
-  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  async delete<T>(url: string, config?: RequestConfig): Promise<T> {
     return this.makeRequest<T>({ ...config, method: 'DELETE', url });
   }
 
   // GraphQL support method - can be overridden by child classes
-  async graphql<T>(query: string, variables?: any, config?: AxiosRequestConfig): Promise<T> {
+  async graphql<T>(query: string, variables?: any, config?: RequestConfig): Promise<T> {
     // Use custom GraphQL endpoint if implemented by child class
     const graphqlEndpoint = this.getGraphQLEndpoint ? this.getGraphQLEndpoint() : '/graphql';
     
@@ -530,7 +530,8 @@ export abstract class BaseApiClient implements IApiClient {
       requestHeaders: { ...this.getDefaultHeaders(), ...requestConfig.headers },
       requestBody: requestConfig.data,
       userId: this.config.userId || 'unknown',
-      integrationName: this.integrationName
+      integrationName: this.integrationName,
+      operationType: requestConfig.operationType // İşlem kategorisi
     });
   }
 

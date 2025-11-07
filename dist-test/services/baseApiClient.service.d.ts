@@ -8,15 +8,6 @@ interface AxiosError extends Error {
     config?: any;
     code?: string;
 }
-interface AxiosRequestConfig {
-    method?: string;
-    url?: string;
-    headers?: Record<string, any>;
-    data?: any;
-    timeout?: number;
-    baseURL?: string;
-    params?: any;
-}
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { IApiClient, RequestConfig } from '../common/interfaces/api-client.interface';
 import { BaseApiClientConfig, ApiRequestMetrics } from '../common/types/api-client.types';
@@ -39,11 +30,11 @@ export declare abstract class BaseApiClient implements IApiClient {
     abstract handleRateLimitError(error: AxiosError): Promise<void>;
     abstract shouldRetry(error: AxiosError): boolean;
     protected handleCustomError?(error: AxiosError): void;
-    get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
-    post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
-    put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
-    delete<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
-    graphql<T>(query: string, variables?: any, config?: AxiosRequestConfig): Promise<T>;
+    get<T>(url: string, config?: RequestConfig): Promise<T>;
+    post<T>(url: string, data?: any, config?: RequestConfig): Promise<T>;
+    put<T>(url: string, data?: any, config?: RequestConfig): Promise<T>;
+    delete<T>(url: string, config?: RequestConfig): Promise<T>;
+    graphql<T>(query: string, variables?: any, config?: RequestConfig): Promise<T>;
     protected processGraphQLResponse<T>(response: any, query?: string): T;
     protected applyResponseProcessing(response: any, context?: {
         isGraphQL?: boolean;

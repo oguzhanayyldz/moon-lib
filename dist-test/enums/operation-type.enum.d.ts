@@ -1,0 +1,29 @@
+/**
+ * Integration işlemlerinin türlerini belirten enum
+ * Log kayıtlarının kategorize edilmesi ve filtrelenmesi için kullanılır
+ */
+export declare enum OperationType {
+    SEND_PRODUCTS = "SEND_PRODUCTS",
+    FETCH_PRODUCTS = "FETCH_PRODUCTS",
+    UPDATE_PRODUCTS = "UPDATE_PRODUCTS",
+    DELETE_PRODUCTS = "DELETE_PRODUCTS",
+    CHECK_PRODUCT_STATUS = "CHECK_PRODUCT_STATUS",
+    GET_BATCH_STATUS = "GET_BATCH_STATUS",
+    CREATE_BATCH_REQUEST = "CREATE_BATCH_REQUEST",
+    GET_CATEGORIES = "GET_CATEGORIES",
+    GET_BRANDS = "GET_BRANDS",
+    GET_CATEGORY_ATTRIBUTES = "GET_CATEGORY_ATTRIBUTES",
+    CHECK_STOCK = "CHECK_STOCK",
+    UPDATE_STOCK = "UPDATE_STOCK",
+    SYNC_STOCK = "SYNC_STOCK",
+    UPDATE_STOCK_AND_PRICE = "UPDATE_STOCK_AND_PRICE",// Hem stok hem fiyat güncelleme (Trendyol için)
+    CREATE_ORDER = "CREATE_ORDER",
+    UPDATE_ORDER = "UPDATE_ORDER",
+    CANCEL_ORDER = "CANCEL_ORDER",
+    FETCH_ORDERS = "FETCH_ORDERS",
+    UPDATE_PRICES = "UPDATE_PRICES",
+    FETCH_PRICES = "FETCH_PRICES",
+    HEALTH_CHECK = "HEALTH_CHECK",
+    OTHER = "OTHER"
+}
+//# sourceMappingURL=operation-type.enum.d.ts.map

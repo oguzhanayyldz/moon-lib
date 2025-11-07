@@ -1,11 +1,14 @@
 import { IntegrationRequestLogAttrs, IntegrationRequestLogDoc, IntegrationRequestLogModel } from '../models/integrationRequestLog.schema';
 import { ResourceName } from '../common';
+import { OperationType } from '../enums/operation-type.enum';
+import { ResponseInterpreterFactory } from './response-interpreters/interpreter.factory';
 import { logger } from './logger.service';
 import mongoose from 'mongoose';
 
 export interface LogIntegrationRequestOptions {
     integrationName: ResourceName;
     userId: string;
+    operationType?: OperationType; // İşlem kategorisi
     method: string;
     endpoint: string;
     requestHeaders?: Record<string, any>;
@@ -47,6 +50,7 @@ export class IntegrationRequestLogService {
             const logData: IntegrationRequestLogAttrs = {
                 integrationName: options.integrationName,
                 userId: options.userId,
+                operationType: options.operationType,
                 method: options.method,
                 endpoint: options.endpoint,
                 requestHeaders: sanitizedHeaders,
@@ -115,6 +119,29 @@ export class IntegrationRequestLogService {
                 updateData.metadata = options.metadata;
             }
 
+            // Response interpretation: Yanıtı yorumla ve kaydet
+            if (logEntry.operationType && options.responseBody) {
+                try {
+                    const interpreter = ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
+                    if (interpreter) {
+                        const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
+                        if (interpretedResponse) {
+                            updateData.interpretedResponse = interpretedResponse;
+                            logger.debug('Response interpreted successfully', {
+                                logId,
+                                operationType: logEntry.operationType,
+                                summary: interpretedResponse.summary
+                            });
+                        }
+                    }
+                } catch (interpretError) {
+                    logger.warn('Failed to interpret response, continuing without interpretation', {
+                        logId,
+                        error: (interpretError as Error).message
+                    });
+                }
+            }
+
             await this.IntegrationRequestLogModel.findByIdAndUpdate(logId, updateData);
 
             logger.debug(`Integration response logged`, {
@@ -122,7 +149,8 @@ export class IntegrationRequestLogService {
                 responseStatus: options.responseStatus,
                 duration,
                 durationSource: options.duration ? 'caller' : 'calculated',
-                hasError: !!options.errorMessage
+                hasError: !!options.errorMessage,
+                hasInterpretation: !!updateData.interpretedResponse
             });
         } catch (error) {
             logger.error('Error logging integration response:', error);
@@ -141,9 +169,11 @@ export class IntegrationRequestLogService {
         sortField: string = 'requestTime',
         sortOrder: string = 'desc',
         filters?: {
+            operationType?: OperationType;
             method?: string;
             success?: boolean;
             search?: string;
+            advancedSearch?: string; // Body/params içinde arama
             startDate?: Date;
             endDate?: Date;
         }
@@ -153,6 +183,10 @@ export class IntegrationRequestLogService {
 
             if (integrationName) {
                 query.integrationName = integrationName;
+            }
+
+            if (filters?.operationType) {
+                query.operationType = filters.operationType;
             }
 
             if (filters?.method) {
@@ -177,6 +211,21 @@ export class IntegrationRequestLogService {
                     { endpoint: { $regex: filters.search, $options: 'i' } },
                     { 'metadata.description': { $regex: filters.search, $options: 'i' } }
                 ];
+            }
+
+            // Advanced search: requestBody ve responseBody içinde JSON arama
+            if (filters?.advancedSearch) {
+                // MongoDB $where ile nested search yapmak yerine,
+                // text-based search yapalım (performans için)
+                const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                query.$and = query.$and || [];
+                query.$and.push({
+                    $or: [
+                        { requestBody: searchRegex },
+                        { responseBody: searchRegex },
+                        { endpoint: searchRegex }
+                    ]
+                });
             }
 
             // Tarih aralığı filtresi
@@ -337,9 +386,11 @@ export class IntegrationRequestLogService {
         sortOrder: 'asc' | 'desc' = 'desc',
         filters?: {
             userId?: string;
+            operationType?: OperationType;
             method?: string;
             success?: boolean;
             search?: string;
+            advancedSearch?: string;
         }
     ) {
         try {
@@ -351,6 +402,10 @@ export class IntegrationRequestLogService {
 
             if (filters?.userId) {
                 query.userId = filters.userId;
+            }
+
+            if (filters?.operationType) {
+                query.operationType = filters.operationType;
             }
 
             if (filters?.method) {
@@ -375,6 +430,19 @@ export class IntegrationRequestLogService {
                     { endpoint: { $regex: filters.search, $options: 'i' } },
                     { 'metadata.description': { $regex: filters.search, $options: 'i' } }
                 ];
+            }
+
+            // Advanced search: requestBody ve responseBody içinde JSON arama
+            if (filters?.advancedSearch) {
+                const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                query.$and = query.$and || [];
+                query.$and.push({
+                    $or: [
+                        { requestBody: searchRegex },
+                        { responseBody: searchRegex },
+                        { endpoint: searchRegex }
+                    ]
+                });
             }
 
             const skip = (page - 1) * limit;

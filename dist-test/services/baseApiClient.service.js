@@ -398,7 +398,8 @@ class BaseApiClient {
             requestHeaders: Object.assign(Object.assign({}, this.getDefaultHeaders()), requestConfig.headers),
             requestBody: requestConfig.data,
             userId: this.config.userId || 'unknown',
-            integrationName: this.integrationName
+            integrationName: this.integrationName,
+            operationType: requestConfig.operationType // İşlem kategorisi
         });
     }
     async logResponse(logId, params) {
