@@ -85,7 +85,7 @@ export const logSubUserAction = (
     const entry = createAuditLogEntry(req, serviceName, operation, resourceType, resourceId, metadata);
     
     // Console'a yazdır (production'da database'e kaydedilebilir)
-    console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
+    // console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
 };
 
 /**
@@ -103,5 +103,5 @@ export const logSubUserError = (
     const entry = createErrorAuditLogEntry(req, serviceName, operation, resourceType, error, resourceId, metadata);
     
     // Console'a yazdır (production'da database'e kaydedilebilir)
-    console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
+    // console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
 };

@@ -37,5 +37,6 @@ export enum OperationType {
 
     // Diğer İşlemler
     HEALTH_CHECK = 'HEALTH_CHECK',
+    READ = 'READ',
     OTHER = 'OTHER'
 }
