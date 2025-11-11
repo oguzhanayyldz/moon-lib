@@ -39,7 +39,7 @@ exports.createErrorAuditLogEntry = createErrorAuditLogEntry;
 const logSubUserAction = (req, serviceName, operation, resourceType, resourceId, metadata) => {
     const entry = (0, exports.createAuditLogEntry)(req, serviceName, operation, resourceType, resourceId, metadata);
     // Console'a yazdır (production'da database'e kaydedilebilir)
-    console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
+    // console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
 };
 exports.logSubUserAction = logSubUserAction;
 /**
@@ -48,6 +48,6 @@ exports.logSubUserAction = logSubUserAction;
 const logSubUserError = (req, serviceName, operation, resourceType, error, resourceId, metadata) => {
     const entry = (0, exports.createErrorAuditLogEntry)(req, serviceName, operation, resourceType, error, resourceId, metadata);
     // Console'a yazdır (production'da database'e kaydedilebilir)
-    console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
+    // console.log('[AUDIT LOG]', JSON.stringify(entry, null, 2));
 };
 exports.logSubUserError = logSubUserError;

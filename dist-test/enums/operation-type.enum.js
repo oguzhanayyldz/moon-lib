@@ -35,6 +35,7 @@ var OperationType;
     OperationType["FETCH_PRICES"] = "FETCH_PRICES";
     // Diğer İşlemler
     OperationType["HEALTH_CHECK"] = "HEALTH_CHECK";
+    OperationType["READ"] = "READ";
     OperationType["OTHER"] = "OTHER";
 })(OperationType || (exports.OperationType = OperationType = {}));
 //# sourceMappingURL=operation-type.enum.js.map

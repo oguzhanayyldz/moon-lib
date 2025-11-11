@@ -24,6 +24,7 @@ export declare enum OperationType {
     UPDATE_PRICES = "UPDATE_PRICES",
     FETCH_PRICES = "FETCH_PRICES",
     HEALTH_CHECK = "HEALTH_CHECK",
+    READ = "READ",
     OTHER = "OTHER"
 }
 //# sourceMappingURL=operation-type.enum.d.ts.map
