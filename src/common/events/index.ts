@@ -30,6 +30,7 @@ export * from './types/product-status';
 export * from './types/product-type';
 export * from './types/order-type';
 export * from './types/order-status';
+export * from './types/order-status2';
 export * from './types/return-status';
 export * from './types/payment-type';
 export * from './import-images-from-urls-event';

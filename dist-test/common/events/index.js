@@ -46,6 +46,7 @@ __exportStar(require("./types/product-status"), exports);
 __exportStar(require("./types/product-type"), exports);
 __exportStar(require("./types/order-type"), exports);
 __exportStar(require("./types/order-status"), exports);
+__exportStar(require("./types/order-status2"), exports);
 __exportStar(require("./types/return-status"), exports);
 __exportStar(require("./types/payment-type"), exports);
 __exportStar(require("./import-images-from-urls-event"), exports);
