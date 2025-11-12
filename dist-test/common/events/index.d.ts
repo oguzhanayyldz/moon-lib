@@ -44,4 +44,5 @@ export * from './integration-created-event';
 export * from './user-integration-settings-event';
 export * from './order-integration-status-updated-event';
 export * from './product-matched-event';
+export * from './notification-created-event';
 //# sourceMappingURL=index.d.ts.map

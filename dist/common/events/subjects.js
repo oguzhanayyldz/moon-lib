@@ -39,4 +39,5 @@ var Subjects;
     Subjects["UserIntegrationSettings"] = "user.integration.settings";
     Subjects["OrderIntegrationStatusUpdated"] = "order:integration:status:updated";
     Subjects["ProductMatched"] = "order:product:matched";
+    Subjects["NotificationCreated"] = "notification:created";
 })(Subjects || (exports.Subjects = Subjects = {}));

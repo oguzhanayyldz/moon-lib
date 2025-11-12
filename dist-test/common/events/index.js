@@ -60,4 +60,5 @@ __exportStar(require("./integration-created-event"), exports);
 __exportStar(require("./user-integration-settings-event"), exports);
 __exportStar(require("./order-integration-status-updated-event"), exports);
 __exportStar(require("./product-matched-event"), exports);
+__exportStar(require("./notification-created-event"), exports);
 //# sourceMappingURL=index.js.map

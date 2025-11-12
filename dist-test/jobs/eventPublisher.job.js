@@ -40,6 +40,7 @@ const integrationCreated_publisher_1 = require("../events/publishers/integration
 const userIntegrationSettings_publisher_1 = require("../events/publishers/userIntegrationSettings.publisher");
 const orderIntegrationStatusUpdated_publisher_1 = require("../events/publishers/orderIntegrationStatusUpdated.publisher");
 const productMatched_publisher_1 = require("../events/publishers/productMatched.publisher");
+const notificationCreated_publisher_1 = require("../events/publishers/notificationCreated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -293,6 +294,10 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.ProductMatched:
                 await new productMatched_publisher_1.ProductMatchedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.NotificationCreated:
+                await new notificationCreated_publisher_1.NotificationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

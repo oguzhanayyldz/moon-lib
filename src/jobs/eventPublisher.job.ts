@@ -39,6 +39,7 @@ import { IntegrationCreatedPublisher } from '../events/publishers/integrationCre
 import { UserIntegrationSettingsPublisher } from '../events/publishers/userIntegrationSettings.publisher';
 import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/orderIntegrationStatusUpdated.publisher';
 import { ProductMatchedPublisher } from '../events/publishers/productMatched.publisher';
+import { NotificationCreatedPublisher } from '../events/publishers/notificationCreated.publisher';
 
 
 export class EventPublisherJob {
@@ -324,6 +325,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.ProductMatched:
                 await new ProductMatchedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.NotificationCreated:
+                await new NotificationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:
