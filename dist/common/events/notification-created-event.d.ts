@@ -5,8 +5,12 @@ export interface NotificationCreatedEvent {
         userId: string;
         type: "order" | "integration" | "stock" | "system" | "security";
         category: string;
-        title: string;
-        message: string;
+        title?: string;
+        message?: string;
+        titleKey?: string;
+        titleParams?: Record<string, any>;
+        messageKey?: string;
+        messageParams?: Record<string, any>;
         metadata?: {
             orderId?: string;
             integrationId?: string;

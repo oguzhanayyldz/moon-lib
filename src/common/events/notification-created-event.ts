@@ -6,8 +6,14 @@ export interface NotificationCreatedEvent {
         userId: string;
         type: "order" | "integration" | "stock" | "system" | "security";
         category: string;
-        title: string;
-        message: string;
+        // Legacy fields (optional for backward compatibility)
+        title?: string;
+        message?: string;
+        // Translation key fields (preferred method)
+        titleKey?: string;
+        titleParams?: Record<string, any>;
+        messageKey?: string;
+        messageParams?: Record<string, any>;
         metadata?: {
             orderId?: string;
             integrationId?: string;
