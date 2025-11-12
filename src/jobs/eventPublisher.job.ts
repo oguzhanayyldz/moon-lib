@@ -40,6 +40,7 @@ import { UserIntegrationSettingsPublisher } from '../events/publishers/userInteg
 import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/orderIntegrationStatusUpdated.publisher';
 import { ProductMatchedPublisher } from '../events/publishers/productMatched.publisher';
 import { NotificationCreatedPublisher } from '../events/publishers/notificationCreated.publisher';
+import { OrderProductStockUpdatedPublisher } from '../events/publishers/orderProductUpdated.publisher';
 
 
 export class EventPublisherJob {
@@ -329,6 +330,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.NotificationCreated:
                 await new NotificationCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.OrderProductUpdated:
+                await new OrderProductStockUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

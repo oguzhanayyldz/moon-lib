@@ -21,6 +21,7 @@ var Subjects;
     Subjects["StockUpdated"] = "stock:updated";
     Subjects["OrderCreated"] = "order:created";
     Subjects["OrderUpdated"] = "order:updated";
+    Subjects["OrderProductUpdated"] = "order:product:updated";
     Subjects["OrderStatusUpdated"] = "order:status:updated";
     Subjects["OrderIntegrationCreated"] = "order:integration:created";
     Subjects["IntegrationCommand"] = "integration:command";

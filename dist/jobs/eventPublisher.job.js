@@ -50,6 +50,7 @@ const userIntegrationSettings_publisher_1 = require("../events/publishers/userIn
 const orderIntegrationStatusUpdated_publisher_1 = require("../events/publishers/orderIntegrationStatusUpdated.publisher");
 const productMatched_publisher_1 = require("../events/publishers/productMatched.publisher");
 const notificationCreated_publisher_1 = require("../events/publishers/notificationCreated.publisher");
+const orderProductUpdated_publisher_1 = require("../events/publishers/orderProductUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -314,6 +315,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.NotificationCreated:
                     yield new notificationCreated_publisher_1.NotificationCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.OrderProductUpdated:
+                    yield new orderProductUpdated_publisher_1.OrderProductStockUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

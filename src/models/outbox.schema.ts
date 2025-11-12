@@ -38,7 +38,8 @@ import {
     UserIntegrationSettingsEvent,
     OrderIntegrationStatusUpdatedEvent,
     ProductMatchedEvent,
-    NotificationCreatedEvent
+    NotificationCreatedEvent,
+    OrderProductStockUpdatedEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -66,6 +67,7 @@ interface EventPayloadMap {
     [Subjects.StockUpdated]: StockUpdatedEvent['data'];
     [Subjects.OrderCreated]: OrderCreatedEvent['data'];
     [Subjects.OrderUpdated]: OrderUpdatedEvent['data'];
+    [Subjects.OrderProductUpdated]: OrderProductStockUpdatedEvent['data'];
     [Subjects.EntityDeleted]: EntityDeletedEvent['data'];
     [Subjects.OrderStatusUpdated]: OrderStatusUpdatedEvent['data'];
     [Subjects.ImportImagesFromUrls]: ImportImagesFromUrlsEvent['data'];

@@ -36,6 +36,7 @@ __exportStar(require("./stock-created-event"), exports);
 __exportStar(require("./stock-updated-event"), exports);
 __exportStar(require("./order-created-event"), exports);
 __exportStar(require("./order-updated-event"), exports);
+__exportStar(require("./order-product-updated-event"), exports);
 __exportStar(require("./order-status-updated-event"), exports);
 __exportStar(require("./order-integration-created-event"), exports);
 __exportStar(require("./integration-command-event"), exports);

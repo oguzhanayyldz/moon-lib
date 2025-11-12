@@ -20,6 +20,7 @@ export * from './stock-created-event';
 export * from './stock-updated-event';
 export * from './order-created-event';
 export * from './order-updated-event';
+export * from './order-product-updated-event';
 export * from './order-status-updated-event';
 export * from './order-integration-created-event';
 export * from './integration-command-event';

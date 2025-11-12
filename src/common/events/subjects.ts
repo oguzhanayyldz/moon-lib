@@ -17,6 +17,7 @@ export enum Subjects {
     StockUpdated = "stock:updated",
     OrderCreated = "order:created",
     OrderUpdated = "order:updated",
+    OrderProductUpdated = "order:product:updated",
     OrderStatusUpdated = "order:status:updated",
     OrderIntegrationCreated = "order:integration:created",
     IntegrationCommand = "integration:command",

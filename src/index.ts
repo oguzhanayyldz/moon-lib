@@ -96,6 +96,7 @@ export * from './events/publishers/stockCreated.publisher';
 export * from './events/publishers/stockUpdated.publisher';
 export * from './events/publishers/orderCreated.publisher';
 export * from './events/publishers/orderUpdated.publisher';
+export * from './events/publishers/orderProductUpdated.publisher';
 export * from './events/publishers/orderStatusUpdated.publisher';
 export * from './events/retryableListener';
 export * from './events/listeners/BaseModernEntityDeletedListener';
