@@ -37,4 +37,6 @@ export enum Subjects {
     OrderIntegrationStatusUpdated = "order:integration:status:updated",
     ProductMatched = "order:product:matched",
     NotificationCreated = "notification:created",
+    EntityVersionUpdated = "entity:version-updated",
+    SyncRequested = "sync:requested",
 }

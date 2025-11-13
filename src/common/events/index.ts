@@ -46,4 +46,6 @@ export * from './integration-created-event';
 export * from './user-integration-settings-event';
 export * from './order-integration-status-updated-event';
 export * from './product-matched-event';
-export * from './notification-created-event'
+export * from './notification-created-event';
+export * from './entity-version-updated-event';
+export * from './sync-requested-event';

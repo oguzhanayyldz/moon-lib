@@ -41,5 +41,7 @@ var Subjects;
     Subjects["OrderIntegrationStatusUpdated"] = "order:integration:status:updated";
     Subjects["ProductMatched"] = "order:product:matched";
     Subjects["NotificationCreated"] = "notification:created";
+    Subjects["EntityVersionUpdated"] = "entity:version-updated";
+    Subjects["SyncRequested"] = "sync:requested";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

@@ -41,6 +41,8 @@ import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/ord
 import { ProductMatchedPublisher } from '../events/publishers/productMatched.publisher';
 import { NotificationCreatedPublisher } from '../events/publishers/notificationCreated.publisher';
 import { OrderProductStockUpdatedPublisher } from '../events/publishers/orderProductUpdated.publisher';
+import { EntityVersionUpdatedPublisher } from '../events/publishers/entityVersionUpdated.publisher';
+import { SyncRequestedPublisher } from '../events/publishers/syncRequested.publisher';
 
 
 export class EventPublisherJob {
@@ -334,6 +336,14 @@ export class EventPublisherJob {
                 break;
             case Subjects.OrderProductUpdated:
                 await new OrderProductStockUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.EntityVersionUpdated:
+                await new EntityVersionUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.SyncRequested:
+                await new SyncRequestedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

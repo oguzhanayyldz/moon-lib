@@ -116,6 +116,8 @@ export * from './events/publishers/integrationCreated.publisher';
 export * from './events/publishers/userIntegrationSettings.publisher';
 export * from './events/publishers/orderIntegrationStatusUpdated.publisher';
 export * from './events/publishers/productMatched.publisher';
+export * from './events/publishers/entityVersionUpdated.publisher';
+export * from './events/publishers/syncRequested.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

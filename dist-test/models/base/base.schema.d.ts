@@ -1,5 +1,6 @@
 import mongoose, { Document, Model } from "mongoose";
 import { SortType } from '../../common';
+import { EntityType, ServiceName } from '../../common/types';
 export interface BaseAttrs {
     id?: string;
     _id?: string;
@@ -42,6 +43,18 @@ export type MongoQuery<T> = {
         $lte?: any;
     };
 } & Record<string, any>;
+/**
+ * BaseSchema Options
+ * Optional version tracking configuration
+ */
+export interface BaseSchemaOptions {
+    enableVersionTracking?: boolean;
+    versionTrackingConfig?: {
+        entityType: EntityType;
+        serviceName: ServiceName;
+        includeMetadata?: boolean;
+    };
+}
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
     build(attrs: A): T;
     findByCustom(id: string): Promise<T | null>;
@@ -56,7 +69,7 @@ export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model
         version: number;
     }): Promise<T | null>;
 }
-export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefinition): mongoose.Schema<any, mongoose.Model<any, any, any, any, any, any>, {}, {}, {}, {}, {
+export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefinition, options?: BaseSchemaOptions): mongoose.Schema<any, mongoose.Model<any, any, any, any, any, any>, {}, {}, {}, {}, {
     toJSON: {
         transform(doc: mongoose.Document<unknown, {}, mongoose.FlatRecord<{
             creationDate: Date;

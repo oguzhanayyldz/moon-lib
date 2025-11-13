@@ -39,7 +39,9 @@ import {
     OrderIntegrationStatusUpdatedEvent,
     ProductMatchedEvent,
     NotificationCreatedEvent,
-    OrderProductStockUpdatedEvent
+    OrderProductStockUpdatedEvent,
+    EntityVersionUpdatedEvent,
+    SyncRequestedEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -82,6 +84,8 @@ interface EventPayloadMap {
     [Subjects.OrderIntegrationStatusUpdated]: OrderIntegrationStatusUpdatedEvent['data'];
     [Subjects.ProductMatched]: ProductMatchedEvent['data'];
     [Subjects.NotificationCreated]: NotificationCreatedEvent['data'];
+    [Subjects.EntityVersionUpdated]: EntityVersionUpdatedEvent['data'];
+    [Subjects.SyncRequested]: SyncRequestedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

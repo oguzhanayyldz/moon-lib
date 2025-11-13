@@ -36,5 +36,7 @@ export declare enum Subjects {
     UserIntegrationSettings = "user.integration.settings",
     OrderIntegrationStatusUpdated = "order:integration:status:updated",
     ProductMatched = "order:product:matched",
-    NotificationCreated = "notification:created"
+    NotificationCreated = "notification:created",
+    EntityVersionUpdated = "entity:version-updated",
+    SyncRequested = "sync:requested"
 }

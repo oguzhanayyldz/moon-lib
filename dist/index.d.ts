@@ -83,6 +83,8 @@ export * from './events/publishers/integrationCreated.publisher';
 export * from './events/publishers/userIntegrationSettings.publisher';
 export * from './events/publishers/orderIntegrationStatusUpdated.publisher';
 export * from './events/publishers/productMatched.publisher';
+export * from './events/publishers/entityVersionUpdated.publisher';
+export * from './events/publishers/syncRequested.publisher';
 export * from './common/errors';
 export * from './common/events';
 export * from './common/interfaces';

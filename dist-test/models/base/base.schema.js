@@ -38,7 +38,9 @@ const mongoose_1 = __importStar(require("mongoose"));
 const mongoose_update_if_current_1 = require("mongoose-update-if-current");
 const uuid_1 = require("uuid");
 const common_1 = require("../../common");
-function createBaseSchema(schemaDefinition = {}) {
+const events_1 = require("../../common/events");
+const logger_service_1 = require("../../services/logger.service");
+function createBaseSchema(schemaDefinition = {}, options = {}) {
     const baseSchema = new mongoose_1.Schema(Object.assign({ uuid: { type: String }, creationDate: {
             type: Date,
             default: Date.now,
@@ -159,6 +161,68 @@ function createBaseSchema(schemaDefinition = {}) {
         this.updatedOn = new Date();
         next();
     });
+    // 🆕 VERSION TRACKING POST-SAVE HOOK (OPTIONAL)
+    if (options.enableVersionTracking && options.versionTrackingConfig) {
+        const publishVersionEvent = async (doc, Model) => {
+            var _a, _b, _c;
+            try {
+                const { entityType, serviceName, includeMetadata } = options.versionTrackingConfig;
+                const previousVersion = doc.version - 1;
+                // Outbox model'ini al
+                const Outbox = Model.db.model('Outbox');
+                // EntityVersionUpdated event'ini Outbox'a ekle
+                await Outbox.create({
+                    eventType: events_1.Subjects.EntityVersionUpdated,
+                    payload: {
+                        entityType,
+                        entityId: doc.id || ((_a = doc._id) === null || _a === void 0 ? void 0 : _a.toString()),
+                        service: serviceName,
+                        version: doc.version,
+                        previousVersion,
+                        timestamp: new Date(),
+                        userId: ((_c = (_b = doc.user) === null || _b === void 0 ? void 0 : _b.toString) === null || _c === void 0 ? void 0 : _c.call(_b)) || doc.user,
+                        metadata: includeMetadata ? {
+                            modelName: Model.modelName
+                        } : undefined
+                    },
+                    status: 'pending'
+                });
+                logger_service_1.logger.debug(`✅ Version tracking: ${entityType}/${doc.id || doc._id} v${doc.version} → Outbox (previousVersion: ${previousVersion})`);
+            }
+            catch (error) {
+                logger_service_1.logger.error('❌ Version tracking publish error:', error);
+                // Hata logla ama işlemi engelleme
+            }
+        };
+        // POST-SAVE HOOK (create ve update için)
+        baseSchema.post('save', async function (doc, next) {
+            try {
+                const Model = this.constructor;
+                await publishVersionEvent(doc, Model);
+                next();
+            }
+            catch (error) {
+                logger_service_1.logger.error('❌ Version tracking (save) hook error:', error);
+                next();
+            }
+        });
+        // POST-FINDONEANDUPDATE HOOK (updateWithRetry için)
+        baseSchema.post('findOneAndUpdate', async function (doc, next) {
+            try {
+                if (!doc) {
+                    next();
+                    return;
+                }
+                const Model = this.constructor;
+                await publishVersionEvent(doc, Model);
+                next();
+            }
+            catch (error) {
+                logger_service_1.logger.error('❌ Version tracking (findOneAndUpdate) hook error:', error);
+                next();
+            }
+        });
+    }
     baseSchema.pre('findOneAndUpdate', function (next) {
         const filter = this.getQuery();
         this.updateOne(filter, { $set: { updatedOn: new Date() } });

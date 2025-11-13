@@ -5,6 +5,7 @@ export * from './credential-type';
 export * from './credential-group';
 export * from './currency-code';
 export * from './currency-symbol';
+export * from './entity.types';
 export * from './fix-status';
 export * from './integration-status';
 export * from './integration-type';

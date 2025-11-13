@@ -21,6 +21,7 @@ __exportStar(require("./credential-type"), exports);
 __exportStar(require("./credential-group"), exports);
 __exportStar(require("./currency-code"), exports);
 __exportStar(require("./currency-symbol"), exports);
+__exportStar(require("./entity.types"), exports);
 __exportStar(require("./fix-status"), exports);
 __exportStar(require("./integration-status"), exports);
 __exportStar(require("./integration-type"), exports);

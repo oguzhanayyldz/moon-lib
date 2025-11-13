@@ -1,0 +1,28 @@
+/**
+ * Entity Types
+ * Microservices'lerde kullanılan entity tipleri
+ */
+export enum EntityType {
+  Product = 'product',
+  Combination = 'combination',
+  PackageProductLink = 'package-product-link',
+  RelationProductLink = 'relation-product-link',
+  Order = 'order',
+  OrderProduct = 'order-product',
+  Stock = 'stock',
+  User = 'user',
+  Integration = 'integration',
+}
+
+/**
+ * Service Names
+ * Microservices isimleri
+ */
+export enum ServiceName {
+  Products = 'products',
+  Orders = 'orders',
+  Inventory = 'inventory',
+  Pricing = 'pricing',
+  Catalog = 'catalog',
+  Sync = 'sync',
+}

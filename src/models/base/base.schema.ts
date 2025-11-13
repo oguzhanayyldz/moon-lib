@@ -3,6 +3,9 @@ import { updateIfCurrentPlugin } from "mongoose-update-if-current";
 import { v4 as uuidv4 } from 'uuid';
 import moment from "moment-timezone";
 import { generateRandomString, SortType, getRefDataId } from '../../common';
+import { EntityType, ServiceName } from '../../common/types';
+import { Subjects } from '../../common/events';
+import { logger } from '../../services/logger.service';
 
 export interface BaseAttrs {
     id?: string;
@@ -39,8 +42,8 @@ export interface EmitReturnConfig {
 }
 
 export type MongoQuery<T> = {
-    [P in keyof T]?: T[P] | { 
-        $in?: any[]; 
+    [P in keyof T]?: T[P] | {
+        $in?: any[];
         $nin?: any[];
         $eq?: any;
         $gt?: any;
@@ -51,6 +54,19 @@ export type MongoQuery<T> = {
     };
 } & Record<string, any>;
 
+/**
+ * BaseSchema Options
+ * Optional version tracking configuration
+ */
+export interface BaseSchemaOptions {
+    enableVersionTracking?: boolean;
+    versionTrackingConfig?: {
+        entityType: EntityType;
+        serviceName: ServiceName;
+        includeMetadata?: boolean;
+    };
+}
+
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
     build(attrs: A): T;
     findByCustom(id: string): Promise<T | null>;
@@ -59,7 +75,10 @@ export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model
     findByEvent(event: { id: string, version: number }): Promise<T | null>;
 }
 
-export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {}) {
+export function createBaseSchema(
+    schemaDefinition: mongoose.SchemaDefinition = {},
+    options: BaseSchemaOptions = {}
+) {
     const baseSchema = new Schema({
         uuid: { type: String },
         creationDate: {
@@ -209,6 +228,70 @@ export function createBaseSchema(schemaDefinition: mongoose.SchemaDefinition = {
         this.updatedOn = new Date();
         next();
     });
+
+    // 🆕 VERSION TRACKING POST-SAVE HOOK (OPTIONAL)
+    if (options.enableVersionTracking && options.versionTrackingConfig) {
+        const publishVersionEvent = async (doc: any, Model: any) => {
+            try {
+                const { entityType, serviceName, includeMetadata } = options.versionTrackingConfig!;
+                const previousVersion = doc.version - 1;
+
+                // Outbox model'ini al
+                const Outbox = Model.db.model('Outbox');
+
+                // EntityVersionUpdated event'ini Outbox'a ekle
+                await Outbox.create({
+                    eventType: Subjects.EntityVersionUpdated,
+                    payload: {
+                        entityType,
+                        entityId: doc.id || doc._id?.toString(),
+                        service: serviceName,
+                        version: doc.version,
+                        previousVersion,
+                        timestamp: new Date(),
+                        userId: (doc as any).user?.toString?.() || (doc as any).user,
+                        metadata: includeMetadata ? {
+                            modelName: Model.modelName
+                        } : undefined
+                    },
+                    status: 'pending'
+                });
+
+                logger.debug(`✅ Version tracking: ${entityType}/${doc.id || doc._id} v${doc.version} → Outbox (previousVersion: ${previousVersion})`);
+            } catch (error) {
+                logger.error('❌ Version tracking publish error:', error);
+                // Hata logla ama işlemi engelleme
+            }
+        };
+
+        // POST-SAVE HOOK (create ve update için)
+        baseSchema.post<BaseDoc>('save', async function(doc, next) {
+            try {
+                const Model = this.constructor as any;
+                await publishVersionEvent(doc, Model);
+                next();
+            } catch (error) {
+                logger.error('❌ Version tracking (save) hook error:', error);
+                next();
+            }
+        });
+
+        // POST-FINDONEANDUPDATE HOOK (updateWithRetry için)
+        baseSchema.post<BaseDoc>('findOneAndUpdate', async function(doc: any, next: any) {
+            try {
+                if (!doc) {
+                    next();
+                    return;
+                }
+                const Model = this.constructor as any;
+                await publishVersionEvent(doc, Model);
+                next();
+            } catch (error) {
+                logger.error('❌ Version tracking (findOneAndUpdate) hook error:', error);
+                next();
+            }
+        });
+    }
 
     baseSchema.pre<BaseDoc>('findOneAndUpdate', function (next) {
         const filter = (this as any).getQuery();

@@ -1,0 +1,33 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ServiceName = exports.EntityType = void 0;
+/**
+ * Entity Types
+ * Microservices'lerde kullanılan entity tipleri
+ */
+var EntityType;
+(function (EntityType) {
+    EntityType["Product"] = "product";
+    EntityType["Combination"] = "combination";
+    EntityType["PackageProductLink"] = "package-product-link";
+    EntityType["RelationProductLink"] = "relation-product-link";
+    EntityType["Order"] = "order";
+    EntityType["OrderProduct"] = "order-product";
+    EntityType["Stock"] = "stock";
+    EntityType["User"] = "user";
+    EntityType["Integration"] = "integration";
+})(EntityType || (exports.EntityType = EntityType = {}));
+/**
+ * Service Names
+ * Microservices isimleri
+ */
+var ServiceName;
+(function (ServiceName) {
+    ServiceName["Products"] = "products";
+    ServiceName["Orders"] = "orders";
+    ServiceName["Inventory"] = "inventory";
+    ServiceName["Pricing"] = "pricing";
+    ServiceName["Catalog"] = "catalog";
+    ServiceName["Sync"] = "sync";
+})(ServiceName || (exports.ServiceName = ServiceName = {}));
+//# sourceMappingURL=entity.types.js.map
