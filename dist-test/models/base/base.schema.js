@@ -163,19 +163,24 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
     });
     // 🆕 VERSION TRACKING POST-SAVE HOOK (OPTIONAL)
     if (options.enableVersionTracking && options.versionTrackingConfig) {
+        logger_service_1.logger.info(`🔧 [VERSION-TRACKING-INIT] Enabled for ${options.versionTrackingConfig.entityType} in ${options.versionTrackingConfig.serviceName}`);
         const publishVersionEvent = async (doc, Model) => {
             var _a, _b, _c;
+            const { entityType, serviceName, includeMetadata } = options.versionTrackingConfig;
+            const docId = doc.id || ((_a = doc._id) === null || _a === void 0 ? void 0 : _a.toString());
+            logger_service_1.logger.info(`🚀 [VERSION-TRACKING-PUBLISH] START: ${entityType}/${docId} v${doc.version} (service: ${serviceName})`);
             try {
-                const { entityType, serviceName, includeMetadata } = options.versionTrackingConfig;
                 const previousVersion = doc.version - 1;
                 // Outbox model'ini al
+                logger_service_1.logger.info(`📦 [VERSION-TRACKING-OUTBOX] Retrieving Outbox model from db...`);
                 const Outbox = Model.db.model('Outbox');
+                logger_service_1.logger.info(`✅ [VERSION-TRACKING-OUTBOX] Outbox model retrieved successfully`);
                 // EntityVersionUpdated event'ini Outbox'a ekle
-                await Outbox.create({
+                const outboxPayload = {
                     eventType: events_1.Subjects.EntityVersionUpdated,
                     payload: {
                         entityType,
-                        entityId: doc.id || ((_a = doc._id) === null || _a === void 0 ? void 0 : _a.toString()),
+                        entityId: docId,
                         service: serviceName,
                         version: doc.version,
                         previousVersion,
@@ -186,42 +191,64 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                         } : undefined
                     },
                     status: 'pending'
+                };
+                logger_service_1.logger.info(`💾 [VERSION-TRACKING-CREATE] Creating Outbox entry...`, {
+                    entityType,
+                    entityId: docId,
+                    version: doc.version
                 });
-                logger_service_1.logger.debug(`✅ Version tracking: ${entityType}/${doc.id || doc._id} v${doc.version} → Outbox (previousVersion: ${previousVersion})`);
+                await Outbox.create(outboxPayload);
+                logger_service_1.logger.info(`✅ [VERSION-TRACKING-SUCCESS] Version tracking: ${entityType}/${docId} v${doc.version} → Outbox (previousVersion: ${previousVersion})`);
             }
             catch (error) {
-                logger_service_1.logger.error('❌ Version tracking publish error:', error);
+                logger_service_1.logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}:`, error);
+                logger_service_1.logger.error(`❌ [VERSION-TRACKING-ERROR-DETAIL]`, {
+                    entityType,
+                    entityId: docId,
+                    version: doc.version,
+                    service: serviceName,
+                    errorMessage: error.message,
+                    errorStack: error.stack
+                });
                 // Hata logla ama işlemi engelleme
             }
         };
         // POST-SAVE HOOK (create ve update için)
         baseSchema.post('save', async function (doc, next) {
+            logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('save') TRIGGERED for doc: ${doc.id || doc._id}`);
             try {
                 const Model = this.constructor;
+                logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}`);
                 await publishVersionEvent(doc, Model);
+                logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('save') completed successfully`);
                 next();
             }
             catch (error) {
-                logger_service_1.logger.error('❌ Version tracking (save) hook error:', error);
+                logger_service_1.logger.error('❌ [VERSION-TRACKING-HOOK-ERROR] post(save) hook error:', error);
                 next();
             }
         });
         // POST-FINDONEANDUPDATE HOOK (updateWithRetry için)
         baseSchema.post('findOneAndUpdate', async function (doc, next) {
+            logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('findOneAndUpdate') TRIGGERED for doc: ${doc ? (doc.id || doc._id) : 'null'}`);
             try {
                 if (!doc) {
+                    logger_service_1.logger.warn(`⚠️ [VERSION-TRACKING-HOOK] post('findOneAndUpdate') - doc is null, skipping`);
                     next();
                     return;
                 }
                 const Model = this.constructor;
+                logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}`);
                 await publishVersionEvent(doc, Model);
+                logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('findOneAndUpdate') completed successfully`);
                 next();
             }
             catch (error) {
-                logger_service_1.logger.error('❌ Version tracking (findOneAndUpdate) hook error:', error);
+                logger_service_1.logger.error('❌ [VERSION-TRACKING-HOOK-ERROR] post(findOneAndUpdate) hook error:', error);
                 next();
             }
         });
+        logger_service_1.logger.info(`✅ [VERSION-TRACKING-INIT] Hooks registered successfully for ${options.versionTrackingConfig.entityType} in ${options.versionTrackingConfig.serviceName}`);
     }
     baseSchema.pre('findOneAndUpdate', function (next) {
         const filter = this.getQuery();
