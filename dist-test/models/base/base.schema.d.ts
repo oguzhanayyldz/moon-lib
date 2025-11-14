@@ -53,6 +53,8 @@ export interface BaseSchemaOptions {
         entityType: EntityType;
         serviceName: ServiceName;
         includeMetadata?: boolean;
+        parentField?: string;
+        parentEntityType?: EntityType;
     };
 }
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {

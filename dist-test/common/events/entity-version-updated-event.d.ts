@@ -15,6 +15,10 @@ export interface EntityVersionUpdatedEvent {
         timestamp: Date;
         userId?: string;
         metadata?: Record<string, any>;
+        parentEntity?: {
+            entityType: EntityType;
+            entityId: string;
+        };
     };
 }
 //# sourceMappingURL=entity-version-updated-event.d.ts.map

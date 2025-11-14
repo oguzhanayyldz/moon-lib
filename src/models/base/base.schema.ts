@@ -64,6 +64,8 @@ export interface BaseSchemaOptions {
         entityType: EntityType;
         serviceName: ServiceName;
         includeMetadata?: boolean;
+        parentField?: string;  // Child entity ise parent field adı (ör: 'product', 'package')
+        parentEntityType?: EntityType;  // Parent entity tipi (ör: EntityType.Product)
     };
 }
 
@@ -234,13 +236,26 @@ export function createBaseSchema(
         logger.info(`🔧 [VERSION-TRACKING-INIT] Enabled for ${options.versionTrackingConfig.entityType} in ${options.versionTrackingConfig.serviceName}`);
 
         const publishVersionEvent = async (doc: any, Model: any) => {
-            const { entityType, serviceName, includeMetadata } = options.versionTrackingConfig!;
+            const { entityType, serviceName, includeMetadata, parentField, parentEntityType } = options.versionTrackingConfig!;
             const docId = doc.id || doc._id?.toString();
 
             logger.info(`🚀 [VERSION-TRACKING-PUBLISH] START: ${entityType}/${docId} v${doc.version} (service: ${serviceName})`);
 
             try {
                 const previousVersion = doc.version - 1;
+
+                // Parent entity bilgisini çıkar (child entity ise)
+                let parentEntity: { entityType: EntityType; entityId: string } | undefined;
+                if (parentField && parentEntityType && doc[parentField]) {
+                    const parentId = doc[parentField]?.toString?.() || doc[parentField];
+                    if (parentId) {
+                        parentEntity = {
+                            entityType: parentEntityType,
+                            entityId: parentId
+                        };
+                        logger.info(`👨‍👦 [VERSION-TRACKING-PARENT] Parent entity detected: ${parentEntityType}/${parentId}`);
+                    }
+                }
 
                 // Outbox model'ini al
                 logger.info(`📦 [VERSION-TRACKING-OUTBOX] Retrieving Outbox model from db...`);
@@ -260,7 +275,8 @@ export function createBaseSchema(
                         userId: (doc as any).user?.toString?.() || (doc as any).user,
                         metadata: includeMetadata ? {
                             modelName: Model.modelName
-                        } : undefined
+                        } : undefined,
+                        parentEntity  // ← YENİ: Parent entity bilgisi
                     },
                     status: 'pending'
                 };

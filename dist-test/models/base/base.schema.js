@@ -165,12 +165,24 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
     if (options.enableVersionTracking && options.versionTrackingConfig) {
         logger_service_1.logger.info(`🔧 [VERSION-TRACKING-INIT] Enabled for ${options.versionTrackingConfig.entityType} in ${options.versionTrackingConfig.serviceName}`);
         const publishVersionEvent = async (doc, Model) => {
-            var _a, _b, _c;
-            const { entityType, serviceName, includeMetadata } = options.versionTrackingConfig;
+            var _a, _b, _c, _d, _e;
+            const { entityType, serviceName, includeMetadata, parentField, parentEntityType } = options.versionTrackingConfig;
             const docId = doc.id || ((_a = doc._id) === null || _a === void 0 ? void 0 : _a.toString());
             logger_service_1.logger.info(`🚀 [VERSION-TRACKING-PUBLISH] START: ${entityType}/${docId} v${doc.version} (service: ${serviceName})`);
             try {
                 const previousVersion = doc.version - 1;
+                // Parent entity bilgisini çıkar (child entity ise)
+                let parentEntity;
+                if (parentField && parentEntityType && doc[parentField]) {
+                    const parentId = ((_c = (_b = doc[parentField]) === null || _b === void 0 ? void 0 : _b.toString) === null || _c === void 0 ? void 0 : _c.call(_b)) || doc[parentField];
+                    if (parentId) {
+                        parentEntity = {
+                            entityType: parentEntityType,
+                            entityId: parentId
+                        };
+                        logger_service_1.logger.info(`👨‍👦 [VERSION-TRACKING-PARENT] Parent entity detected: ${parentEntityType}/${parentId}`);
+                    }
+                }
                 // Outbox model'ini al
                 logger_service_1.logger.info(`📦 [VERSION-TRACKING-OUTBOX] Retrieving Outbox model from db...`);
                 const Outbox = Model.db.model('Outbox');
@@ -185,10 +197,11 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                         version: doc.version,
                         previousVersion,
                         timestamp: new Date(),
-                        userId: ((_c = (_b = doc.user) === null || _b === void 0 ? void 0 : _b.toString) === null || _c === void 0 ? void 0 : _c.call(_b)) || doc.user,
+                        userId: ((_e = (_d = doc.user) === null || _d === void 0 ? void 0 : _d.toString) === null || _e === void 0 ? void 0 : _e.call(_d)) || doc.user,
                         metadata: includeMetadata ? {
                             modelName: Model.modelName
-                        } : undefined
+                        } : undefined,
+                        parentEntity // ← YENİ: Parent entity bilgisi
                     },
                     status: 'pending'
                 };

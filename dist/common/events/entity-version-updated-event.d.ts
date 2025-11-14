@@ -15,5 +15,9 @@ export interface EntityVersionUpdatedEvent {
         timestamp: Date;
         userId?: string;
         metadata?: Record<string, any>;
+        parentEntity?: {
+            entityType: EntityType;
+            entityId: string;
+        };
     };
 }

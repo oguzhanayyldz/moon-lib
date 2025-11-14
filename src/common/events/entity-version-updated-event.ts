@@ -16,5 +16,9 @@ export interface EntityVersionUpdatedEvent {
     timestamp: Date;
     userId?: string;
     metadata?: Record<string, any>;
+    parentEntity?: {  // Child entity ise parent bilgisi (ör: Combination → Product)
+      entityType: EntityType;
+      entityId: string;
+    };
   };
 }
