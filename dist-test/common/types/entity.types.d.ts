@@ -9,6 +9,8 @@ export declare enum EntityType {
     RelationProductLink = "relation-product-link",
     Order = "order",
     OrderProduct = "order-product",
+    Customer = "customer",
+    CustomerAddress = "customer-address",
     Stock = "stock",
     User = "user",
     Integration = "integration"

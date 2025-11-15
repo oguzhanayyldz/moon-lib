@@ -78,6 +78,11 @@ export declare class OptimisticLockingUtil {
     */
     static updateWithRetry<T>(Model: any, id: string, updateFields: any, options?: any, operationName?: string, session?: ClientSession): Promise<T>;
     /**
+     * updateWithRetry için EntityVersionUpdated event publish eder
+     * @private
+     */
+    private static publishVersionEventForUpdate;
+    /**
     * Context-aware updateWithRetry: Request object'ten session algılama
     *
     * @static

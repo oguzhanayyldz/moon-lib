@@ -42,6 +42,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.VERSION_TRACKING_CONFIGS = void 0;
 exports.createBaseSchema = createBaseSchema;
 const mongoose_1 = __importStar(require("mongoose"));
 const mongoose_update_if_current_1 = require("mongoose-update-if-current");
@@ -49,6 +50,9 @@ const uuid_1 = require("uuid");
 const common_1 = require("../../common");
 const events_1 = require("../../common/events");
 const logger_service_1 = require("../../services/logger.service");
+// ✅ Global Map: Model isimlerine göre version tracking config saklama
+// Schema veya Model'e custom property eklemek çalışmadığı için global Map kullanıyoruz
+exports.VERSION_TRACKING_CONFIGS = new Map();
 function createBaseSchema(schemaDefinition = {}, options = {}) {
     const baseSchema = new mongoose_1.Schema(Object.assign({ uuid: { type: String }, creationDate: {
             type: Date,
@@ -176,6 +180,13 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
     });
     // 🆕 VERSION TRACKING POST-SAVE HOOK (OPTIONAL)
     if (options.enableVersionTracking && options.versionTrackingConfig) {
+        // ✅ GLOBAL MAP: Config'i entityType key'i ile Map'e kaydet
+        // publishVersionEventForUpdate metodu runtime'da buradan okuyacak
+        const configKey = options.versionTrackingConfig.entityType;
+        exports.VERSION_TRACKING_CONFIGS.set(configKey, {
+            enableVersionTracking: options.enableVersionTracking,
+            versionTrackingConfig: options.versionTrackingConfig
+        });
         logger_service_1.logger.info(`🔧 [VERSION-TRACKING-INIT] Enabled for ${options.versionTrackingConfig.entityType} in ${options.versionTrackingConfig.serviceName}`);
         const publishVersionEvent = (doc, Model) => __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c, _d, _e;
@@ -239,15 +250,15 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                 // Hata logla ama işlemi engelleme
             }
         });
-        // POST-SAVE HOOK (create ve update için)
+        // POST-SAVE HOOK (create ve doc.save() update için)
         baseSchema.post('save', function (doc, next) {
             return __awaiter(this, void 0, void 0, function* () {
                 logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('save') TRIGGERED for doc: ${doc.id || doc._id}`);
                 try {
                     const Model = this.constructor;
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}`);
+                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}, doc.version: ${doc.version}`);
                     yield publishVersionEvent(doc, Model);
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('save') completed successfully`);
+                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('save') completed successfully with version: ${doc.version}`);
                     next();
                 }
                 catch (error) {
@@ -259,6 +270,7 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         // POST-FINDONEANDUPDATE HOOK (updateWithRetry için)
         baseSchema.post('findOneAndUpdate', function (doc, next) {
             return __awaiter(this, void 0, void 0, function* () {
+                var _a;
                 logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('findOneAndUpdate') TRIGGERED for doc: ${doc ? (doc.id || doc._id) : 'null'}`);
                 try {
                     if (!doc) {
@@ -267,7 +279,17 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                         return;
                     }
                     const Model = this.constructor;
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}`);
+                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}, doc.version from hook param: ${doc.version}`);
+                    // ✅ FIX: Update query'den version bilgisini al
+                    // mongoose-update-if-current plugin ile manuel $set충돌 sorunu çözümü
+                    const query = this; // Query context
+                    const update = query.getUpdate();
+                    const newVersion = (_a = update === null || update === void 0 ? void 0 : update.$set) === null || _a === void 0 ? void 0 : _a.version;
+                    if (newVersion !== undefined) {
+                        logger_service_1.logger.info(`🔧 [VERSION-TRACKING-HOOK] Overriding doc.version from ${doc.version} to ${newVersion} (from update query)`);
+                        doc.version = newVersion;
+                    }
+                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Publishing event with version: ${doc.version}`);
                     yield publishVersionEvent(doc, Model);
                     logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('findOneAndUpdate') completed successfully`);
                     next();

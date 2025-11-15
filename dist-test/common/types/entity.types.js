@@ -13,6 +13,8 @@ var EntityType;
     EntityType["RelationProductLink"] = "relation-product-link";
     EntityType["Order"] = "order";
     EntityType["OrderProduct"] = "order-product";
+    EntityType["Customer"] = "customer";
+    EntityType["CustomerAddress"] = "customer-address";
     EntityType["Stock"] = "stock";
     EntityType["User"] = "user";
     EntityType["Integration"] = "integration";

@@ -1,6 +1,10 @@
 import mongoose, { Document, Model } from "mongoose";
 import { SortType } from '../../common';
 import { EntityType, ServiceName } from '../../common/types';
+export declare const VERSION_TRACKING_CONFIGS: Map<string, {
+    enableVersionTracking: boolean;
+    versionTrackingConfig?: any;
+}>;
 export interface BaseAttrs {
     id?: string;
     _id?: string;

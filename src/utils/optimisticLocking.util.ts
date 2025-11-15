@@ -143,32 +143,115 @@ export class OptimisticLockingUtil {
         session?: ClientSession
     ): Promise<T> {
         const docName = operationName || `${Model.modelName} ${id}`;
-        
-        return await this.retryWithOptimisticLocking(
+
+        const result = await this.retryWithOptimisticLocking(
             async () => {
-                const updateOptions = { 
-                    new: true, 
-                    omitUndefined: true, 
+                const updateOptions = {
+                    new: true,
+                    omitUndefined: true,
                     ...options,
                     ...(session ? { session } : {})
                 };
-                
-                const result = await Model.findByIdAndUpdate(
-                    id, 
-                    updateFields, 
+
+                const updatedDoc = await Model.findByIdAndUpdate(
+                    id,
+                    updateFields,
                     updateOptions
                 );
-                
-                if (!result) {
+
+                if (!updatedDoc) {
                     throw new Error(`Document not found: ${id}`);
                 }
-                
-                return result;
+
+                return updatedDoc;
             },
             3,
             100,
             `${docName} update${session ? ' (transactional)' : ''}`
         );
+
+        // ✅ FIX: updateWithRetry ile version set edildiğinde EntityVersionUpdated event publish et
+        // Çünkü findByIdAndUpdate post('save') hook'unu tetiklemiyor
+        const targetVersion = updateFields?.$set?.version;
+        if (targetVersion !== undefined && result) {
+            try {
+                await this.publishVersionEventForUpdate(Model, result, targetVersion);
+            } catch (error) {
+                logger.error(`❌ Failed to publish version event after updateWithRetry:`, error);
+                // Event publish hatası işlemi engellemesin
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * updateWithRetry için EntityVersionUpdated event publish eder
+     * @private
+     */
+    private static async publishVersionEventForUpdate(Model: any, doc: any, newVersion: number): Promise<void> {
+        const docId = doc.id || doc._id?.toString();
+
+        // ✅ GLOBAL MAP: Config'i Map'ten al
+        // base.schema.ts içindeki VERSION_TRACKING_CONFIGS Map'inden config'i oku
+        const { VERSION_TRACKING_CONFIGS } = await import('../models/base/base.schema');
+
+        // Model.modelName ile config'i bul - Order, Package, vs.
+        // Map key'i entityType ile eşleşmeli (EntityType.Order gibi)
+        let config = null;
+        for (const [key, value] of VERSION_TRACKING_CONFIGS.entries()) {
+            // entityType ile eşleş - 'order', 'package', vs.
+            if (key.toLowerCase() === Model.modelName.toLowerCase()) {
+                config = value;
+                break;
+            }
+        }
+
+        if (!config || !config.enableVersionTracking) {
+            // Version tracking enabled değilse event publish etme (sessizce skip)
+            return;
+        }
+
+        const versionTrackingConfig = config.versionTrackingConfig;
+        if (!versionTrackingConfig) {
+            logger.warn(`⚠️ [VERSION-TRACKING] versionTrackingConfig is null for ${Model.modelName}, skipping event publish`);
+            return;
+        }
+
+        const { entityType, serviceName } = versionTrackingConfig;
+
+        logger.info(`🔧 [UPDATE-WITH-RETRY-EVENT] Publishing EntityVersionUpdated: ${entityType}/${docId} v${newVersion} (service: ${serviceName})`);
+
+        // Outbox model'i Model'in database connection'ından al
+        // Her microservice kendi MongoDB connection'ını kullanıyor
+        const Outbox = Model.db.model('Outbox');
+
+        if (!Outbox) {
+            logger.warn(`⚠️ [UPDATE-WITH-RETRY-EVENT] Outbox model not found, skipping event publish`);
+            return;
+        }
+
+        const previousVersion = newVersion - 1;
+        const outboxPayload = {
+            eventType: 'entity:version-updated',
+            payload: {
+                entityType,
+                entityId: docId,
+                service: serviceName,
+                version: newVersion,
+                previousVersion,
+                timestamp: new Date(),
+                userId: doc.user?.toString() || doc.user,
+                metadata: {
+                    modelName: Model.modelName,
+                    source: 'updateWithRetry'
+                }
+            },
+            status: 'pending'
+        };
+
+        await Outbox.create(outboxPayload);
+        logger.info(`✅ [UPDATE-WITH-RETRY-EVENT] Version tracking: ${entityType}/${docId} v${newVersion} → Outbox (previousVersion: ${previousVersion})`);
     }
 
     /**
