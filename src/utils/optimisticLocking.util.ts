@@ -36,7 +36,7 @@ export class OptimisticLockingUtil {
      */
     static async retryWithOptimisticLocking<T>(
         operation: () => Promise<T>,
-        maxRetries: number = 3,
+        maxRetries: number = 5,
         backoffMs: number = 100,
         operationName: string = 'operation'
     ): Promise<T> {
@@ -94,7 +94,7 @@ export class OptimisticLockingUtil {
                 await document.save(saveOptions);
                 return document;
             },
-            3,
+            5,
             100,
             `${docName} save${session ? ' (transactional)' : ''}`
         );
@@ -165,7 +165,7 @@ export class OptimisticLockingUtil {
 
                 return updatedDoc;
             },
-            3,
+            5,
             100,
             `${docName} update${session ? ' (transactional)' : ''}`
         );
@@ -306,7 +306,7 @@ export class OptimisticLockingUtil {
                 const result = await Model.bulkWrite(operations, bulkOptions);
                 return result;
             },
-            3,
+            5,
             100,
             `${opName}${session ? ' (transactional)' : ''}`
         );

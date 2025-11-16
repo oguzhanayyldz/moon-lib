@@ -66,7 +66,7 @@ class OptimisticLockingUtil {
             - Operasyon adı ile detaylı loglama yapar
             - Session-aware ve transaction-safe operasyon desteği
      */
-    static async retryWithOptimisticLocking(operation, maxRetries = 3, backoffMs = 100, operationName = 'operation') {
+    static async retryWithOptimisticLocking(operation, maxRetries = 5, backoffMs = 100, operationName = 'operation') {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 const result = await operation();
@@ -109,7 +109,7 @@ class OptimisticLockingUtil {
             const saveOptions = session ? { session } : {};
             await document.save(saveOptions);
             return document;
-        }, 3, 100, `${docName} save${session ? ' (transactional)' : ''}`);
+        }, 5, 100, `${docName} save${session ? ' (transactional)' : ''}`);
     }
     /**
     * Context-aware saveWithRetry: Request object'ten session algılama
@@ -150,11 +150,10 @@ class OptimisticLockingUtil {
                 throw new Error(`Document not found: ${id}`);
             }
             return updatedDoc;
-        }, 3, 100, `${docName} update${session ? ' (transactional)' : ''}`);
+        }, 5, 100, `${docName} update${session ? ' (transactional)' : ''}`);
         // ✅ FIX: updateWithRetry ile version set edildiğinde EntityVersionUpdated event publish et
         // Çünkü findByIdAndUpdate post('save') hook'unu tetiklemiyor
         const targetVersion = (_a = updateFields === null || updateFields === void 0 ? void 0 : updateFields.$set) === null || _a === void 0 ? void 0 : _a.version;
-        logger_service_1.logger.info(`${docName} updated successfully, version=${targetVersion}`);
         if (targetVersion !== undefined && result) {
             try {
                 await this.publishVersionEventForUpdate(Model, result, targetVersion);
@@ -171,34 +170,28 @@ class OptimisticLockingUtil {
      * @private
      */
     static async publishVersionEventForUpdate(Model, doc, newVersion) {
-        var _a, _b, _c;
+        var _a, _b;
         const docId = doc.id || ((_a = doc._id) === null || _a === void 0 ? void 0 : _a.toString());
-        logger_service_1.logger.info(`🔍 [UPDATE-WITH-RETRY-DEBUG] publishVersionEventForUpdate CALLED: Model=${Model.modelName}, docId=${docId}, newVersion=${newVersion}`);
         // ✅ GLOBAL MAP: Config'i Map'ten al
         // base.schema.ts içindeki VERSION_TRACKING_CONFIGS Map'inden config'i oku
         const { VERSION_TRACKING_CONFIGS } = await Promise.resolve().then(() => __importStar(require('../models/base/base.schema')));
-        // Map'te kayıtlı tüm config'leri logla (debug için)
-        const allKeys = Array.from(VERSION_TRACKING_CONFIGS.keys());
-        logger_service_1.logger.info(`🔍 [UPDATE-WITH-RETRY-DEBUG] All configs in Map: [${allKeys.join(', ')}]`);
         // Model.modelName ile config'i bul - Order, Package, vs.
         // Map key'i entityType ile eşleşmeli (EntityType.Order gibi)
         let config = null;
         for (const [key, value] of VERSION_TRACKING_CONFIGS.entries()) {
-            logger_service_1.logger.info(`🔍 [UPDATE-WITH-RETRY-DEBUG] Checking Map entry: key="${key}", entityType="${(_b = value.versionTrackingConfig) === null || _b === void 0 ? void 0 : _b.entityType}"`);
             // entityType ile eşleş - 'order', 'package', vs.
             if (key.toLowerCase() === Model.modelName.toLowerCase()) {
                 config = value;
                 break;
             }
         }
-        logger_service_1.logger.info(`🔍 [UPDATE-WITH-RETRY-DEBUG] Config from Map: found=${!!config}, enabled=${config === null || config === void 0 ? void 0 : config.enableVersionTracking}`);
         if (!config || !config.enableVersionTracking) {
-            logger_service_1.logger.warn(`⚠️ [UPDATE-WITH-RETRY-DEBUG] Version tracking NOT enabled for ${Model.modelName}, skipping event publish`);
+            // Version tracking enabled değilse event publish etme (sessizce skip)
             return;
         }
         const versionTrackingConfig = config.versionTrackingConfig;
         if (!versionTrackingConfig) {
-            logger_service_1.logger.warn(`⚠️ [UPDATE-WITH-RETRY-DEBUG] versionTrackingConfig is null, skipping event publish`);
+            logger_service_1.logger.warn(`⚠️ [VERSION-TRACKING] versionTrackingConfig is null for ${Model.modelName}, skipping event publish`);
             return;
         }
         const { entityType, serviceName } = versionTrackingConfig;
@@ -220,7 +213,7 @@ class OptimisticLockingUtil {
                 version: newVersion,
                 previousVersion,
                 timestamp: new Date(),
-                userId: ((_c = doc.user) === null || _c === void 0 ? void 0 : _c.toString()) || doc.user,
+                userId: ((_b = doc.user) === null || _b === void 0 ? void 0 : _b.toString()) || doc.user,
                 metadata: {
                     modelName: Model.modelName,
                     source: 'updateWithRetry'
@@ -267,7 +260,7 @@ class OptimisticLockingUtil {
             const bulkOptions = session ? { session } : {};
             const result = await Model.bulkWrite(operations, bulkOptions);
             return result;
-        }, 3, 100, `${opName}${session ? ' (transactional)' : ''}`);
+        }, 5, 100, `${opName}${session ? ' (transactional)' : ''}`);
     }
     /**
     * Context-aware bulk operations

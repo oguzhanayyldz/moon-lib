@@ -76,7 +76,7 @@ class OptimisticLockingUtil {
             - Session-aware ve transaction-safe operasyon desteği
      */
     static retryWithOptimisticLocking(operation_1) {
-        return __awaiter(this, arguments, void 0, function* (operation, maxRetries = 3, backoffMs = 100, operationName = 'operation') {
+        return __awaiter(this, arguments, void 0, function* (operation, maxRetries = 5, backoffMs = 100, operationName = 'operation') {
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     const result = yield operation();
@@ -121,7 +121,7 @@ class OptimisticLockingUtil {
                 const saveOptions = session ? { session } : {};
                 yield document.save(saveOptions);
                 return document;
-            }), 3, 100, `${docName} save${session ? ' (transactional)' : ''}`);
+            }), 5, 100, `${docName} save${session ? ' (transactional)' : ''}`);
         });
     }
     /**
@@ -166,7 +166,7 @@ class OptimisticLockingUtil {
                     throw new Error(`Document not found: ${id}`);
                 }
                 return updatedDoc;
-            }), 3, 100, `${docName} update${session ? ' (transactional)' : ''}`);
+            }), 5, 100, `${docName} update${session ? ' (transactional)' : ''}`);
             // ✅ FIX: updateWithRetry ile version set edildiğinde EntityVersionUpdated event publish et
             // Çünkü findByIdAndUpdate post('save') hook'unu tetiklemiyor
             const targetVersion = (_a = updateFields === null || updateFields === void 0 ? void 0 : updateFields.$set) === null || _a === void 0 ? void 0 : _a.version;
@@ -282,7 +282,7 @@ class OptimisticLockingUtil {
                 const bulkOptions = session ? { session } : {};
                 const result = yield Model.bulkWrite(operations, bulkOptions);
                 return result;
-            }), 3, 100, `${opName}${session ? ' (transactional)' : ''}`);
+            }), 5, 100, `${opName}${session ? ' (transactional)' : ''}`);
         });
     }
     /**
