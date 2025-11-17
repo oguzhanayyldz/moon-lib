@@ -144,11 +144,14 @@ const mockEnhancedEntityDeletionRegistry = {
   
   // Clear any remaining timers by brute force
   const highestId = originalSetInterval(() => {}, 0) as any;
-  for (let i = 0; i < (highestId as number); i++) {
-    try {
-      originalClearInterval(i);
-    } catch (e) {
-      // Ignore errors
+  // Symbol check: Node.js 20+ returns Symbol/object instead of number
+  if (typeof highestId === 'number') {
+    for (let i = 0; i < highestId; i++) {
+      try {
+        originalClearInterval(i);
+      } catch (e) {
+        // Ignore errors
+      }
     }
   }
   originalClearInterval(highestId);
@@ -922,22 +925,24 @@ export const setupTestEnvironment = () => {
         (logger as any)[key] = jest.fn();
     });
     
-    // Reset Redis wrapper
-    const mockStorage: Record<string, any> = {};
-    redisWrapper.client.set = jest.fn((key: string, value: any) => {
-        mockStorage[key] = value;
-        return Promise.resolve('OK');
-    });
-    redisWrapper.client.get = jest.fn((key: string) => Promise.resolve(mockStorage[key] || null));
-    redisWrapper.client.del = jest.fn((key: string | string[]) => {
-        if (Array.isArray(key)) {
-            key.forEach(k => delete mockStorage[k]);
-            return Promise.resolve(key.length);
-        } else {
-            delete mockStorage[key];
-            return Promise.resolve(1);
-        }
-    });
+    // Reset Redis wrapper (only if client exists)
+    if (redisWrapper.client) {
+        const mockStorage: Record<string, any> = {};
+        redisWrapper.client.set = jest.fn((key: string, value: any) => {
+            mockStorage[key] = value;
+            return Promise.resolve('OK');
+        });
+        redisWrapper.client.get = jest.fn((key: string) => Promise.resolve(mockStorage[key] || null));
+        redisWrapper.client.del = jest.fn((key: string | string[]) => {
+            if (Array.isArray(key)) {
+                key.forEach(k => delete mockStorage[k]);
+                return Promise.resolve(key.length);
+            } else {
+                delete mockStorage[key];
+                return Promise.resolve(1);
+            }
+        });
+    }
 };
 
 // Test Mock Verification Helpers
