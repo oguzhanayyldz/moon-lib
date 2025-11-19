@@ -29,6 +29,7 @@ export * from './services/entityDeletionRegistry';
 export * from './services/enhancedEntityDeletionRegistry';
 export * from './services/batchProcessingEngine.service';
 export * from './services/strategyCache.service';
+export * from './services/integrationCache.service';
 
 // Response Interpreters
 export * from './services/response-interpreters/base.interpreter';

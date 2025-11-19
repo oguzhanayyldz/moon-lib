@@ -43,6 +43,7 @@ __exportStar(require("./services/entityDeletionRegistry"), exports);
 __exportStar(require("./services/enhancedEntityDeletionRegistry"), exports);
 __exportStar(require("./services/batchProcessingEngine.service"), exports);
 __exportStar(require("./services/strategyCache.service"), exports);
+__exportStar(require("./services/integrationCache.service"), exports);
 // Response Interpreters
 __exportStar(require("./services/response-interpreters/base.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/trendyol.interpreter"), exports);

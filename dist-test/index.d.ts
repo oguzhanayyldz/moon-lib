@@ -19,6 +19,7 @@ export * from './services/entityDeletionRegistry';
 export * from './services/enhancedEntityDeletionRegistry';
 export * from './services/batchProcessingEngine.service';
 export * from './services/strategyCache.service';
+export * from './services/integrationCache.service';
 export * from './services/response-interpreters/base.interpreter';
 export * from './services/response-interpreters/trendyol.interpreter';
 export * from './services/response-interpreters/shopify.interpreter';

@@ -8,8 +8,9 @@ import { ResourceName } from "../types/resourceName";
  *
  * ProductUpdated eventinden farkı:
  * - Sadece erpId güncellemesi için (tek sorumluluk)
- * - Minimal payload (sadece id, erpId, version)
- * - Sonsuz döngü riski yok (farklı event tipi)
+ * - Minimal payload (sadece id, erpId, source)
+ * - Tek yönlü event: ERP → Products (sonsuz döngü riski yok)
+ * - Idempotent: Aynı erpId varsa güncelleme yapılmaz
  *
  * Event flow:
  * 1. Products Service → IntegrationCommand (createProductsBulk)
@@ -39,11 +40,6 @@ export interface ProductErpIdUpdated {
     combination?: string;
     /** ERP sisteminden dönen external ID (Parasut product ID, Logo stok kodu, etc.) */
     erpId: string;
-    /**
-     * Mevcut version (sonsuz döngü önleme için)
-     * Listener sadece eventVersion > currentVersion olan güncellemeleri işler
-     */
-    version: number;
     /** ERP sistem adı (Parasut, Logo, Netsis, etc.) */
     source: ResourceName;
     /** Event oluşturulma zamanı */
