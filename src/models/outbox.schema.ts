@@ -29,6 +29,7 @@ import {
     DeleteProductImagesCompletedEvent,
     ProductPriceIntegrationUpdatedEvent,
     ProductPriceUpdatedEvent,
+    ProductErpIdUpdatedEvent,
     ProductStockIntegrationUpdatedEvent,
     CatalogMappingCreatedEvent,
     ProductImageIntegrationUpdatedEvent, 
@@ -53,6 +54,7 @@ interface EventPayloadMap {
     [Subjects.ProductStockIntegrationUpdated]: ProductStockIntegrationUpdatedEvent['data'];
     [Subjects.ProductImageIntegrationUpdated]: ProductImageIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
+    [Subjects.ProductErpIdUpdated]: ProductErpIdUpdatedEvent['data'];
     [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
     [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];
     [Subjects.RelationProductLinkCreated]: RelationProductLinkCreatedEvent['data'];

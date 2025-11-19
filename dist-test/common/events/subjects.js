@@ -35,6 +35,7 @@ var Subjects;
     Subjects["ProductPriceUpdated"] = "product:price:updated";
     Subjects["ProductStockIntegrationUpdated"] = "product:stock:integration:updated";
     Subjects["ProductImageIntegrationUpdated"] = "product:image:integration:updated";
+    Subjects["ProductErpIdUpdated"] = "product:erp-id:updated";
     Subjects["CatalogMappingCreated"] = "catalog.mapping.created";
     Subjects["IntegrationCreated"] = "integration.created";
     Subjects["UserIntegrationSettings"] = "user.integration.settings";

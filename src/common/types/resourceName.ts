@@ -6,4 +6,5 @@ export enum ResourceName {
     CicekSepeti = "CicekSepeti",
     Amazon = "Amazon",
     Shopify = "Shopify",
+    Parasut = "Parasut",
 }

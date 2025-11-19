@@ -29,6 +29,7 @@ import { ImportImagesFromUrlsPublisher } from '../events/publishers/importImages
 import { ImportImagesFromUrlsCompletedPublisher } from '../events/publishers/importImagesFromUrlsCompletedPublisher.publisher';
 import { ProductPriceIntegrationUpdatedPublisher } from '../events/publishers/productPriceIntegrationUpdated.publisher';
 import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceUpdated.publisher';
+import { ProductErpIdUpdatedPublisher } from '../events/publishers/productErpIdUpdated.publisher';
 import { ProductStockIntegrationUpdatedPublisher } from '../events/publishers/productStockIntegrationUpdated.publisher';
 import { ProductImageIntegrationUpdatedPublisher } from '../events/publishers/productImageIntegrationUpdated.publisher';
 import { CatalogMappingCreatedPublisher } from '../events/publishers/catalogMappingCreated.publisher';
@@ -292,6 +293,10 @@ export class EventPublisherJob {
                     break;
             case Subjects.ProductPriceUpdated:
                 await new ProductPriceUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
+            case Subjects.ProductErpIdUpdated:
+                await new ProductErpIdUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                     break;
             case Subjects.ProductStockIntegrationUpdated:

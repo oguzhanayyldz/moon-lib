@@ -38,6 +38,7 @@ export * from './import-images-from-urls-completed-event';
 export * from './delete-product-images-event';
 export * from './delete-product-images-completed-event';
 export * from './product-price-updated-event';
+export * from './product-erp-id-updated-event';
 export * from './product-stock-integration-updated-event';
 export * from './product-image-integration-updated-event';
 export * from './catalog-mapping-created-event';

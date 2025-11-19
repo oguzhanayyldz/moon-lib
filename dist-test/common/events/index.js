@@ -54,6 +54,7 @@ __exportStar(require("./import-images-from-urls-completed-event"), exports);
 __exportStar(require("./delete-product-images-event"), exports);
 __exportStar(require("./delete-product-images-completed-event"), exports);
 __exportStar(require("./product-price-updated-event"), exports);
+__exportStar(require("./product-erp-id-updated-event"), exports);
 __exportStar(require("./product-stock-integration-updated-event"), exports);
 __exportStar(require("./product-image-integration-updated-event"), exports);
 __exportStar(require("./catalog-mapping-created-event"), exports);

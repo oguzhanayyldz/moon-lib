@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, SyncRequestedEvent } from "../common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductErpIdUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, SyncRequestedEvent } from "../common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -9,6 +9,7 @@ interface EventPayloadMap {
     [Subjects.ProductStockIntegrationUpdated]: ProductStockIntegrationUpdatedEvent['data'];
     [Subjects.ProductImageIntegrationUpdated]: ProductImageIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
+    [Subjects.ProductErpIdUpdated]: ProductErpIdUpdatedEvent['data'];
     [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
     [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];
     [Subjects.RelationProductLinkCreated]: RelationProductLinkCreatedEvent['data'];
