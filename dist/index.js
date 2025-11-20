@@ -122,6 +122,9 @@ __exportStar(require("./events/publishers/orderIntegrationStatusUpdated.publishe
 __exportStar(require("./events/publishers/productMatched.publisher"), exports);
 __exportStar(require("./events/publishers/entityVersionUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/syncRequested.publisher"), exports);
+__exportStar(require("./events/publishers/invoiceCreated.publisher"), exports);
+__exportStar(require("./events/publishers/invoiceFormalized.publisher"), exports);
+__exportStar(require("./events/publishers/invoiceFailed.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);

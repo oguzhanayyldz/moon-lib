@@ -33,6 +33,10 @@ var OperationType;
     // Fiyat İşlemleri
     OperationType["UPDATE_PRICES"] = "UPDATE_PRICES";
     OperationType["FETCH_PRICES"] = "FETCH_PRICES";
+    // Fatura İşlemleri
+    OperationType["SEND_INVOICES"] = "SEND_INVOICES";
+    OperationType["FETCH_INVOICES"] = "FETCH_INVOICES";
+    OperationType["CANCEL_INVOICE"] = "CANCEL_INVOICE";
     // Diğer İşlemler
     OperationType["HEALTH_CHECK"] = "HEALTH_CHECK";
     OperationType["READ"] = "READ";

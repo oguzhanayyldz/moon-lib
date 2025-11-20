@@ -13,7 +13,8 @@ export declare enum EntityType {
     CustomerAddress = "customer-address",
     Stock = "stock",
     User = "user",
-    Integration = "integration"
+    Integration = "integration",
+    Invoice = "invoice"
 }
 /**
  * Service Names
@@ -25,5 +26,6 @@ export declare enum ServiceName {
     Inventory = "inventory",
     Pricing = "pricing",
     Catalog = "catalog",
-    Sync = "sync"
+    Sync = "sync",
+    Invoice = "invoice"
 }

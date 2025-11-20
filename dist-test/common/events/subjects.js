@@ -44,5 +44,8 @@ var Subjects;
     Subjects["NotificationCreated"] = "notification:created";
     Subjects["EntityVersionUpdated"] = "entity:version-updated";
     Subjects["SyncRequested"] = "sync:requested";
+    Subjects["InvoiceCreated"] = "invoice:created";
+    Subjects["InvoiceFormalized"] = "invoice:formalized";
+    Subjects["InvoiceFailed"] = "invoice:failed";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

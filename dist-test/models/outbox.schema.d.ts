@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductErpIdUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, SyncRequestedEvent } from "../common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductErpIdUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, SyncRequestedEvent, InvoiceCreatedEvent, InvoiceFormalizedEvent, InvoiceFailedEvent } from "../common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -43,6 +43,9 @@ interface EventPayloadMap {
     [Subjects.NotificationCreated]: NotificationCreatedEvent['data'];
     [Subjects.EntityVersionUpdated]: EntityVersionUpdatedEvent['data'];
     [Subjects.SyncRequested]: SyncRequestedEvent['data'];
+    [Subjects.InvoiceCreated]: InvoiceCreatedEvent['data'];
+    [Subjects.InvoiceFormalized]: InvoiceFormalizedEvent['data'];
+    [Subjects.InvoiceFailed]: InvoiceFailedEvent['data'];
 }
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;

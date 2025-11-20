@@ -18,6 +18,7 @@ var EntityType;
     EntityType["Stock"] = "stock";
     EntityType["User"] = "user";
     EntityType["Integration"] = "integration";
+    EntityType["Invoice"] = "invoice";
 })(EntityType || (exports.EntityType = EntityType = {}));
 /**
  * Service Names
@@ -31,5 +32,6 @@ var ServiceName;
     ServiceName["Pricing"] = "pricing";
     ServiceName["Catalog"] = "catalog";
     ServiceName["Sync"] = "sync";
+    ServiceName["Invoice"] = "invoice";
 })(ServiceName || (exports.ServiceName = ServiceName = {}));
 //# sourceMappingURL=entity.types.js.map

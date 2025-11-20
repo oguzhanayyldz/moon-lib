@@ -50,3 +50,7 @@ export * from './product-matched-event';
 export * from './notification-created-event';
 export * from './entity-version-updated-event';
 export * from './sync-requested-event';
+export * from './invoice-created-event';
+export * from './invoice-formalized-event';
+export * from './invoice-failed-event';
+export * from './types/invoice-status';

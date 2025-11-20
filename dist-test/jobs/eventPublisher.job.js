@@ -45,6 +45,9 @@ const notificationCreated_publisher_1 = require("../events/publishers/notificati
 const orderProductUpdated_publisher_1 = require("../events/publishers/orderProductUpdated.publisher");
 const entityVersionUpdated_publisher_1 = require("../events/publishers/entityVersionUpdated.publisher");
 const syncRequested_publisher_1 = require("../events/publishers/syncRequested.publisher");
+const invoiceCreated_publisher_1 = require("../events/publishers/invoiceCreated.publisher");
+const invoiceFormalized_publisher_1 = require("../events/publishers/invoiceFormalized.publisher");
+const invoiceFailed_publisher_1 = require("../events/publishers/invoiceFailed.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -318,6 +321,18 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.SyncRequested:
                 await new syncRequested_publisher_1.SyncRequestedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.InvoiceCreated:
+                await new invoiceCreated_publisher_1.InvoiceCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.InvoiceFormalized:
+                await new invoiceFormalized_publisher_1.InvoiceFormalizedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.InvoiceFailed:
+                await new invoiceFailed_publisher_1.InvoiceFailedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

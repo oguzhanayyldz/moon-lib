@@ -35,6 +35,11 @@ export enum OperationType {
     UPDATE_PRICES = 'UPDATE_PRICES',
     FETCH_PRICES = 'FETCH_PRICES',
 
+    // Fatura İşlemleri
+    SEND_INVOICES = 'SEND_INVOICES',
+    FETCH_INVOICES = 'FETCH_INVOICES',
+    CANCEL_INVOICE = 'CANCEL_INVOICE',
+
     // Diğer İşlemler
     HEALTH_CHECK = 'HEALTH_CHECK',
     READ = 'READ',
