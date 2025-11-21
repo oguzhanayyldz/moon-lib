@@ -44,6 +44,7 @@ export interface ProductCreatedEventDataListItem {
     type: ProductType;
     unitType: UnitType;
     erpId?: string | null;
+    erpPlatform?: string | null;
     combinations?: ProductCreatedEventDataListItemCombination[];
     packages?: ProductCreatedEventDataListItemPackage[];
     related?: ProductCreatedEventDataListItemRelated;
@@ -65,6 +66,7 @@ export interface ProductCreatedEventDataListItemCombination {
     sku: string;
     status: FixStatus;
     erpId?: string | null;
+    erpPlatform?: string | null;
     sort?: number | null;
     attributes?: AttributesType;
     uniqueCode?: string | null;

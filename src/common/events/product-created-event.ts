@@ -52,6 +52,7 @@ export interface ProductCreatedEventDataListItem {
     type: ProductType;
     unitType: UnitType;
     erpId?: string | null;
+    erpPlatform?: string | null; // ERP platform adı (Parasut, Logo, Netsis...)
     combinations?: ProductCreatedEventDataListItemCombination[];
     packages?: ProductCreatedEventDataListItemPackage[];
     related?: ProductCreatedEventDataListItemRelated;
@@ -76,6 +77,7 @@ export interface ProductCreatedEventDataListItemCombination {
     sku: string;
     status: FixStatus;
     erpId?: string | null;
+    erpPlatform?: string | null; // ERP platform adı (Parasut, Logo, Netsis...)
     sort?: number | null;
     attributes?: AttributesType;
     uniqueCode?: string | null;

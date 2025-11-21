@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InvoiceCategory = exports.InvoiceType = exports.InvoiceStatus = void 0;
+exports.InvoiceCategory = exports.InvoiceErpStatus = exports.InvoiceType = exports.InvoiceStatus = void 0;
 /**
  * Invoice Status Enum
  * Fatura durumlarını tanımlar
@@ -47,6 +47,41 @@ var InvoiceType;
      */
     InvoiceType["PROFORMA"] = "PROFORMA";
 })(InvoiceType || (exports.InvoiceType = InvoiceType = {}));
+/**
+ * Invoice ERP Status Enum
+ * ERP'deki fatura işlem aşamalarını tanımlar
+ */
+var InvoiceErpStatus;
+(function (InvoiceErpStatus) {
+    /**
+     * Bekliyor - Henüz ERP'ye gönderilmedi
+     */
+    InvoiceErpStatus["PENDING"] = "PENDING";
+    /**
+     * Oluşturuluyor - ERP'de sales invoice oluşturuluyor
+     */
+    InvoiceErpStatus["CREATING"] = "CREATING";
+    /**
+     * Oluşturuldu - ERP'de sales invoice oluşturuldu, resmileştirme bekleniyor
+     */
+    InvoiceErpStatus["CREATED"] = "CREATED";
+    /**
+     * Resmileştiriliyor - E-Arşiv/E-Fatura dönüşümü yapılıyor
+     */
+    InvoiceErpStatus["FORMALIZING"] = "FORMALIZING";
+    /**
+     * Resmileştirildi - E-Arşiv/E-Fatura numarası alındı
+     */
+    InvoiceErpStatus["FORMALIZED"] = "FORMALIZED";
+    /**
+     * Oluşturma Başarısız - Sales invoice oluşturma başarısız
+     */
+    InvoiceErpStatus["CREATE_FAILED"] = "CREATE_FAILED";
+    /**
+     * Resmileştirme Başarısız - E-Arşiv/E-Fatura dönüşümü başarısız
+     */
+    InvoiceErpStatus["FORMALIZE_FAILED"] = "FORMALIZE_FAILED";
+})(InvoiceErpStatus || (exports.InvoiceErpStatus = InvoiceErpStatus = {}));
 /**
  * Invoice Category Enum
  * E-Fatura kategorileri

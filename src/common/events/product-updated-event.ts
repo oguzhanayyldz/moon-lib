@@ -36,6 +36,7 @@ export interface ProductUpdatedEventDataListItem {
     packages?: ProductUpdatedEventDataListItemPackage[];
     related?: ProductUpdatedEventDataListItemRelated;
     erpId?: string | null;
+    erpPlatform?: string | null; // ERP platform adı (Parasut, Logo, Netsis...)
     uniqueCode?: string | null;
     deleted?: boolean;
     deletionDate?: Date | null;
@@ -55,6 +56,7 @@ export interface ProductUpdatedEventDataListItemCombination {
     sku: string;
     status: FixStatus;
     erpId?: string | null;
+    erpPlatform?: string | null; // ERP platform adı (Parasut, Logo, Netsis...)
     sort?: number | null;
     attributes?: AttributesType;
     deleted?: boolean;
