@@ -73,4 +73,18 @@ export declare abstract class ErpIntegration extends BaseIntegration {
      * @optional
      */
     protected abstract checkBalance?(): Promise<number>;
+    /**
+     * ERP sistemindeki faturayı siler
+     * NOT: Sadece resmileşmemiş faturalar silinebilir!
+     * Resmileşmiş faturalar (e-Arşiv/e-Fatura) GİB'e bildirildiği için silinemez.
+     *
+     * @param erpId - ERP'deki fatura ID'si (sales invoice ID)
+     * @returns Silme işlemi sonucu
+     * @abstract
+     * @optional - Bazı ERP sistemlerinde silme desteklenmeyebilir
+     */
+    protected abstract deleteInvoice?(erpId: string): Promise<{
+        success: boolean;
+        message?: string;
+    }>;
 }
