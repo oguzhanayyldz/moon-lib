@@ -45,6 +45,7 @@ import { OrderProductStockUpdatedPublisher } from '../events/publishers/orderPro
 import { EntityVersionUpdatedPublisher } from '../events/publishers/entityVersionUpdated.publisher';
 import { SyncRequestedPublisher } from '../events/publishers/syncRequested.publisher';
 import { InvoiceCreatedPublisher } from '../events/publishers/invoiceCreated.publisher';
+import { InvoiceUpdatedPublisher } from '../events/publishers/invoiceUpdated.publisher';
 import { InvoiceFormalizedPublisher } from '../events/publishers/invoiceFormalized.publisher';
 import { InvoiceFailedPublisher } from '../events/publishers/invoiceFailed.publisher';
 
@@ -356,6 +357,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.InvoiceCreated:
                 await new InvoiceCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.InvoiceUpdated:
+                await new InvoiceUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case Subjects.InvoiceFormalized:

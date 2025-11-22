@@ -67,6 +67,7 @@ __exportStar(require("./notification-created-event"), exports);
 __exportStar(require("./entity-version-updated-event"), exports);
 __exportStar(require("./sync-requested-event"), exports);
 __exportStar(require("./invoice-created-event"), exports);
+__exportStar(require("./invoice-updated-event"), exports);
 __exportStar(require("./invoice-formalized-event"), exports);
 __exportStar(require("./invoice-failed-event"), exports);
 __exportStar(require("./types/invoice-status"), exports);

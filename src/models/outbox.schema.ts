@@ -43,6 +43,7 @@ import {
     OrderProductStockUpdatedEvent,
     EntityVersionUpdatedEvent,
     SyncRequestedEvent,
+    InvoiceUpdatedEvent,
     InvoiceCreatedEvent,
     InvoiceFormalizedEvent,
     InvoiceFailedEvent,
@@ -92,6 +93,7 @@ interface EventPayloadMap {
     [Subjects.EntityVersionUpdated]: EntityVersionUpdatedEvent['data'];
     [Subjects.SyncRequested]: SyncRequestedEvent['data'];
     [Subjects.InvoiceCreated]: InvoiceCreatedEvent['data'];
+    [Subjects.InvoiceUpdated]: InvoiceUpdatedEvent['data'];
     [Subjects.InvoiceFormalized]: InvoiceFormalizedEvent['data'];
     [Subjects.InvoiceFailed]: InvoiceFailedEvent['data'];
 }

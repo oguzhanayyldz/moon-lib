@@ -45,6 +45,7 @@ var Subjects;
     Subjects["EntityVersionUpdated"] = "entity:version-updated";
     Subjects["SyncRequested"] = "sync:requested";
     Subjects["InvoiceCreated"] = "invoice:created";
+    Subjects["InvoiceUpdated"] = "invoice:updated";
     Subjects["InvoiceFormalized"] = "invoice:formalized";
     Subjects["InvoiceFailed"] = "invoice:failed";
 })(Subjects || (exports.Subjects = Subjects = {}));

@@ -46,6 +46,7 @@ const orderProductUpdated_publisher_1 = require("../events/publishers/orderProdu
 const entityVersionUpdated_publisher_1 = require("../events/publishers/entityVersionUpdated.publisher");
 const syncRequested_publisher_1 = require("../events/publishers/syncRequested.publisher");
 const invoiceCreated_publisher_1 = require("../events/publishers/invoiceCreated.publisher");
+const invoiceUpdated_publisher_1 = require("../events/publishers/invoiceUpdated.publisher");
 const invoiceFormalized_publisher_1 = require("../events/publishers/invoiceFormalized.publisher");
 const invoiceFailed_publisher_1 = require("../events/publishers/invoiceFailed.publisher");
 class EventPublisherJob {
@@ -325,6 +326,10 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.InvoiceCreated:
                 await new invoiceCreated_publisher_1.InvoiceCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.InvoiceUpdated:
+                await new invoiceUpdated_publisher_1.InvoiceUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case common_1.Subjects.InvoiceFormalized:
