@@ -32,12 +32,16 @@ export declare abstract class ErpIntegration extends BaseIntegration {
      * Oluşturulan faturayı resmileştirir (e-Arşiv veya e-Fatura)
      * Bazı ERP sistemlerinde ayrı bir adım olarak gereklidir
      *
-     * @param invoiceId - Resmileştirilecek fatura ID'si
-     * @returns void
+     * @param params - Resmileştirme parametreleri (erpId, category, invoiceData vb.)
+     * @returns Resmileştirme sonucu
      * @abstract
      * @optional - Bazı ERP sistemlerinde otomatik olabilir
      */
-    protected abstract formalizeInvoice?(invoiceId: string): Promise<void>;
+    protected abstract formalizeInvoice?(params: {
+        erpId: string;
+        category?: string;
+        invoiceData?: any;
+    }): Promise<any>;
     /**
      * Cari hesapları (müşteri/tedarikçi) senkronize eder
      * @abstract
