@@ -32,8 +32,10 @@ export interface InvoiceCreated {
     type: InvoiceType;
     category: InvoiceCategory;
     erpPlatform?: string;
+    erpIntegrationId?: string;
     erpId?: string;
     erpInvoiceId?: string;
+    erpStatus?: string;
     customer: {
         customerId?: string;
         customerUuid?: string;
@@ -68,10 +70,23 @@ export interface InvoiceCreated {
     };
     issueDate: Date;
     dueDate?: Date;
+    formalizedAt?: Date;
     createdAt: Date;
     updatedAt: Date;
+    pdfUrl?: string;
+    xmlUrl?: string;
+    printUrl?: string;
+    gibUuid?: string;
+    gibEttn?: string;
     description?: string;
     notes?: string;
+    errorCode?: string;
+    errorMessage?: string;
+    errorDetails?: Record<string, any>;
+    retryCount?: number;
+    maxRetries?: number;
+    willRetry?: boolean;
+    nextRetryAt?: Date;
     fields?: Record<string, any>;
 }
 export interface InvoiceItem {

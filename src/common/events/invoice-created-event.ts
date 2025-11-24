@@ -40,8 +40,10 @@ export interface InvoiceCreated {
 
     // ERP bilgileri (başlangıçta undefined, resmileştirme sonrası dolar)
     erpPlatform?: string; // Parasut, Logo, SAP, Netsis, etc.
-    erpId?: string; // ERP'deki fatura ID'si
-    erpInvoiceId?: string; // ERP'deki invoice_id (bazı ERP'lerde farklı olabilir)
+    erpIntegrationId?: string; // Integration Service'deki ERP integration ID
+    erpId?: string; // ERP'deki fatura ID'si (sales_invoice ID)
+    erpInvoiceId?: string; // ERP'deki resmi fatura ID (e-archive/e-invoice ID)
+    erpStatus?: string; // ERP'deki işlem aşaması (PENDING, CREATED, FORMALIZED, etc.)
 
     // Müşteri bilgileri (Order'dan gelen billing address + customer bilgileri)
     customer: {
@@ -92,12 +94,33 @@ export interface InvoiceCreated {
     // Tarihler
     issueDate: Date; // Fatura tarihi (genelde order.date ile aynı)
     dueDate?: Date; // Vade tarihi (opsiyonel)
+    formalizedAt?: Date; // Resmileştirme tarihi (sadece FORMALIZED status'ünde dolu)
     createdAt: Date;
     updatedAt: Date;
+
+    // PDF ve XML linkleri (resmileştirme sonrası dolar)
+    pdfUrl?: string; // PDF link
+    xmlUrl?: string; // XML link
+    printUrl?: string; // Print link
+
+    // GİB bilgileri (e-Fatura/e-Arşiv için)
+    gibUuid?: string; // GİB UUID
+    gibEttn?: string; // GİB ETTN
 
     // Notlar ve açıklamalar
     description?: string;
     notes?: string; // Order.note
+
+    // Hata bilgileri (başarısız durumlar için)
+    errorCode?: string;
+    errorMessage?: string;
+    errorDetails?: Record<string, any>;
+
+    // Retry bilgileri
+    retryCount?: number;
+    maxRetries?: number;
+    willRetry?: boolean;
+    nextRetryAt?: Date;
 
     // Ek alanlar
     fields?: Record<string, any>;
