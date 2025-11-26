@@ -57,6 +57,7 @@ export interface OrderUpdated {
         sentDate?: Date;
         shippedDate?: Date;
         deliveredDate?: Date;
+        deliveryStatus?: string;
         fields?: Record<string, any>;
     };
     billingAddress?: {

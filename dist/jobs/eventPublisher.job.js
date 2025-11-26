@@ -58,6 +58,9 @@ const invoiceCreated_publisher_1 = require("../events/publishers/invoiceCreated.
 const invoiceUpdated_publisher_1 = require("../events/publishers/invoiceUpdated.publisher");
 const invoiceFormalized_publisher_1 = require("../events/publishers/invoiceFormalized.publisher");
 const invoiceFailed_publisher_1 = require("../events/publishers/invoiceFailed.publisher");
+const orderCargoUpdated_publisher_1 = require("../events/publishers/orderCargoUpdated.publisher");
+const shipmentCreated_publisher_1 = require("../events/publishers/shipmentCreated.publisher");
+const shipmentUpdated_publisher_1 = require("../events/publishers/shipmentUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -354,6 +357,18 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.InvoiceFailed:
                     yield new invoiceFailed_publisher_1.InvoiceFailedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.OrderCargoUpdated:
+                    yield new orderCargoUpdated_publisher_1.OrderCargoUpdatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.ShipmentCreated:
+                    yield new shipmentCreated_publisher_1.ShipmentCreatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.ShipmentUpdated:
+                    yield new shipmentUpdated_publisher_1.ShipmentUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

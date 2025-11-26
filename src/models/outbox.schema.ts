@@ -19,6 +19,7 @@ import {
     StockCreatedEvent,
     StockUpdatedEvent,
     OrderCreatedEvent,
+    OrderCargoUpdatedEvent,
     OrderUpdatedEvent,
     EntityDeletedEvent,
     OrderStatusUpdatedEvent,
@@ -96,6 +97,7 @@ interface EventPayloadMap {
     [Subjects.InvoiceUpdated]: InvoiceUpdatedEvent['data'];
     [Subjects.InvoiceFormalized]: InvoiceFormalizedEvent['data'];
     [Subjects.InvoiceFailed]: InvoiceFailedEvent['data'];
+    [Subjects.OrderCargoUpdated]: OrderCargoUpdatedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

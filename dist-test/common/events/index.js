@@ -71,4 +71,7 @@ __exportStar(require("./invoice-updated-event"), exports);
 __exportStar(require("./invoice-formalized-event"), exports);
 __exportStar(require("./invoice-failed-event"), exports);
 __exportStar(require("./types/invoice-status"), exports);
+__exportStar(require("./order-cargo-updated-event"), exports);
+__exportStar(require("./shipment-created-event"), exports);
+__exportStar(require("./shipment-updated-event"), exports);
 //# sourceMappingURL=index.js.map

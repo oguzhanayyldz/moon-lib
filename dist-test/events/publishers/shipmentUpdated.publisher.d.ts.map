@@ -1,0 +1,1 @@
+{"version":3,"file":"shipmentUpdated.publisher.d.ts","sourceRoot":"","sources":["../../../src/events/publishers/shipmentUpdated.publisher.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAE,QAAQ,EAAE,oBAAoB,EAAE,MAAM,cAAc,CAAC;AAEzE;;;;;;;;;;;GAWG;AACH,qBAAa,wBAAyB,SAAQ,SAAS,CAAC,oBAAoB,CAAC;IACzE,OAAO,EAAE,QAAQ,CAAC,eAAe,CAA4B;CAChE"}

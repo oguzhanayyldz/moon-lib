@@ -1,0 +1,1 @@
+{"version":3,"file":"orderCargoUpdated.publisher.d.ts","sourceRoot":"","sources":["../../../src/events/publishers/orderCargoUpdated.publisher.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAE,QAAQ,EAAE,sBAAsB,EAAE,MAAM,cAAc,CAAC;AAE3E;;;;;GAKG;AACH,qBAAa,0BAA2B,SAAQ,SAAS,CAAC,sBAAsB,CAAC;IAC7E,OAAO,EAAE,QAAQ,CAAC,iBAAiB,CAA8B;CACpE"}

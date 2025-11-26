@@ -44,4 +44,7 @@ export enum Subjects {
     InvoiceUpdated = "invoice:updated",
     InvoiceFormalized = "invoice:formalized",
     InvoiceFailed = "invoice:failed",
+    OrderCargoUpdated = "order:cargo:updated",
+    ShipmentCreated = "shipment:created",
+    ShipmentUpdated = "shipment:updated",
 }

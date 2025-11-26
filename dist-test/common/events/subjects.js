@@ -48,5 +48,8 @@ var Subjects;
     Subjects["InvoiceUpdated"] = "invoice:updated";
     Subjects["InvoiceFormalized"] = "invoice:formalized";
     Subjects["InvoiceFailed"] = "invoice:failed";
+    Subjects["OrderCargoUpdated"] = "order:cargo:updated";
+    Subjects["ShipmentCreated"] = "shipment:created";
+    Subjects["ShipmentUpdated"] = "shipment:updated";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

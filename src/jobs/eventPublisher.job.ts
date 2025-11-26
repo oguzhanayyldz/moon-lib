@@ -48,6 +48,9 @@ import { InvoiceCreatedPublisher } from '../events/publishers/invoiceCreated.pub
 import { InvoiceUpdatedPublisher } from '../events/publishers/invoiceUpdated.publisher';
 import { InvoiceFormalizedPublisher } from '../events/publishers/invoiceFormalized.publisher';
 import { InvoiceFailedPublisher } from '../events/publishers/invoiceFailed.publisher';
+import { OrderCargoUpdatedPublisher } from '../events/publishers/orderCargoUpdated.publisher';
+import { ShipmentCreatedPublisher } from '../events/publishers/shipmentCreated.publisher';
+import { ShipmentUpdatedPublisher } from '../events/publishers/shipmentUpdated.publisher';
 
 
 export class EventPublisherJob {
@@ -369,6 +372,18 @@ export class EventPublisherJob {
                 break;
             case Subjects.InvoiceFailed:
                 await new InvoiceFailedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.OrderCargoUpdated:
+                await new OrderCargoUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ShipmentCreated:
+                await new ShipmentCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ShipmentUpdated:
+                await new ShipmentUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

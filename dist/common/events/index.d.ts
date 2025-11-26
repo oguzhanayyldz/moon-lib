@@ -55,3 +55,6 @@ export * from './invoice-updated-event';
 export * from './invoice-formalized-event';
 export * from './invoice-failed-event';
 export * from './types/invoice-status';
+export * from './order-cargo-updated-event';
+export * from './shipment-created-event';
+export * from './shipment-updated-event';
