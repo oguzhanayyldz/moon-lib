@@ -132,6 +132,7 @@ export * from './common/middlewares';
 export * from './common/types';
 export * from './common/methods';
 export * from './common/core';
+export * from './common/validators';
 export * from './common/strategies';
 
 // Model başlatma fonksiyonu

@@ -134,6 +134,7 @@ __exportStar(require("./common/middlewares"), exports);
 __exportStar(require("./common/types"), exports);
 __exportStar(require("./common/methods"), exports);
 __exportStar(require("./common/core"), exports);
+__exportStar(require("./common/validators"), exports);
 __exportStar(require("./common/strategies"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {

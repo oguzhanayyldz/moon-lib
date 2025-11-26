@@ -22,6 +22,7 @@ __exportStar(require("./product-stock-integration-updated.interface"), exports);
 __exportStar(require("./product-image-integration-updated.interface"), exports);
 __exportStar(require("./product-export.interface"), exports);
 __exportStar(require("./invoice-export.interface"), exports);
+__exportStar(require("./shipment-export.interface"), exports);
 __exportStar(require("./order-integration-created.interface"), exports);
 __exportStar(require("./order-integration-status-updated.interface"), exports);
 __exportStar(require("./api-client.interface"), exports);

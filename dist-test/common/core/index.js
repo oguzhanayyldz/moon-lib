@@ -19,4 +19,5 @@ __exportStar(require("./integration-credentials"), exports);
 __exportStar(require("./marketplace-integration"), exports);
 __exportStar(require("./ecommerce-integration"), exports);
 __exportStar(require("./erp-integration"), exports);
+__exportStar(require("./cargo-integration"), exports);
 //# sourceMappingURL=index.js.map

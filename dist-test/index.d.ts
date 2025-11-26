@@ -96,6 +96,7 @@ export * from './common/middlewares';
 export * from './common/types';
 export * from './common/methods';
 export * from './common/core';
+export * from './common/validators';
 export * from './common/strategies';
 export declare const initializeModels: (connection: mongoose.Connection) => void;
 export declare const initializeModelsForIntegration: (connection: mongoose.Connection) => void;

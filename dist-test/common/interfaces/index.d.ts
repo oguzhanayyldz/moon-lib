@@ -6,6 +6,7 @@ export * from './product-stock-integration-updated.interface';
 export * from './product-image-integration-updated.interface';
 export * from './product-export.interface';
 export * from './invoice-export.interface';
+export * from './shipment-export.interface';
 export * from './order-integration-created.interface';
 export * from './order-integration-status-updated.interface';
 export * from './api-client.interface';
