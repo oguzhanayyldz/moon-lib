@@ -8,4 +8,5 @@ export enum ResourceName {
     Shopify = "Shopify",
     Parasut = "Parasut",
     Aras = "Aras",
+    Yurtici = "Yurtici",
 }

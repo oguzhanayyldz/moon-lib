@@ -25,6 +25,8 @@ export * from './services/response-interpreters/trendyol.interpreter';
 export * from './services/response-interpreters/shopify.interpreter';
 export * from './services/response-interpreters/interpreter.factory';
 export * from './enums/operation-type.enum';
+export * from './common/enums/aras-status.enum';
+export * from './common/enums/yurtici-status.enum';
 export * from './security/SecurityValidator';
 export * from './security/RateLimiter';
 export * from './security/BruteForceProtection';

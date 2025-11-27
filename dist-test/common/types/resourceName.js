@@ -11,5 +11,7 @@ var ResourceName;
     ResourceName["Amazon"] = "Amazon";
     ResourceName["Shopify"] = "Shopify";
     ResourceName["Parasut"] = "Parasut";
+    ResourceName["Aras"] = "Aras";
+    ResourceName["Yurtici"] = "Yurtici";
 })(ResourceName || (exports.ResourceName = ResourceName = {}));
 //# sourceMappingURL=resourceName.js.map

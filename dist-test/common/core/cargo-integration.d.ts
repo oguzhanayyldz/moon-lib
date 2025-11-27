@@ -129,10 +129,9 @@ export declare abstract class CargoIntegration extends BaseIntegration {
      *
      * @param address - Doğrulanacak adres
      * @returns Adres geçerli mi, önerilen düzeltmeler
-     * @abstract
-     * @optional
+     * @optional - Override if cargo provider supports address validation
      */
-    protected abstract validateAddress?(address: {
+    protected validateAddress(address: {
         country: string;
         city: string;
         district: string;
@@ -151,10 +150,9 @@ export declare abstract class CargoIntegration extends BaseIntegration {
      *
      * @param params - Maliyet hesaplama parametreleri
      * @returns Tahmini kargo maliyeti
-     * @abstract
-     * @optional
+     * @optional - Override if cargo provider supports cost calculation
      */
-    protected abstract calculateShippingCost?(params: {
+    protected calculateShippingCost(params: {
         senderCity: string;
         recipientCity: string;
         weight: number;
@@ -174,10 +172,9 @@ export declare abstract class CargoIntegration extends BaseIntegration {
      * @param city - Şehir
      * @param district - İlçe (opsiyonel)
      * @returns Şube listesi
-     * @abstract
-     * @optional
+     * @optional - Override if cargo provider supports branch listing
      */
-    protected abstract getBranches?(city: string, district?: string): Promise<Array<{
+    protected getBranches(city: string, district?: string): Promise<Array<{
         branchCode: string;
         branchName: string;
         address: string;

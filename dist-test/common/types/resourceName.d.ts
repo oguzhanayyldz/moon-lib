@@ -6,6 +6,8 @@ export declare enum ResourceName {
     CicekSepeti = "CicekSepeti",
     Amazon = "Amazon",
     Shopify = "Shopify",
-    Parasut = "Parasut"
+    Parasut = "Parasut",
+    Aras = "Aras",
+    Yurtici = "Yurtici"
 }
 //# sourceMappingURL=resourceName.d.ts.map

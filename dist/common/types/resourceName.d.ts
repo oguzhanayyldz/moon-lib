@@ -7,5 +7,6 @@ export declare enum ResourceName {
     Amazon = "Amazon",
     Shopify = "Shopify",
     Parasut = "Parasut",
-    Aras = "Aras"
+    Aras = "Aras",
+    Yurtici = "Yurtici"
 }

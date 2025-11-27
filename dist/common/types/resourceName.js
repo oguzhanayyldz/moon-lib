@@ -12,4 +12,5 @@ var ResourceName;
     ResourceName["Shopify"] = "Shopify";
     ResourceName["Parasut"] = "Parasut";
     ResourceName["Aras"] = "Aras";
+    ResourceName["Yurtici"] = "Yurtici";
 })(ResourceName || (exports.ResourceName = ResourceName = {}));
