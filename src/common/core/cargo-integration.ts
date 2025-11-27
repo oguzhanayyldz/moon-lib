@@ -140,10 +140,9 @@ export abstract class CargoIntegration extends BaseIntegration {
      *
      * @param address - Doğrulanacak adres
      * @returns Adres geçerli mi, önerilen düzeltmeler
-     * @abstract
-     * @optional
+     * @optional - Override if cargo provider supports address validation
      */
-    protected abstract validateAddress?(address: {
+    protected async validateAddress(address: {
         country: string;
         city: string;
         district: string;
@@ -153,7 +152,13 @@ export abstract class CargoIntegration extends BaseIntegration {
         valid: boolean;
         suggestions?: any[];
         message?: string;
-    }>;
+    }> {
+        // Default implementation - address validation not supported
+        return {
+            valid: true,
+            message: 'Address validation not supported by this cargo provider'
+        };
+    }
 
     /**
      * Kargo maliyeti hesaplama (opsiyonel)
@@ -163,10 +168,9 @@ export abstract class CargoIntegration extends BaseIntegration {
      *
      * @param params - Maliyet hesaplama parametreleri
      * @returns Tahmini kargo maliyeti
-     * @abstract
-     * @optional
+     * @optional - Override if cargo provider supports cost calculation
      */
-    protected abstract calculateShippingCost?(params: {
+    protected async calculateShippingCost(params: {
         senderCity: string;
         recipientCity: string;
         weight: number;
@@ -176,7 +180,10 @@ export abstract class CargoIntegration extends BaseIntegration {
         cost: number;
         currency: string;
         deliveryTime?: string;
-    }>;
+    }> {
+        // Default implementation - cost calculation not supported
+        throw new Error('Shipping cost calculation not supported by this cargo provider');
+    }
 
     /**
      * Şube/dağıtım merkezi sorgulama (opsiyonel)
@@ -187,14 +194,16 @@ export abstract class CargoIntegration extends BaseIntegration {
      * @param city - Şehir
      * @param district - İlçe (opsiyonel)
      * @returns Şube listesi
-     * @abstract
-     * @optional
+     * @optional - Override if cargo provider supports branch listing
      */
-    protected abstract getBranches?(city: string, district?: string): Promise<Array<{
+    protected async getBranches(city: string, district?: string): Promise<Array<{
         branchCode: string;
         branchName: string;
         address: string;
         phone?: string;
         workingHours?: string;
-    }>>;
+    }>> {
+        // Default implementation - branch listing not supported
+        return [];
+    }
 }

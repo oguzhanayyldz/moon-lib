@@ -39,6 +39,7 @@ export * from './services/response-interpreters/interpreter.factory';
 
 // Enums
 export * from './enums/operation-type.enum';
+export * from './common/enums/aras-status.enum';
 
 // Security
 export * from './security/SecurityValidator';
