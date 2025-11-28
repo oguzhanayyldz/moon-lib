@@ -98,6 +98,55 @@ export declare class OptimisticLockingUtil {
     */
     static updateWithContext<T>(Model: any, id: string, updateFields: any, req?: Request, options?: any, operationName?: string): Promise<T>;
     /**
+    * Metadata güncelleme - VERSION TRACKING OLMADAN
+    *
+    * Scheduler job'lar, istatistik güncellemeleri ve metadata-only operasyonlar için.
+    * Version tracking hook'larını tetiklemez, version increment yapmaz.
+    *
+    * Use Cases:
+    * - AutomationRule: lastRunAt, totalProcessed, totalSuccess, totalFailed
+    * - Scheduler metadata: lastExecutedAt, executionCount
+    * - Statistics: viewCount, downloadCount, accessCount
+    * - Timestamps: lastAccessedAt, lastSyncedAt
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları ($inc, $set, $unset)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @param {ClientSession} [session] - MongoDB session (transaction için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description
+    * Version tracking hook'unu bypass eder çünkü:
+    * - Metadata değişiklikleri anlamlı veri değişikliği değildir
+    * - Cross-service sync gerektirmez
+    * - Outbox entry oluşturmaya gerek yoktur
+    * - Version increment gereksizdir
+    *
+    * Retry mekanizması ile güvenli güncelleme sağlar:
+    * - Exponential backoff stratejisi
+    * - Maksimum 5 deneme
+    * - Session/transaction desteği
+    */
+    static updateMetadataWithRetry<T>(Model: any, id: string, updateFields: any, options?: any, operationName?: string, session?: ClientSession): Promise<T>;
+    /**
+    * Context-aware updateMetadataWithRetry: Request object'ten session algılama
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları
+    * @param {Request} [req] - Express Request object (session algılamak için)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description Request context'inden session'ı otomatik algılar ve metadata güncelleme yapar.
+    */
+    static updateMetadataWithContext<T>(Model: any, id: string, updateFields: any, req?: Request, options?: any, operationName?: string): Promise<T>;
+    /**
     * Bulk operations with session support
     *
     * @static

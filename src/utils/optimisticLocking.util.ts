@@ -256,7 +256,7 @@ export class OptimisticLockingUtil {
 
     /**
     * Context-aware updateWithRetry: Request object'ten session algılama
-    * 
+    *
     * @static
     * @template T
     * @param {any} Model - Mongoose model
@@ -278,6 +278,104 @@ export class OptimisticLockingUtil {
     ): Promise<T> {
         const session = req && (req as any).dbSession ? (req as any).dbSession : undefined;
         return await this.updateWithRetry(Model, id, updateFields, options, operationName, session);
+    }
+
+    /**
+    * Metadata güncelleme - VERSION TRACKING OLMADAN
+    *
+    * Scheduler job'lar, istatistik güncellemeleri ve metadata-only operasyonlar için.
+    * Version tracking hook'larını tetiklemez, version increment yapmaz.
+    *
+    * Use Cases:
+    * - AutomationRule: lastRunAt, totalProcessed, totalSuccess, totalFailed
+    * - Scheduler metadata: lastExecutedAt, executionCount
+    * - Statistics: viewCount, downloadCount, accessCount
+    * - Timestamps: lastAccessedAt, lastSyncedAt
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları ($inc, $set, $unset)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @param {ClientSession} [session] - MongoDB session (transaction için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description
+    * Version tracking hook'unu bypass eder çünkü:
+    * - Metadata değişiklikleri anlamlı veri değişikliği değildir
+    * - Cross-service sync gerektirmez
+    * - Outbox entry oluşturmaya gerek yoktur
+    * - Version increment gereksizdir
+    *
+    * Retry mekanizması ile güvenli güncelleme sağlar:
+    * - Exponential backoff stratejisi
+    * - Maksimum 5 deneme
+    * - Session/transaction desteği
+    */
+    static async updateMetadataWithRetry<T>(
+        Model: any,
+        id: string,
+        updateFields: any,
+        options: any = {},
+        operationName?: string,
+        session?: ClientSession
+    ): Promise<T> {
+        const docName = operationName || `${Model.modelName} ${id} metadata`;
+
+        return await this.retryWithOptimisticLocking(
+            async () => {
+                const updateOptions = {
+                    new: true,
+                    omitUndefined: true,
+                    ...options,
+                    ...(session ? { session } : {})
+                };
+
+                const updatedDoc = await Model.findByIdAndUpdate(
+                    id,
+                    updateFields,
+                    updateOptions
+                );
+
+                if (!updatedDoc) {
+                    throw new Error(`Document not found: ${id}`);
+                }
+
+                return updatedDoc;
+            },
+            5,
+            100,
+            `${docName} update${session ? ' (transactional)' : ''}`
+        );
+        // ✅ Version tracking event publish YOK - metadata-only update
+        // Version increment YOK - post('save') ve post('findOneAndUpdate') hook'ları tetiklenmez
+    }
+
+    /**
+    * Context-aware updateMetadataWithRetry: Request object'ten session algılama
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları
+    * @param {Request} [req] - Express Request object (session algılamak için)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description Request context'inden session'ı otomatik algılar ve metadata güncelleme yapar.
+    */
+    static async updateMetadataWithContext<T>(
+        Model: any,
+        id: string,
+        updateFields: any,
+        req?: Request,
+        options: any = {},
+        operationName?: string
+    ): Promise<T> {
+        const session = req && (req as any).dbSession ? (req as any).dbSession : undefined;
+        return await this.updateMetadataWithRetry(Model, id, updateFields, options, operationName, session);
     }
 
     /**

@@ -264,6 +264,74 @@ class OptimisticLockingUtil {
         });
     }
     /**
+    * Metadata güncelleme - VERSION TRACKING OLMADAN
+    *
+    * Scheduler job'lar, istatistik güncellemeleri ve metadata-only operasyonlar için.
+    * Version tracking hook'larını tetiklemez, version increment yapmaz.
+    *
+    * Use Cases:
+    * - AutomationRule: lastRunAt, totalProcessed, totalSuccess, totalFailed
+    * - Scheduler metadata: lastExecutedAt, executionCount
+    * - Statistics: viewCount, downloadCount, accessCount
+    * - Timestamps: lastAccessedAt, lastSyncedAt
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları ($inc, $set, $unset)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @param {ClientSession} [session] - MongoDB session (transaction için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description
+    * Version tracking hook'unu bypass eder çünkü:
+    * - Metadata değişiklikleri anlamlı veri değişikliği değildir
+    * - Cross-service sync gerektirmez
+    * - Outbox entry oluşturmaya gerek yoktur
+    * - Version increment gereksizdir
+    *
+    * Retry mekanizması ile güvenli güncelleme sağlar:
+    * - Exponential backoff stratejisi
+    * - Maksimum 5 deneme
+    * - Session/transaction desteği
+    */
+    static updateMetadataWithRetry(Model_1, id_1, updateFields_1) {
+        return __awaiter(this, arguments, void 0, function* (Model, id, updateFields, options = {}, operationName, session) {
+            const docName = operationName || `${Model.modelName} ${id} metadata`;
+            return yield this.retryWithOptimisticLocking(() => __awaiter(this, void 0, void 0, function* () {
+                const updateOptions = Object.assign(Object.assign({ new: true, omitUndefined: true }, options), (session ? { session } : {}));
+                const updatedDoc = yield Model.findByIdAndUpdate(id, updateFields, updateOptions);
+                if (!updatedDoc) {
+                    throw new Error(`Document not found: ${id}`);
+                }
+                return updatedDoc;
+            }), 5, 100, `${docName} update${session ? ' (transactional)' : ''}`);
+            // ✅ Version tracking event publish YOK - metadata-only update
+            // Version increment YOK - post('save') ve post('findOneAndUpdate') hook'ları tetiklenmez
+        });
+    }
+    /**
+    * Context-aware updateMetadataWithRetry: Request object'ten session algılama
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları
+    * @param {Request} [req] - Express Request object (session algılamak için)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description Request context'inden session'ı otomatik algılar ve metadata güncelleme yapar.
+    */
+    static updateMetadataWithContext(Model_1, id_1, updateFields_1, req_1) {
+        return __awaiter(this, arguments, void 0, function* (Model, id, updateFields, req, options = {}, operationName) {
+            const session = req && req.dbSession ? req.dbSession : undefined;
+            return yield this.updateMetadataWithRetry(Model, id, updateFields, options, operationName, session);
+        });
+    }
+    /**
     * Bulk operations with session support
     *
     * @static

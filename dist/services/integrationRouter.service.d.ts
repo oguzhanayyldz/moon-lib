@@ -15,7 +15,7 @@ export declare class IntegrationRouter {
      * Belirli bir entegrasyon tipi ve platform için hedef NATS subject'ini oluşturur
      *
      * @param type Entegrasyon tipi (örn: "ecommerce", "marketplace")
-     * @param platform Platform adı (örn: "shopify", "trendyol")
+     * @param platform Platform adı (örn: "shopify", "trendyol", "Aras Kargo")
      * @returns NATS subject string
      * @throws Error - tip veya platform boş olduğunda
      */
