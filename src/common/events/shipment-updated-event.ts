@@ -59,6 +59,11 @@ export interface ShipmentUpdated {
     // Güncellenen shipment durumu
     status?: string;
 
+    // Platform tracking bilgileri (Shopify, Trendyol vb.)
+    platformTrackingSent?: boolean;
+    platformTrackingSentAt?: Date;
+    platformTrackingError?: string;
+
     // Timestamp
     timestamp: Date;
 }

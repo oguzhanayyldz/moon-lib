@@ -47,6 +47,9 @@ export interface ShipmentCreated {
     shippedDate?: Date;
     deliveredDate?: Date;
     status: string;
+    platformTrackingSent?: boolean;
+    platformTrackingSentAt?: Date;
+    platformTrackingError?: string;
     timestamp: Date;
 }
 //# sourceMappingURL=shipment-created-event.d.ts.map
