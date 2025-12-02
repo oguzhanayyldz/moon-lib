@@ -53,3 +53,36 @@ export declare const isActiveOrderStatus: (status: OrderStatus) => boolean;
  * @returns Boolean indicating if order is being fulfilled
  */
 export declare const isInFulfillmentProcess: (status: OrderStatus) => boolean;
+/**
+ * Order status priority mapping for cargo-based transitions
+ * Higher number = later in fulfillment process
+ * Used to determine if a status transition is "forward" or "backward"
+ */
+export declare const ORDER_STATUS_PRIORITY: Record<OrderStatus, number>;
+/**
+ * Check if a status transition is valid for cargo-based updates
+ *
+ * This is different from isValidStatusTransition() because:
+ * - Allows "forward" jumps (e.g., Prepared → Delivered)
+ * - Blocks backward transitions (e.g., Delivered → Preparing)
+ * - Prevents exiting from final statuses
+ *
+ * Used specifically for ShipmentUpdated events where cargo company
+ * reports the real-world status, which may skip intermediate states.
+ *
+ * @param fromStatus Current order status
+ * @param toStatus Target order status from cargo tracking
+ * @returns Boolean indicating if the cargo-based transition is allowed
+ */
+export declare const isForwardCargoTransition: (fromStatus: OrderStatus, toStatus: OrderStatus) => boolean;
+/**
+ * Get list of intermediate statuses that were skipped in a status jump
+ *
+ * Example: Prepared (13) → Delivered (50)
+ * Returns: [Packing, Packaged, ReadyToShip, Shipped, InTransit, OutForDelivery]
+ *
+ * @param fromStatus Starting status
+ * @param toStatus Ending status
+ * @returns Array of OrderStatus values that were skipped
+ */
+export declare const getSkippedStatuses: (fromStatus: OrderStatus, toStatus: OrderStatus) => OrderStatus[];

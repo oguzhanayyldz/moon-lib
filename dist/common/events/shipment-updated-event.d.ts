@@ -49,5 +49,6 @@ export interface ShipmentUpdated {
     platformTrackingSent?: boolean;
     platformTrackingSentAt?: Date;
     platformTrackingError?: string;
+    suggestedOrderStatus?: string;
     timestamp: Date;
 }

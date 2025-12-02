@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isInFulfillmentProcess = exports.isActiveOrderStatus = exports.getNextPossibleStatuses = exports.isValidStatusTransition = exports.ORDER_STATUS_TRANSITIONS = exports.OrderStatus = void 0;
+exports.getSkippedStatuses = exports.isForwardCargoTransition = exports.ORDER_STATUS_PRIORITY = exports.isInFulfillmentProcess = exports.isActiveOrderStatus = exports.getNextPossibleStatuses = exports.isValidStatusTransition = exports.ORDER_STATUS_TRANSITIONS = exports.OrderStatus = void 0;
 var OrderStatus;
 (function (OrderStatus) {
     // Initial states
@@ -68,26 +68,35 @@ exports.ORDER_STATUS_TRANSITIONS = {
     ],
     [OrderStatus.Preparing]: [
         OrderStatus.Prepared,
+        OrderStatus.Shipped, // Hızlı hazırlık, direkt gönderim
+        OrderStatus.InTransit, // Express senaryolar
         OrderStatus.OnHold,
         OrderStatus.Cancelled
     ],
     [OrderStatus.Prepared]: [
         OrderStatus.Packing,
+        OrderStatus.Shipped, // Kargo oluşturulup gönderildiğinde
+        OrderStatus.InTransit, // Kargo firması direkt in_transit döndüğünde
         OrderStatus.OnHold,
         OrderStatus.Cancelled
     ],
     [OrderStatus.Packing]: [
         OrderStatus.Packaged,
+        OrderStatus.Shipped, // Paketlenip direkt gönderiliyor
+        OrderStatus.InTransit, // Paketlenir paketlenmez kargoya verildi
         OrderStatus.OnHold,
         OrderStatus.Cancelled
     ],
     [OrderStatus.Packaged]: [
         OrderStatus.ReadyToShip,
+        OrderStatus.Shipped, // Paketlendi ve gönderildi
+        OrderStatus.InTransit, // Direkt yolda
         OrderStatus.OnHold,
         OrderStatus.Cancelled
     ],
     [OrderStatus.ReadyToShip]: [
         OrderStatus.Shipped,
+        OrderStatus.InTransit, // Kargo alır almaz yola çıktı
         OrderStatus.OnHold,
         OrderStatus.Cancelled
     ],
@@ -191,4 +200,118 @@ const isInFulfillmentProcess = (status) => {
     return fulfillmentStatuses.includes(status);
 };
 exports.isInFulfillmentProcess = isInFulfillmentProcess;
+/**
+ * Order status priority mapping for cargo-based transitions
+ * Higher number = later in fulfillment process
+ * Used to determine if a status transition is "forward" or "backward"
+ */
+exports.ORDER_STATUS_PRIORITY = {
+    // Initial states (0-9)
+    [OrderStatus.Draft]: 0,
+    [OrderStatus.NewOrder]: 1,
+    [OrderStatus.WaitingPayment]: 2,
+    [OrderStatus.WaitingStock]: 3,
+    [OrderStatus.Comfirmed]: 4,
+    [OrderStatus.Paid]: 5,
+    // Processing States (10-19)
+    [OrderStatus.Pending]: 10,
+    [OrderStatus.Processing]: 11,
+    [OrderStatus.Preparing]: 12,
+    [OrderStatus.Prepared]: 13,
+    // Packaging states (20-29)
+    [OrderStatus.Packing]: 20,
+    [OrderStatus.Packaged]: 21,
+    // Shipping states (30-49)
+    [OrderStatus.ReadyToShip]: 30,
+    [OrderStatus.Shipped]: 35,
+    [OrderStatus.InTransit]: 40,
+    [OrderStatus.OutForDelivery]: 45,
+    // Delivery states (50-59)
+    [OrderStatus.Delivered]: 50,
+    [OrderStatus.Completed]: 55,
+    // Exception states (100+) - considered "final" or "terminal"
+    [OrderStatus.OnHold]: 100,
+    [OrderStatus.Cancelled]: 101,
+    [OrderStatus.Returned]: 102,
+    [OrderStatus.Refunded]: 103,
+    [OrderStatus.Failed]: 104,
+};
+/**
+ * Final/terminal order statuses that cannot be changed (except for specific cases)
+ */
+const FINAL_STATUSES = [
+    OrderStatus.Completed,
+    OrderStatus.Cancelled,
+    OrderStatus.Refunded,
+    OrderStatus.Failed
+];
+/**
+ * Check if a status transition is valid for cargo-based updates
+ *
+ * This is different from isValidStatusTransition() because:
+ * - Allows "forward" jumps (e.g., Prepared → Delivered)
+ * - Blocks backward transitions (e.g., Delivered → Preparing)
+ * - Prevents exiting from final statuses
+ *
+ * Used specifically for ShipmentUpdated events where cargo company
+ * reports the real-world status, which may skip intermediate states.
+ *
+ * @param fromStatus Current order status
+ * @param toStatus Target order status from cargo tracking
+ * @returns Boolean indicating if the cargo-based transition is allowed
+ */
+const isForwardCargoTransition = (fromStatus, toStatus) => {
+    var _a, _b;
+    // Same status is always allowed (idempotent)
+    if (fromStatus === toStatus) {
+        return true;
+    }
+    // Cannot exit from final statuses
+    if (FINAL_STATUSES.includes(fromStatus)) {
+        return false;
+    }
+    // Special case: Can return from Delivered
+    if (toStatus === OrderStatus.Returned && fromStatus === OrderStatus.Delivered) {
+        return true;
+    }
+    // Special case: Can fail from any active status
+    if (toStatus === OrderStatus.Failed) {
+        return true;
+    }
+    // Check if it's a forward transition
+    const fromPriority = (_a = exports.ORDER_STATUS_PRIORITY[fromStatus]) !== null && _a !== void 0 ? _a : 0;
+    const toPriority = (_b = exports.ORDER_STATUS_PRIORITY[toStatus]) !== null && _b !== void 0 ? _b : 0;
+    // Allow forward transitions (to higher priority)
+    return toPriority > fromPriority;
+};
+exports.isForwardCargoTransition = isForwardCargoTransition;
+/**
+ * Get list of intermediate statuses that were skipped in a status jump
+ *
+ * Example: Prepared (13) → Delivered (50)
+ * Returns: [Packing, Packaged, ReadyToShip, Shipped, InTransit, OutForDelivery]
+ *
+ * @param fromStatus Starting status
+ * @param toStatus Ending status
+ * @returns Array of OrderStatus values that were skipped
+ */
+const getSkippedStatuses = (fromStatus, toStatus) => {
+    var _a, _b;
+    const fromPriority = (_a = exports.ORDER_STATUS_PRIORITY[fromStatus]) !== null && _a !== void 0 ? _a : 0;
+    const toPriority = (_b = exports.ORDER_STATUS_PRIORITY[toStatus]) !== null && _b !== void 0 ? _b : 0;
+    // No skip if not a forward jump
+    if (toPriority <= fromPriority) {
+        return [];
+    }
+    // Find all statuses between from and to
+    const skipped = [];
+    for (const [status, priority] of Object.entries(exports.ORDER_STATUS_PRIORITY)) {
+        if (priority > fromPriority && priority < toPriority) {
+            skipped.push(status);
+        }
+    }
+    // Sort by priority
+    return skipped.sort((a, b) => exports.ORDER_STATUS_PRIORITY[a] - exports.ORDER_STATUS_PRIORITY[b]);
+};
+exports.getSkippedStatuses = getSkippedStatuses;
 //# sourceMappingURL=order-status.js.map

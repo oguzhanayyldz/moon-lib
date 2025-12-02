@@ -49,6 +49,7 @@ export interface ShipmentUpdated {
     platformTrackingSent?: boolean;
     platformTrackingSentAt?: Date;
     platformTrackingError?: string;
+    suggestedOrderStatus?: string;
     timestamp: Date;
 }
 //# sourceMappingURL=shipment-updated-event.d.ts.map

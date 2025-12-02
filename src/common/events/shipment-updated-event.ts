@@ -64,6 +64,10 @@ export interface ShipmentUpdated {
     platformTrackingSentAt?: Date;
     platformTrackingError?: string;
 
+    // Order status suggestion (kargo durumundan türetilen sipariş durumu)
+    // Orders Service bu değeri alıp transition validation yaparak order status'ü günceller
+    suggestedOrderStatus?: string;
+
     // Timestamp
     timestamp: Date;
 }

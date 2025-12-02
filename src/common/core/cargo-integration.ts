@@ -110,16 +110,19 @@ export abstract class CargoIntegration extends BaseIntegration {
      * Birden fazla kargonun durumunu tek seferde sorgular.
      * Bazı kargo firmaları batch API sağlar, performans açısından önemli.
      *
-     * @param shipments - Takip edilecek kargolar (shippingNumber array)
+     * @param params - Object containing cargoIntegrationId and shipments array
      * @returns Batch tracking sonuçları
      * @abstract
      * @optional - Bazı firmalar batch API sağlamaz
      */
-    protected abstract fetchTrackingUpdatesBulk?(shipments: Array<{
-        orderCargoId: string;
-        shippingNumber: string;
-        trackingNumber?: string;
-    }>): Promise<Array<{
+    protected abstract fetchTrackingUpdatesBulk?(params: {
+        cargoIntegrationId: string;
+        shipments: Array<{
+            orderCargoId: string;
+            shippingNumber: string;
+            trackingNumber?: string;
+        }>;
+    }): Promise<Array<{
         orderCargoId: string;
         shippingNumber: string;
         success: boolean;
