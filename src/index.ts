@@ -146,6 +146,9 @@ export * from './common/core';
 export * from './common/validators';
 export * from './common/strategies';
 
+// Config - Shared Configurations
+export * from './config/multer.config';
+
 // Model başlatma fonksiyonu
 export const initializeModels = (connection: mongoose.Connection): void => {
     createOutboxModel(connection);

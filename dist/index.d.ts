@@ -106,5 +106,6 @@ export * from './common/methods';
 export * from './common/core';
 export * from './common/validators';
 export * from './common/strategies';
+export * from './config/multer.config';
 export declare const initializeModels: (connection: mongoose.Connection) => void;
 export declare const initializeModelsForIntegration: (connection: mongoose.Connection) => void;

@@ -146,6 +146,8 @@ __exportStar(require("./common/methods"), exports);
 __exportStar(require("./common/core"), exports);
 __exportStar(require("./common/validators"), exports);
 __exportStar(require("./common/strategies"), exports);
+// Config - Shared Configurations
+__exportStar(require("./config/multer.config"), exports);
 // Model başlatma fonksiyonu
 const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);
