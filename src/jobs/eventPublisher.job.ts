@@ -51,6 +51,8 @@ import { InvoiceFailedPublisher } from '../events/publishers/invoiceFailed.publi
 import { OrderCargoUpdatedPublisher } from '../events/publishers/orderCargoUpdated.publisher';
 import { ShipmentCreatedPublisher } from '../events/publishers/shipmentCreated.publisher';
 import { ShipmentUpdatedPublisher } from '../events/publishers/shipmentUpdated.publisher';
+import { ExcelFileGeneratedPublisher } from '../events/publishers/excelFileGenerated.publisher';
+import { ExcelFileStoredPublisher } from '../events/publishers/excelFileStored.publisher';
 
 
 export class EventPublisherJob {
@@ -384,6 +386,14 @@ export class EventPublisherJob {
                 break;
             case Subjects.ShipmentUpdated:
                 await new ShipmentUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ExcelFileGenerated:
+                await new ExcelFileGeneratedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ExcelFileStored:
+                await new ExcelFileStoredPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

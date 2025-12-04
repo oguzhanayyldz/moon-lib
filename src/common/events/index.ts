@@ -58,3 +58,5 @@ export * from './types/invoice-status';
 export * from './order-cargo-updated-event';
 export * from './shipment-created-event';
 export * from './shipment-updated-event';
+export * from './excel-file-generated-event';
+export * from './excel-file-stored-event';

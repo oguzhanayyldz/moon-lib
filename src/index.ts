@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { createOutboxModel } from './models/outbox.schema';
 import { createDeadLetterModel } from './models/deadLetter.schema';
+import { createExcelJobModel } from './models/excelJob.schema';
 import { createIntegrationCategoryModel } from './models/integrationCategory.schema';
 import { createIntegrationBrandModel } from './models/integrationBrand.schema';
 import { createIntegrationCategoryAttributesModel } from './models/integrationCategoryAttributes.schema';
@@ -14,6 +15,7 @@ export * from './models/integrationCategory.schema';
 export * from './models/integrationBrand.schema';
 export * from './models/integrationCategoryAttributes.schema';
 export * from './models/integrationRequestLog.schema';
+export * from './models/excelJob.schema';
 
 // Services
 export * from './services/natsWrapper.service';
@@ -30,6 +32,11 @@ export * from './services/enhancedEntityDeletionRegistry';
 export * from './services/batchProcessingEngine.service';
 export * from './services/strategyCache.service';
 export * from './services/integrationCache.service';
+
+// Excel utilities
+export * from './services/excel/excelGenerator.service';
+export * from './services/excel/excelParser.service';
+export * from './services/sharedExcel.service';
 
 // Response Interpreters
 export * from './services/response-interpreters/base.interpreter';
@@ -124,6 +131,8 @@ export * from './events/publishers/syncRequested.publisher';
 export * from './events/publishers/invoiceCreated.publisher';
 export * from './events/publishers/invoiceFormalized.publisher';
 export * from './events/publishers/invoiceFailed.publisher';
+export * from './events/publishers/excelFileGenerated.publisher';
+export * from './events/publishers/excelFileStored.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
@@ -141,11 +150,13 @@ export * from './common/strategies';
 export const initializeModels = (connection: mongoose.Connection): void => {
     createOutboxModel(connection);
     createDeadLetterModel(connection);
+    createExcelJobModel(connection);
 };
 
 export const initializeModelsForIntegration = (connection: mongoose.Connection): void => {
     createOutboxModel(connection);
     createDeadLetterModel(connection);
+    createExcelJobModel(connection);
     createIntegrationCategoryModel(connection);
     createIntegrationBrandModel(connection);
     createIntegrationCategoryAttributesModel(connection);

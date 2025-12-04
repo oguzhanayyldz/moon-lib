@@ -51,4 +51,6 @@ var Subjects;
     Subjects["OrderCargoUpdated"] = "order:cargo:updated";
     Subjects["ShipmentCreated"] = "shipment:created";
     Subjects["ShipmentUpdated"] = "shipment:updated";
+    Subjects["ExcelFileGenerated"] = "excel:file:generated";
+    Subjects["ExcelFileStored"] = "excel:file:stored";
 })(Subjects || (exports.Subjects = Subjects = {}));

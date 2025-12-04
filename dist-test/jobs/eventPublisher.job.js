@@ -52,6 +52,8 @@ const invoiceFailed_publisher_1 = require("../events/publishers/invoiceFailed.pu
 const orderCargoUpdated_publisher_1 = require("../events/publishers/orderCargoUpdated.publisher");
 const shipmentCreated_publisher_1 = require("../events/publishers/shipmentCreated.publisher");
 const shipmentUpdated_publisher_1 = require("../events/publishers/shipmentUpdated.publisher");
+const excelFileGenerated_publisher_1 = require("../events/publishers/excelFileGenerated.publisher");
+const excelFileStored_publisher_1 = require("../events/publishers/excelFileStored.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -353,6 +355,14 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.ShipmentUpdated:
                 await new shipmentUpdated_publisher_1.ShipmentUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.ExcelFileGenerated:
+                await new excelFileGenerated_publisher_1.ExcelFileGeneratedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.ExcelFileStored:
+                await new excelFileStored_publisher_1.ExcelFileStoredPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

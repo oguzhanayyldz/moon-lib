@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeModelsForIntegration = exports.initializeModels = void 0;
 const outbox_schema_1 = require("./models/outbox.schema");
 const deadLetter_schema_1 = require("./models/deadLetter.schema");
+const excelJob_schema_1 = require("./models/excelJob.schema");
 const integrationCategory_schema_1 = require("./models/integrationCategory.schema");
 const integrationBrand_schema_1 = require("./models/integrationBrand.schema");
 const integrationCategoryAttributes_schema_1 = require("./models/integrationCategoryAttributes.schema");
@@ -29,6 +30,7 @@ __exportStar(require("./models/integrationCategory.schema"), exports);
 __exportStar(require("./models/integrationBrand.schema"), exports);
 __exportStar(require("./models/integrationCategoryAttributes.schema"), exports);
 __exportStar(require("./models/integrationRequestLog.schema"), exports);
+__exportStar(require("./models/excelJob.schema"), exports);
 // Services
 __exportStar(require("./services/natsWrapper.service"), exports);
 __exportStar(require("./services/tracer.service"), exports);
@@ -44,6 +46,10 @@ __exportStar(require("./services/enhancedEntityDeletionRegistry"), exports);
 __exportStar(require("./services/batchProcessingEngine.service"), exports);
 __exportStar(require("./services/strategyCache.service"), exports);
 __exportStar(require("./services/integrationCache.service"), exports);
+// Excel utilities
+__exportStar(require("./services/excel/excelGenerator.service"), exports);
+__exportStar(require("./services/excel/excelParser.service"), exports);
+__exportStar(require("./services/sharedExcel.service"), exports);
 // Response Interpreters
 __exportStar(require("./services/response-interpreters/base.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/trendyol.interpreter"), exports);
@@ -127,6 +133,8 @@ __exportStar(require("./events/publishers/syncRequested.publisher"), exports);
 __exportStar(require("./events/publishers/invoiceCreated.publisher"), exports);
 __exportStar(require("./events/publishers/invoiceFormalized.publisher"), exports);
 __exportStar(require("./events/publishers/invoiceFailed.publisher"), exports);
+__exportStar(require("./events/publishers/excelFileGenerated.publisher"), exports);
+__exportStar(require("./events/publishers/excelFileStored.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);
@@ -142,11 +150,13 @@ __exportStar(require("./common/strategies"), exports);
 const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);
     (0, deadLetter_schema_1.createDeadLetterModel)(connection);
+    (0, excelJob_schema_1.createExcelJobModel)(connection);
 };
 exports.initializeModels = initializeModels;
 const initializeModelsForIntegration = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);
     (0, deadLetter_schema_1.createDeadLetterModel)(connection);
+    (0, excelJob_schema_1.createExcelJobModel)(connection);
     (0, integrationCategory_schema_1.createIntegrationCategoryModel)(connection);
     (0, integrationBrand_schema_1.createIntegrationBrandModel)(connection);
     (0, integrationCategoryAttributes_schema_1.createIntegrationCategoryAttributesModel)(connection);

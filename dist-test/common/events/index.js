@@ -74,4 +74,6 @@ __exportStar(require("./types/invoice-status"), exports);
 __exportStar(require("./order-cargo-updated-event"), exports);
 __exportStar(require("./shipment-created-event"), exports);
 __exportStar(require("./shipment-updated-event"), exports);
+__exportStar(require("./excel-file-generated-event"), exports);
+__exportStar(require("./excel-file-stored-event"), exports);
 //# sourceMappingURL=index.js.map

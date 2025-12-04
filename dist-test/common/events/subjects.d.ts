@@ -46,6 +46,8 @@ export declare enum Subjects {
     InvoiceFailed = "invoice:failed",
     OrderCargoUpdated = "order:cargo:updated",
     ShipmentCreated = "shipment:created",
-    ShipmentUpdated = "shipment:updated"
+    ShipmentUpdated = "shipment:updated",
+    ExcelFileGenerated = "excel:file:generated",
+    ExcelFileStored = "excel:file:stored"
 }
 //# sourceMappingURL=subjects.d.ts.map

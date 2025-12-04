@@ -19,7 +19,10 @@
     "build": "tsc",
     "build:test": "tsc --project tsconfig.test.json",
     "build:all": "npm run build && npm run build:test",
-    "build:watch": "tsc --watch"
+    "build:watch": "tsc --watch",
+    "test": "jest --no-cache --runInBand",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "files": [
     "dist",
@@ -55,6 +58,7 @@
     "bson": "^5.4.0",
     "buffer-equal-constant-time": "^1.0.1",
     "cookie-session": "^2.0.0",
+    "exceljs": "^4.4.0",
     "express": "^4.18.2",
     "express-mongo-sanitize": "^2.2.0",
     "express-validator": "^7.0.1",

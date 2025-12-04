@@ -47,4 +47,6 @@ export enum Subjects {
     OrderCargoUpdated = "order:cargo:updated",
     ShipmentCreated = "shipment:created",
     ShipmentUpdated = "shipment:updated",
+    ExcelFileGenerated = "excel:file:generated",
+    ExcelFileStored = "excel:file:stored",
 }

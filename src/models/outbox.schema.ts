@@ -49,6 +49,8 @@ import {
     InvoiceFormalizedEvent,
     InvoiceFailedEvent,
     ShipmentCreatedEvent,
+    ExcelFileGeneratedEvent,
+    ExcelFileStoredEvent,
 } from "../common";
 
 // Event tiplerini tanımla
@@ -100,6 +102,8 @@ interface EventPayloadMap {
     [Subjects.InvoiceFailed]: InvoiceFailedEvent['data'];
     [Subjects.OrderCargoUpdated]: OrderCargoUpdatedEvent['data'];
     [Subjects.ShipmentCreated]: ShipmentCreatedEvent['data'];
+    [Subjects.ExcelFileGenerated]: ExcelFileGeneratedEvent['data'];
+    [Subjects.ExcelFileStored]: ExcelFileStoredEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
