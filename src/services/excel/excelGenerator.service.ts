@@ -58,13 +58,29 @@ export class ExcelGeneratorService {
     // Apply header styling
     if (applyHeaderStyle) {
       const headerRow = worksheet.getRow(1);
-      headerRow.font = { bold: true, size: 11 };
+      headerRow.font = {
+        bold: true,
+        size: 14,  // Daha büyük ve okunaklı
+        color: { argb: 'FFFFFFFF' }  // Beyaz yazı
+      };
       headerRow.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' }
+        fgColor: { argb: 'FF4472C4' }  // Excel default mavi (profesyonel)
       };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.alignment = {
+        vertical: 'middle',
+        horizontal: 'center'
+      };
+      headerRow.height = 30;  // Header yüksekliği artırıldı
+
+      // Kenarlıklar ekle (profesyonel görünüm)
+      headerRow.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'medium', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
     }
 
     // Freeze header row
@@ -125,13 +141,29 @@ export class ExcelGeneratorService {
       // Apply header styling
       if (applyHeaderStyle) {
         const headerRow = worksheet.getRow(1);
-        headerRow.font = { bold: true, size: 11 };
+        headerRow.font = {
+          bold: true,
+          size: 14,  // Daha büyük ve okunaklı
+          color: { argb: 'FFFFFFFF' }  // Beyaz yazı
+        };
         headerRow.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' }
+          fgColor: { argb: 'FF4472C4' }  // Excel default mavi (profesyonel)
         };
-        headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+        headerRow.alignment = {
+          vertical: 'middle',
+          horizontal: 'center'
+        };
+        headerRow.height = 30;  // Header yüksekliği artırıldı
+
+        // Kenarlıklar ekle (profesyonel görünüm)
+        headerRow.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'medium', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
       }
 
       // Freeze header row
