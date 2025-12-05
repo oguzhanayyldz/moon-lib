@@ -1,9 +1,23 @@
 import * as ExcelJS from 'exceljs';
+export interface ExcelValidation {
+    type: 'list' | 'custom';
+    formulae?: string[];
+    allowBlank?: boolean;
+    showErrorMessage?: boolean;
+    errorTitle?: string;
+    error?: string;
+    showInputMessage?: boolean;
+    promptTitle?: string;
+    prompt?: string;
+}
 export interface ExcelColumn {
     header: string;
     key: string;
     width?: number;
     style?: Partial<ExcelJS.Style>;
+    validation?: ExcelValidation;
+    hidden?: boolean;
+    readOnly?: boolean;
 }
 export interface ExcelGeneratorOptions {
     worksheetName?: string;

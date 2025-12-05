@@ -1,10 +1,25 @@
 import * as ExcelJS from 'exceljs';
 
+export interface ExcelValidation {
+  type: 'list' | 'custom';
+  formulae?: string[];  // For list: ['item1', 'item2'] or custom formula
+  allowBlank?: boolean;
+  showErrorMessage?: boolean;
+  errorTitle?: string;
+  error?: string;
+  showInputMessage?: boolean;
+  promptTitle?: string;
+  prompt?: string;
+}
+
 export interface ExcelColumn {
   header: string;
   key: string;
   width?: number;
   style?: Partial<ExcelJS.Style>;
+  validation?: ExcelValidation;
+  hidden?: boolean;  // For ID columns
+  readOnly?: boolean;  // For read-only columns (price, stock, images, etc.)
 }
 
 export interface ExcelGeneratorOptions {
@@ -132,11 +147,68 @@ export class ExcelGeneratorService {
         header: col.header,
         key: col.key,
         width: col.width || 15,
-        style: col.style
+        style: col.style,
+        hidden: col.hidden || false
       }));
 
       // Add rows
       worksheet.addRows(data);
+
+      // Apply column validations (dropdown lists) and read-only protection
+      columns.forEach((col, colIndex) => {
+        const columnLetter = String.fromCharCode(65 + colIndex); // A, B, C, ...
+        const startRow = 2; // Data starts at row 2 (row 1 is header)
+        const endRow = data.length + 1; // Last data row
+
+        // Apply to all data cells in this column (including future rows)
+        for (let row = startRow; row <= endRow + 1000; row++) { // +1000 for future rows
+          const cell = worksheet.getCell(`${columnLetter}${row}`);
+
+          // Apply validation if exists
+          if (col.validation) {
+            cell.dataValidation = {
+              type: col.validation.type,
+              allowBlank: col.validation.allowBlank !== false,
+              formulae: col.validation.formulae || [],
+              showErrorMessage: col.validation.showErrorMessage !== false,
+              errorTitle: col.validation.errorTitle || 'Invalid Value',
+              error: col.validation.error || 'Please select a value from the list',
+              showInputMessage: col.validation.showInputMessage || false,
+              promptTitle: col.validation.promptTitle || undefined,
+              prompt: col.validation.prompt || undefined
+            };
+          }
+
+          // Apply read-only protection if specified
+          if (col.readOnly) {
+            // Cell protection (locked)
+            cell.protection = { locked: true };
+
+            // Gray background as visual hint
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF0F0F0' }  // Light gray
+            };
+          } else {
+            // Explicitly unlock editable cells
+            cell.protection = { locked: false };
+          }
+        }
+      });
+
+      // Worksheet protection (only locked cells are protected)
+      worksheet.protect('', {
+        selectLockedCells: true,
+        selectUnlockedCells: true,
+        formatCells: false,
+        formatColumns: false,
+        formatRows: false,
+        insertRows: false,
+        deleteRows: false,
+        sort: false,
+        autoFilter: false
+      });
 
       // Apply header styling
       if (applyHeaderStyle) {
