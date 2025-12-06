@@ -154,6 +154,13 @@ export class ExcelGeneratorService {
       // Add rows
       worksheet.addRows(data);
 
+      // Protect header row (row 1) - READ-ONLY for all columns
+      columns.forEach((col, colIndex) => {
+        const columnLetter = String.fromCharCode(65 + colIndex);
+        const headerCell = worksheet.getCell(`${columnLetter}1`);
+        headerCell.protection = { locked: true }; // Header always locked
+      });
+
       // Apply column validations (dropdown lists) and read-only protection
       columns.forEach((col, colIndex) => {
         const columnLetter = String.fromCharCode(65 + colIndex); // A, B, C, ...
