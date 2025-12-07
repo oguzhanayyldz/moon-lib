@@ -4,6 +4,7 @@ export interface ExcelValidation {
     formulae?: string[];
     allowBlank?: boolean;
     showErrorMessage?: boolean;
+    errorStyle?: 'stop' | 'warning' | 'information';
     errorTitle?: string;
     error?: string;
     showInputMessage?: boolean;

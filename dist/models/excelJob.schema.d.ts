@@ -19,6 +19,7 @@ export interface ExcelJobAttrs extends BaseAttrs {
     user: string | mongoose.Types.ObjectId;
     parentUser?: string | mongoose.Types.ObjectId;
     serviceName: string;
+    entityType?: string;
     type: ExcelJobType;
     status?: ExcelJobStatus;
     progress?: number;
@@ -36,6 +37,7 @@ export interface ExcelJobDoc extends BaseDoc {
     user: mongoose.Types.ObjectId;
     parentUser?: mongoose.Types.ObjectId;
     serviceName: string;
+    entityType?: string;
     type: ExcelJobType;
     status: ExcelJobStatus;
     progress: number;

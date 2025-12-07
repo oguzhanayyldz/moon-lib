@@ -23,6 +23,7 @@ export interface ExcelJobAttrs extends BaseAttrs {
   user: string | mongoose.Types.ObjectId;
   parentUser?: string | mongoose.Types.ObjectId;
   serviceName: string;
+  entityType?: string; // 'product', 'category', 'brand', etc.
   type: ExcelJobType;
   status?: ExcelJobStatus;
   progress?: number;
@@ -41,6 +42,7 @@ export interface ExcelJobDoc extends BaseDoc {
   user: mongoose.Types.ObjectId;
   parentUser?: mongoose.Types.ObjectId;
   serviceName: string;
+  entityType?: string; // 'product', 'category', 'brand', etc.
   type: ExcelJobType;
   status: ExcelJobStatus;
   progress: number;
@@ -75,6 +77,11 @@ const excelJobSchemaDefinition = {
     required: true,
     index: true,
     enum: ['products', 'orders', 'inventory', 'catalog', 'pricing']
+  },
+  entityType: {
+    type: String,
+    index: true,
+    enum: ['product', 'category', 'brand', 'order', 'stock', 'mapping', 'price']
   },
   type: {
     type: String,
@@ -130,9 +137,9 @@ const excelJobSchemaDefinition = {
 const excelJobSchema = createBaseSchema(excelJobSchemaDefinition);
 
 // Compound indexes for optimal query performance
-excelJobSchema.index({ user: 1, serviceName: 1, createdAt: -1 });
-excelJobSchema.index({ parentUser: 1, serviceName: 1, createdAt: -1 });
-excelJobSchema.index({ serviceName: 1, status: 1, createdAt: -1 });
+excelJobSchema.index({ user: 1, serviceName: 1, entityType: 1, createdAt: -1 });
+excelJobSchema.index({ parentUser: 1, serviceName: 1, entityType: 1, createdAt: -1 });
+excelJobSchema.index({ serviceName: 1, entityType: 1, status: 1, createdAt: -1 });
 excelJobSchema.index({ expiresAt: 1 }); // For cleanup jobs
 
 export function createExcelJobModel(connection: mongoose.Connection) {

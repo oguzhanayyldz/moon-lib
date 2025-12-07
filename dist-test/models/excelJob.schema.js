@@ -38,6 +38,11 @@ const excelJobSchemaDefinition = {
         index: true,
         enum: ['products', 'orders', 'inventory', 'catalog', 'pricing']
     },
+    entityType: {
+        type: String,
+        index: true,
+        enum: ['product', 'category', 'brand', 'order', 'stock', 'mapping', 'price']
+    },
     type: {
         type: String,
         enum: Object.values(ExcelJobType),
@@ -90,9 +95,9 @@ const excelJobSchemaDefinition = {
 };
 const excelJobSchema = (0, base_schema_1.createBaseSchema)(excelJobSchemaDefinition);
 // Compound indexes for optimal query performance
-excelJobSchema.index({ user: 1, serviceName: 1, createdAt: -1 });
-excelJobSchema.index({ parentUser: 1, serviceName: 1, createdAt: -1 });
-excelJobSchema.index({ serviceName: 1, status: 1, createdAt: -1 });
+excelJobSchema.index({ user: 1, serviceName: 1, entityType: 1, createdAt: -1 });
+excelJobSchema.index({ parentUser: 1, serviceName: 1, entityType: 1, createdAt: -1 });
+excelJobSchema.index({ serviceName: 1, entityType: 1, status: 1, createdAt: -1 });
 excelJobSchema.index({ expiresAt: 1 }); // For cleanup jobs
 function createExcelJobModel(connection) {
     try {

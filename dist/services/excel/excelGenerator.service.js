@@ -151,6 +151,7 @@ class ExcelGeneratorService {
                                 allowBlank: col.validation.allowBlank !== false,
                                 formulae: col.validation.formulae || [],
                                 showErrorMessage: col.validation.showErrorMessage !== false,
+                                errorStyle: col.validation.errorStyle || 'stop', // Default to 'stop' to prevent manual input
                                 errorTitle: col.validation.errorTitle || 'Invalid Value',
                                 error: col.validation.error || 'Please select a value from the list',
                                 showInputMessage: col.validation.showInputMessage || false,
