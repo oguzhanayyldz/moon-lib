@@ -55,4 +55,9 @@ export declare class ExcelGeneratorService {
         columns: ExcelColumn[];
         exampleRows?: any[];
     }[]): Promise<Buffer>;
+    /**
+     * Helper: Convert column index to Excel letter (supports 26+ columns)
+     * Example: 0 -> A, 25 -> Z, 26 -> AA, 27 -> AB
+     */
+    private static columnIndexToLetter;
 }

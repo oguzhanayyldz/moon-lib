@@ -131,14 +131,15 @@ class ExcelGeneratorService {
                 // Add rows
                 worksheet.addRows(data);
                 // Protect header row (row 1) - READ-ONLY for all columns
+                // IMPORTANT: Use proper column letter conversion for 26+ columns (AA, AB, etc.)
                 columns.forEach((col, colIndex) => {
-                    const columnLetter = String.fromCharCode(65 + colIndex);
+                    const columnLetter = this.columnIndexToLetter(colIndex);
                     const headerCell = worksheet.getCell(`${columnLetter}1`);
                     headerCell.protection = { locked: true }; // Header always locked
                 });
                 // Apply column validations (dropdown lists) and read-only protection
                 columns.forEach((col, colIndex) => {
-                    const columnLetter = String.fromCharCode(65 + colIndex); // A, B, C, ...
+                    const columnLetter = this.columnIndexToLetter(colIndex); // A, B, C, ... AA, AB, ...
                     const startRow = 2; // Data starts at row 2 (row 1 is header)
                     const endRow = data.length + 1; // Last data row
                     // Apply to all data cells in this column (including future rows)
@@ -238,6 +239,18 @@ class ExcelGeneratorService {
             }));
             return this.generateMultiSheet(sheets);
         });
+    }
+    /**
+     * Helper: Convert column index to Excel letter (supports 26+ columns)
+     * Example: 0 -> A, 25 -> Z, 26 -> AA, 27 -> AB
+     */
+    static columnIndexToLetter(index) {
+        let letter = '';
+        while (index >= 0) {
+            letter = String.fromCharCode((index % 26) + 65) + letter;
+            index = Math.floor(index / 26) - 1;
+        }
+        return letter;
     }
 }
 exports.ExcelGeneratorService = ExcelGeneratorService;
