@@ -41,7 +41,7 @@ const excelJobSchemaDefinition = {
     entityType: {
         type: String,
         index: true,
-        enum: ['product', 'category', 'brand', 'order', 'stock', 'mapping', 'price', 'attributes']
+        enum: ['product', 'category', 'brand', 'order', 'stock', 'mapping', 'catalog', 'price', 'attributes']
     },
     type: {
         type: String,
