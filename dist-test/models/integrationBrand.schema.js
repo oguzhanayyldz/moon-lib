@@ -34,6 +34,7 @@ const integrationBrandSchemaDefinition = {
 };
 // Marka ID ve entegrasyon adı için tekil indeks oluştur
 const integrationBrandSchema = (0, base_schema_1.createBaseSchema)(integrationBrandSchemaDefinition);
+integrationBrandSchema.index({ integrationName: 1, externalId: 1 }, { unique: true });
 integrationBrandSchema.pre('save', async function (next) {
     const shouldUpdateUniqueCode = (!this.deleted && !this.deletionDate && this.uniqueCode.indexOf("base-") !== -1) ||
         (this.isModified('externalId') || this.isModified('integrationName'));

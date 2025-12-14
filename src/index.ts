@@ -133,6 +133,14 @@ export * from './events/publishers/invoiceFormalized.publisher';
 export * from './events/publishers/invoiceFailed.publisher';
 export * from './events/publishers/excelFileGenerated.publisher';
 export * from './events/publishers/excelFileStored.publisher';
+export * from './events/publishers/platformCategoryCreated.publisher';
+export * from './events/publishers/platformCategoryUpdated.publisher';
+export * from './events/publishers/platformBrandCreated.publisher';
+export * from './events/publishers/platformBrandUpdated.publisher';
+export * from './events/publishers/categoryCreated.publisher';
+export * from './events/publishers/categoryUpdated.publisher';
+export * from './events/publishers/brandCreated.publisher';
+export * from './events/publishers/brandUpdated.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

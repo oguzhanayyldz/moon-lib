@@ -53,5 +53,13 @@ var Subjects;
     Subjects["ShipmentUpdated"] = "shipment:updated";
     Subjects["ExcelFileGenerated"] = "excel:file:generated";
     Subjects["ExcelFileStored"] = "excel:file:stored";
+    Subjects["PlatformCategoryCreated"] = "platform:category:created";
+    Subjects["PlatformCategoryUpdated"] = "platform:category:updated";
+    Subjects["PlatformBrandCreated"] = "platform:brand:created";
+    Subjects["PlatformBrandUpdated"] = "platform:brand:updated";
+    Subjects["CategoryCreated"] = "category:created";
+    Subjects["CategoryUpdated"] = "category:updated";
+    Subjects["BrandCreated"] = "brand:created";
+    Subjects["BrandUpdated"] = "brand:updated";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

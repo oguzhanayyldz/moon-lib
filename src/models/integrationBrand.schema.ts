@@ -50,6 +50,7 @@ const integrationBrandSchemaDefinition = {
 
 // Marka ID ve entegrasyon adı için tekil indeks oluştur
 const integrationBrandSchema = createBaseSchema(integrationBrandSchemaDefinition);
+integrationBrandSchema.index({ integrationName: 1, externalId: 1 }, { unique: true });
 
 integrationBrandSchema.pre<IntegrationBrandDoc>('save', async function (next) {
     const shouldUpdateUniqueCode = 

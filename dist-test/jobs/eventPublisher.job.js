@@ -54,6 +54,14 @@ const shipmentCreated_publisher_1 = require("../events/publishers/shipmentCreate
 const shipmentUpdated_publisher_1 = require("../events/publishers/shipmentUpdated.publisher");
 const excelFileGenerated_publisher_1 = require("../events/publishers/excelFileGenerated.publisher");
 const excelFileStored_publisher_1 = require("../events/publishers/excelFileStored.publisher");
+const platformCategoryCreated_publisher_1 = require("../events/publishers/platformCategoryCreated.publisher");
+const platformCategoryUpdated_publisher_1 = require("../events/publishers/platformCategoryUpdated.publisher");
+const platformBrandCreated_publisher_1 = require("../events/publishers/platformBrandCreated.publisher");
+const platformBrandUpdated_publisher_1 = require("../events/publishers/platformBrandUpdated.publisher");
+const categoryCreated_publisher_1 = require("../events/publishers/categoryCreated.publisher");
+const categoryUpdated_publisher_1 = require("../events/publishers/categoryUpdated.publisher");
+const brandCreated_publisher_1 = require("../events/publishers/brandCreated.publisher");
+const brandUpdated_publisher_1 = require("../events/publishers/brandUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -363,6 +371,38 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.ExcelFileStored:
                 await new excelFileStored_publisher_1.ExcelFileStoredPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.PlatformCategoryCreated:
+                await new platformCategoryCreated_publisher_1.PlatformCategoryCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.PlatformCategoryUpdated:
+                await new platformCategoryUpdated_publisher_1.PlatformCategoryUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.PlatformBrandCreated:
+                await new platformBrandCreated_publisher_1.PlatformBrandCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.PlatformBrandUpdated:
+                await new platformBrandUpdated_publisher_1.PlatformBrandUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.CategoryCreated:
+                await new categoryCreated_publisher_1.CategoryCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.CategoryUpdated:
+                await new categoryUpdated_publisher_1.CategoryUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.BrandCreated:
+                await new brandCreated_publisher_1.BrandCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.BrandUpdated:
+                await new brandUpdated_publisher_1.BrandUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

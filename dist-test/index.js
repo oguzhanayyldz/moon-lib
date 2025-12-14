@@ -135,6 +135,14 @@ __exportStar(require("./events/publishers/invoiceFormalized.publisher"), exports
 __exportStar(require("./events/publishers/invoiceFailed.publisher"), exports);
 __exportStar(require("./events/publishers/excelFileGenerated.publisher"), exports);
 __exportStar(require("./events/publishers/excelFileStored.publisher"), exports);
+__exportStar(require("./events/publishers/platformCategoryCreated.publisher"), exports);
+__exportStar(require("./events/publishers/platformCategoryUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/platformBrandCreated.publisher"), exports);
+__exportStar(require("./events/publishers/platformBrandUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/categoryCreated.publisher"), exports);
+__exportStar(require("./events/publishers/categoryUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/brandCreated.publisher"), exports);
+__exportStar(require("./events/publishers/brandUpdated.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);

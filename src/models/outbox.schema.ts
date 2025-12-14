@@ -51,6 +51,14 @@ import {
     ShipmentCreatedEvent,
     ExcelFileGeneratedEvent,
     ExcelFileStoredEvent,
+    CategoryCreatedEvent,
+    CategoryUpdatedEvent,
+    BrandCreatedEvent,
+    BrandUpdatedEvent,
+    PlatformCategoryCreatedEvent,
+    PlatformCategoryUpdatedEvent,
+    PlatformBrandCreatedEvent,
+    PlatformBrandUpdatedEvent,
 } from "../common";
 
 // Event tiplerini tanımla
@@ -104,6 +112,14 @@ interface EventPayloadMap {
     [Subjects.ShipmentCreated]: ShipmentCreatedEvent['data'];
     [Subjects.ExcelFileGenerated]: ExcelFileGeneratedEvent['data'];
     [Subjects.ExcelFileStored]: ExcelFileStoredEvent['data'];
+    [Subjects.CategoryCreated]: CategoryCreatedEvent['data'];
+    [Subjects.CategoryUpdated]: CategoryUpdatedEvent['data'];
+    [Subjects.BrandCreated]: BrandCreatedEvent['data'];
+    [Subjects.BrandUpdated]: BrandUpdatedEvent['data'];
+    [Subjects.PlatformCategoryCreated]: PlatformCategoryCreatedEvent['data'];
+    [Subjects.PlatformCategoryUpdated]: PlatformCategoryUpdatedEvent['data'];
+    [Subjects.PlatformBrandCreated]: PlatformBrandCreatedEvent['data'];
+    [Subjects.PlatformBrandUpdated]: PlatformBrandUpdatedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
