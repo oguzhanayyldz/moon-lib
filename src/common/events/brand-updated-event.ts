@@ -9,6 +9,7 @@ export interface BrandUpdatedEvent {
       name: string;
       code?: string;
       source?: string;
+      uniqueCode: string;
     }>;
     importedAt: string;
   };

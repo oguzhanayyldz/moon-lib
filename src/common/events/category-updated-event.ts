@@ -10,6 +10,7 @@ export interface CategoryUpdatedEvent {
       parentCategory?: string;
       code?: string;
       source?: string;
+      uniqueCode: string;
     }>;
     importedAt: string;
   };

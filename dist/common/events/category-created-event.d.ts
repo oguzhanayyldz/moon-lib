@@ -9,6 +9,7 @@ export interface CategoryCreatedEvent {
             parentCategory?: string;
             code?: string;
             source?: string;
+            uniqueCode: string;
         }>;
         importedAt: string;
     };
