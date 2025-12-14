@@ -15,7 +15,7 @@ export class BrandCreatedPublisher extends Publisher<BrandCreatedEvent> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 await super.publish(data);
-                logger.info(`Brand created event published: ${data.name} (ID: ${data.id})`);
+                logger.info(`Brand created event published: ${data.brands.length} brands for user ${data.user}`);
                 return;
             } catch (error) {
                 if (attempt === maxRetries) {

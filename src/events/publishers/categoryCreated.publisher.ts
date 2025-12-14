@@ -15,7 +15,7 @@ export class CategoryCreatedPublisher extends Publisher<CategoryCreatedEvent> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 await super.publish(data);
-                logger.info(`Category created event published: ${data.name} (ID: ${data.id})`);
+                logger.info(`Category created event published: ${data.categories.length} categories for user ${data.user}`);
                 return;
             } catch (error) {
                 if (attempt === maxRetries) {

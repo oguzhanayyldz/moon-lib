@@ -18,7 +18,7 @@ class CategoryUpdatedPublisher extends events_1.Publisher {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 await super.publish(data);
-                logger_service_1.logger.info(`Category updated event published: ${data.name} (ID: ${data.id})`);
+                logger_service_1.logger.info(`Category updated event published: ${data.categories.length} categories for user ${data.user}`);
                 return;
             }
             catch (error) {

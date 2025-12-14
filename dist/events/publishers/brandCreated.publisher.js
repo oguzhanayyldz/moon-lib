@@ -31,7 +31,7 @@ class BrandCreatedPublisher extends events_1.Publisher {
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     yield _super.publish.call(this, data);
-                    logger_service_1.logger.info(`Brand created event published: ${data.name} (ID: ${data.id})`);
+                    logger_service_1.logger.info(`Brand created event published: ${data.brands.length} brands for user ${data.user}`);
                     return;
                 }
                 catch (error) {

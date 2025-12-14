@@ -31,7 +31,7 @@ class CategoryCreatedPublisher extends events_1.Publisher {
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     yield _super.publish.call(this, data);
-                    logger_service_1.logger.info(`Category created event published: ${data.name} (ID: ${data.id})`);
+                    logger_service_1.logger.info(`Category created event published: ${data.categories.length} categories for user ${data.user}`);
                     return;
                 }
                 catch (error) {
