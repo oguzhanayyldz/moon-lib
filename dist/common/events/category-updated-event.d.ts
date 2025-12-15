@@ -1,4 +1,5 @@
 import { Subjects } from './subjects';
+import { ResourceName } from '../types/resourceName';
 export interface CategoryUpdatedEvent {
     subject: Subjects.CategoryUpdated;
     data: {
@@ -8,7 +9,7 @@ export interface CategoryUpdatedEvent {
             name: string;
             parentCategory?: string;
             code?: string;
-            source?: string;
+            source?: ResourceName;
             uniqueCode: string;
         }>;
         importedAt: string;

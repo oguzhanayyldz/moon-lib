@@ -1,4 +1,5 @@
 import { Subjects } from './subjects';
+import { ResourceName } from '../types/resourceName';
 export interface BrandCreatedEvent {
     subject: Subjects.BrandCreated;
     data: {
@@ -7,7 +8,7 @@ export interface BrandCreatedEvent {
             id: string;
             name: string;
             code?: string;
-            source?: string;
+            source?: ResourceName;
             uniqueCode: string;
         }>;
         importedAt: string;
