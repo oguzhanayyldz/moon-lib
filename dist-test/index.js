@@ -135,10 +135,8 @@ __exportStar(require("./events/publishers/invoiceFormalized.publisher"), exports
 __exportStar(require("./events/publishers/invoiceFailed.publisher"), exports);
 __exportStar(require("./events/publishers/excelFileGenerated.publisher"), exports);
 __exportStar(require("./events/publishers/excelFileStored.publisher"), exports);
-__exportStar(require("./events/publishers/platformCategoryCreated.publisher"), exports);
-__exportStar(require("./events/publishers/platformCategoryUpdated.publisher"), exports);
-__exportStar(require("./events/publishers/platformBrandCreated.publisher"), exports);
-__exportStar(require("./events/publishers/platformBrandUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/platformCategorySynced.publisher"), exports);
+__exportStar(require("./events/publishers/platformBrandSynced.publisher"), exports);
 __exportStar(require("./events/publishers/categoryCreated.publisher"), exports);
 __exportStar(require("./events/publishers/categoryUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/brandCreated.publisher"), exports);

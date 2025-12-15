@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderCargoUpdatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductErpIdUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, SyncRequestedEvent, InvoiceUpdatedEvent, InvoiceCreatedEvent, InvoiceFormalizedEvent, InvoiceFailedEvent, ShipmentCreatedEvent, ExcelFileGeneratedEvent, ExcelFileStoredEvent, CategoryCreatedEvent, CategoryUpdatedEvent, BrandCreatedEvent, BrandUpdatedEvent, PlatformCategoryCreatedEvent, PlatformCategoryUpdatedEvent, PlatformBrandCreatedEvent, PlatformBrandUpdatedEvent } from "../common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderCargoUpdatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductErpIdUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, SyncRequestedEvent, InvoiceUpdatedEvent, InvoiceCreatedEvent, InvoiceFormalizedEvent, InvoiceFailedEvent, ShipmentCreatedEvent, ExcelFileGeneratedEvent, ExcelFileStoredEvent, CategoryCreatedEvent, CategoryUpdatedEvent, BrandCreatedEvent, BrandUpdatedEvent, PlatformCategorySyncedEvent, PlatformBrandSyncedEvent } from "../common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -55,10 +55,8 @@ interface EventPayloadMap {
     [Subjects.CategoryUpdated]: CategoryUpdatedEvent['data'];
     [Subjects.BrandCreated]: BrandCreatedEvent['data'];
     [Subjects.BrandUpdated]: BrandUpdatedEvent['data'];
-    [Subjects.PlatformCategoryCreated]: PlatformCategoryCreatedEvent['data'];
-    [Subjects.PlatformCategoryUpdated]: PlatformCategoryUpdatedEvent['data'];
-    [Subjects.PlatformBrandCreated]: PlatformBrandCreatedEvent['data'];
-    [Subjects.PlatformBrandUpdated]: PlatformBrandUpdatedEvent['data'];
+    [Subjects.PlatformCategorySynced]: PlatformCategorySyncedEvent['data'];
+    [Subjects.PlatformBrandSynced]: PlatformBrandSyncedEvent['data'];
 }
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
     eventType: T;

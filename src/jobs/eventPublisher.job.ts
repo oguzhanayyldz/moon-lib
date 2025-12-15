@@ -53,10 +53,8 @@ import { ShipmentCreatedPublisher } from '../events/publishers/shipmentCreated.p
 import { ShipmentUpdatedPublisher } from '../events/publishers/shipmentUpdated.publisher';
 import { ExcelFileGeneratedPublisher } from '../events/publishers/excelFileGenerated.publisher';
 import { ExcelFileStoredPublisher } from '../events/publishers/excelFileStored.publisher';
-import { PlatformCategoryCreatedPublisher } from '../events/publishers/platformCategoryCreated.publisher';
-import { PlatformCategoryUpdatedPublisher } from '../events/publishers/platformCategoryUpdated.publisher';
-import { PlatformBrandCreatedPublisher } from '../events/publishers/platformBrandCreated.publisher';
-import { PlatformBrandUpdatedPublisher } from '../events/publishers/platformBrandUpdated.publisher';
+import { PlatformCategorySyncedPublisher } from '../events/publishers/platformCategorySynced.publisher';
+import { PlatformBrandSyncedPublisher } from '../events/publishers/platformBrandSynced.publisher';
 import { CategoryCreatedPublisher } from '../events/publishers/categoryCreated.publisher';
 import { CategoryUpdatedPublisher } from '../events/publishers/categoryUpdated.publisher';
 import { BrandCreatedPublisher } from '../events/publishers/brandCreated.publisher';
@@ -404,20 +402,12 @@ export class EventPublisherJob {
                 await new ExcelFileStoredPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
-            case Subjects.PlatformCategoryCreated:
-                await new PlatformCategoryCreatedPublisher(this.natsClient)
+            case Subjects.PlatformCategorySynced:
+                await new PlatformCategorySyncedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
-            case Subjects.PlatformCategoryUpdated:
-                await new PlatformCategoryUpdatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case Subjects.PlatformBrandCreated:
-                await new PlatformBrandCreatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case Subjects.PlatformBrandUpdated:
-                await new PlatformBrandUpdatedPublisher(this.natsClient)
+            case Subjects.PlatformBrandSynced:
+                await new PlatformBrandSyncedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case Subjects.CategoryCreated:

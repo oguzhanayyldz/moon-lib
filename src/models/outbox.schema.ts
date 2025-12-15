@@ -55,10 +55,8 @@ import {
     CategoryUpdatedEvent,
     BrandCreatedEvent,
     BrandUpdatedEvent,
-    PlatformCategoryCreatedEvent,
-    PlatformCategoryUpdatedEvent,
-    PlatformBrandCreatedEvent,
-    PlatformBrandUpdatedEvent,
+    PlatformCategorySyncedEvent,
+    PlatformBrandSyncedEvent,
 } from "../common";
 
 // Event tiplerini tanımla
@@ -116,10 +114,8 @@ interface EventPayloadMap {
     [Subjects.CategoryUpdated]: CategoryUpdatedEvent['data'];
     [Subjects.BrandCreated]: BrandCreatedEvent['data'];
     [Subjects.BrandUpdated]: BrandUpdatedEvent['data'];
-    [Subjects.PlatformCategoryCreated]: PlatformCategoryCreatedEvent['data'];
-    [Subjects.PlatformCategoryUpdated]: PlatformCategoryUpdatedEvent['data'];
-    [Subjects.PlatformBrandCreated]: PlatformBrandCreatedEvent['data'];
-    [Subjects.PlatformBrandUpdated]: PlatformBrandUpdatedEvent['data'];
+    [Subjects.PlatformCategorySynced]: PlatformCategorySyncedEvent['data'];
+    [Subjects.PlatformBrandSynced]: PlatformBrandSyncedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

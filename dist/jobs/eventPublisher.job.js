@@ -63,10 +63,8 @@ const shipmentCreated_publisher_1 = require("../events/publishers/shipmentCreate
 const shipmentUpdated_publisher_1 = require("../events/publishers/shipmentUpdated.publisher");
 const excelFileGenerated_publisher_1 = require("../events/publishers/excelFileGenerated.publisher");
 const excelFileStored_publisher_1 = require("../events/publishers/excelFileStored.publisher");
-const platformCategoryCreated_publisher_1 = require("../events/publishers/platformCategoryCreated.publisher");
-const platformCategoryUpdated_publisher_1 = require("../events/publishers/platformCategoryUpdated.publisher");
-const platformBrandCreated_publisher_1 = require("../events/publishers/platformBrandCreated.publisher");
-const platformBrandUpdated_publisher_1 = require("../events/publishers/platformBrandUpdated.publisher");
+const platformCategorySynced_publisher_1 = require("../events/publishers/platformCategorySynced.publisher");
+const platformBrandSynced_publisher_1 = require("../events/publishers/platformBrandSynced.publisher");
 const categoryCreated_publisher_1 = require("../events/publishers/categoryCreated.publisher");
 const categoryUpdated_publisher_1 = require("../events/publishers/categoryUpdated.publisher");
 const brandCreated_publisher_1 = require("../events/publishers/brandCreated.publisher");
@@ -389,20 +387,12 @@ class EventPublisherJob {
                     yield new excelFileStored_publisher_1.ExcelFileStoredPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
-                case common_1.Subjects.PlatformCategoryCreated:
-                    yield new platformCategoryCreated_publisher_1.PlatformCategoryCreatedPublisher(this.natsClient)
+                case common_1.Subjects.PlatformCategorySynced:
+                    yield new platformCategorySynced_publisher_1.PlatformCategorySyncedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
-                case common_1.Subjects.PlatformCategoryUpdated:
-                    yield new platformCategoryUpdated_publisher_1.PlatformCategoryUpdatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
-                case common_1.Subjects.PlatformBrandCreated:
-                    yield new platformBrandCreated_publisher_1.PlatformBrandCreatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
-                case common_1.Subjects.PlatformBrandUpdated:
-                    yield new platformBrandUpdated_publisher_1.PlatformBrandUpdatedPublisher(this.natsClient)
+                case common_1.Subjects.PlatformBrandSynced:
+                    yield new platformBrandSynced_publisher_1.PlatformBrandSyncedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 case common_1.Subjects.CategoryCreated:
