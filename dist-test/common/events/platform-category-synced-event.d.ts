@@ -2,6 +2,9 @@ import { Subjects } from './subjects';
 export interface PlatformCategorySyncedEvent {
     subject: Subjects.PlatformCategorySynced;
     data: {
+        syncSessionId: string;
+        chunkIndex: number;
+        totalChunks: number;
         integrationName: string;
         categories: Array<{
             externalId: string;

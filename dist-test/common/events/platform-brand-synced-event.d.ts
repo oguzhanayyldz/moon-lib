@@ -2,6 +2,9 @@ import { Subjects } from './subjects';
 export interface PlatformBrandSyncedEvent {
     subject: Subjects.PlatformBrandSynced;
     data: {
+        syncSessionId: string;
+        chunkIndex: number;
+        totalChunks: number;
         integrationName: string;
         brands: Array<{
             externalId: string;
