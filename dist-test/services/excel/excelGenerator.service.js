@@ -168,7 +168,7 @@ class ExcelGeneratorService {
                 selectLockedCells: true,
                 selectUnlockedCells: true,
                 formatCells: false,
-                formatColumns: false,
+                formatColumns: true, // Allow users to resize columns for better readability
                 formatRows: false,
                 insertRows: false,
                 deleteRows: false,
