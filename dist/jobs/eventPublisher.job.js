@@ -108,7 +108,7 @@ class EventPublisherJob {
                     retryCount: { $lt: 5 }
                 })
                     .sort({ createdAt: 1 })
-                    .limit(10);
+                    .limit(50); // Artırıldı: Bulk sync event'leri için yeterli kapasite (26 brand chunks + diğer event'ler)
                 if (pendingEvents.length > 0) {
                     logger_service_1.logger.debug(`Processing ${pendingEvents.length} events for environment: ${currentEnvironment}`);
                 }
@@ -418,5 +418,5 @@ class EventPublisherJob {
     }
 }
 exports.EventPublisherJob = EventPublisherJob;
-EventPublisherJob.RETRY_INTERVAL = 5000; // 5 saniye
+EventPublisherJob.RETRY_INTERVAL = 3000; // 3 saniye (bulk sync için optimize edildi)
 EventPublisherJob.ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği

@@ -62,7 +62,7 @@ import { BrandUpdatedPublisher } from '../events/publishers/brandUpdated.publish
 
 
 export class EventPublisherJob {
-    private static readonly RETRY_INTERVAL = 5000; // 5 saniye
+    private static readonly RETRY_INTERVAL = 3000; // 3 saniye (bulk sync için optimize edildi)
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
     private intervalId: NodeJS.Timeout | null = null;
     private monitoringId: NodeJS.Timeout | null = null;
@@ -106,7 +106,7 @@ export class EventPublisherJob {
                 retryCount: { $lt: 5 }
             })
                 .sort({ createdAt: 1 })
-                .limit(10);
+                .limit(50); // Artırıldı: Bulk sync event'leri için yeterli kapasite (26 brand chunks + diğer event'ler)
 
             if (pendingEvents.length > 0) {
                 logger.debug(`Processing ${pendingEvents.length} events for environment: ${currentEnvironment}`);
