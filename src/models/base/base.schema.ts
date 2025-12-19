@@ -63,9 +63,20 @@ export type MongoQuery<T> = {
 
 /**
  * BaseSchema Options
- * Optional version tracking configuration
+ * Optional version tracking configuration and source service tracking
  */
 export interface BaseSchemaOptions {
+    /**
+     * Indicates which service owns this entity as the source of truth (native)
+     *
+     * Example: ProductStock schema in Inventory service should have:
+     *   sourceService: ServiceName.Inventory
+     *
+     * This helps developers quickly identify whether a schema is native or foreign
+     * when reviewing code. Leave undefined for foreign entity copies.
+     */
+    sourceService?: ServiceName;
+
     enableVersionTracking?: boolean;
     versionTrackingConfig?: {
         entityType: EntityType;
