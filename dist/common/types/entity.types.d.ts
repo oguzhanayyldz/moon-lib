@@ -27,6 +27,7 @@ export declare enum ServiceName {
     Inventory = "inventory",
     Pricing = "pricing",
     Catalog = "catalog",
+    Integration = "integration",
     Sync = "sync",
     Invoice = "invoice",
     Shipment = "shipment"

@@ -32,6 +32,7 @@ var ServiceName;
     ServiceName["Inventory"] = "inventory";
     ServiceName["Pricing"] = "pricing";
     ServiceName["Catalog"] = "catalog";
+    ServiceName["Integration"] = "integration";
     ServiceName["Sync"] = "sync";
     ServiceName["Invoice"] = "invoice";
     ServiceName["Shipment"] = "shipment";
