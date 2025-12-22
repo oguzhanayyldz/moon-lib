@@ -12,10 +12,12 @@ export enum EntityType {
   Customer = 'customer',
   CustomerAddress = 'customer-address',
   Stock = 'stock',
+  ProductStock = 'product-stock',
   User = 'user',
   Integration = 'integration',
   Invoice = 'invoice',
   Shipment = 'shipment',
+  CatalogMapping = 'catalog-mapping',
 }
 
 /**
@@ -32,4 +34,5 @@ export enum ServiceName {
   Sync = 'sync',
   Invoice = 'invoice',
   Shipment = 'shipment',
+  Auth = 'auth',
 }

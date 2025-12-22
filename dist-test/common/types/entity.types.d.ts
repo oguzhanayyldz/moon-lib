@@ -12,10 +12,12 @@ export declare enum EntityType {
     Customer = "customer",
     CustomerAddress = "customer-address",
     Stock = "stock",
+    ProductStock = "product-stock",
     User = "user",
     Integration = "integration",
     Invoice = "invoice",
-    Shipment = "shipment"
+    Shipment = "shipment",
+    CatalogMapping = "catalog-mapping"
 }
 /**
  * Service Names
@@ -30,6 +32,7 @@ export declare enum ServiceName {
     Integration = "integration",
     Sync = "sync",
     Invoice = "invoice",
-    Shipment = "shipment"
+    Shipment = "shipment",
+    Auth = "auth"
 }
 //# sourceMappingURL=entity.types.d.ts.map

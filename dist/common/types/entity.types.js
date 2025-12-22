@@ -16,10 +16,12 @@ var EntityType;
     EntityType["Customer"] = "customer";
     EntityType["CustomerAddress"] = "customer-address";
     EntityType["Stock"] = "stock";
+    EntityType["ProductStock"] = "product-stock";
     EntityType["User"] = "user";
     EntityType["Integration"] = "integration";
     EntityType["Invoice"] = "invoice";
     EntityType["Shipment"] = "shipment";
+    EntityType["CatalogMapping"] = "catalog-mapping";
 })(EntityType || (exports.EntityType = EntityType = {}));
 /**
  * Service Names
@@ -36,4 +38,5 @@ var ServiceName;
     ServiceName["Sync"] = "sync";
     ServiceName["Invoice"] = "invoice";
     ServiceName["Shipment"] = "shipment";
+    ServiceName["Auth"] = "auth";
 })(ServiceName || (exports.ServiceName = ServiceName = {}));
