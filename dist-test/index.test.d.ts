@@ -99,6 +99,10 @@ export declare const createRedisWrapper: () => {
         keys: jest.Mock<Promise<string[]>, [pattern: string], any>;
         exists: jest.Mock<Promise<number>, [key: string], any>;
         ttl: jest.Mock<Promise<number>, [key: string], any>;
+        eval: jest.Mock<Promise<number>, [script: string, options?: {
+            keys?: string[];
+            arguments?: any[];
+        } | undefined], any>;
         quit: jest.Mock<any, any, any>;
         on: jest.Mock<void, [event: string, handler: Function], any>;
     };
@@ -130,6 +134,10 @@ export declare const redisWrapper: {
         keys: jest.Mock<Promise<string[]>, [pattern: string], any>;
         exists: jest.Mock<Promise<number>, [key: string], any>;
         ttl: jest.Mock<Promise<number>, [key: string], any>;
+        eval: jest.Mock<Promise<number>, [script: string, options?: {
+            keys?: string[];
+            arguments?: any[];
+        } | undefined], any>;
         quit: jest.Mock<any, any, any>;
         on: jest.Mock<void, [event: string, handler: Function], any>;
     };

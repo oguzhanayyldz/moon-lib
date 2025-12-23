@@ -34,6 +34,7 @@ export enum Subjects {
     ProductErpIdUpdated = "product:erp-id:updated",
     CatalogMappingCreated = 'catalog.mapping.created',
     IntegrationCreated = 'integration.created',
+    IntegrationUpdated = 'integration.updated',
     UserIntegrationSettings = 'user.integration.settings',
     OrderIntegrationStatusUpdated = "order:integration:status:updated",
     ProductMatched = "order:product:matched",
@@ -55,4 +56,9 @@ export enum Subjects {
     CategoryUpdated = "category:updated",
     BrandCreated = "brand:created",
     BrandUpdated = "brand:updated",
+    CustomerCreated = "customer:created",
+    CustomerUpdated = "customer:updated",
+    CustomerAddressCreated = "customer:address:created",
+    CustomerAddressUpdated = "customer:address:updated",
+    CatalogMappingUpdated = "catalog:mapping:updated",
 }

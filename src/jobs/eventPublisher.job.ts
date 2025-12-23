@@ -37,6 +37,7 @@ import { ProductIntegrationSyncedPublisher } from '../events/publishers/productI
 import { OrderIntegrationCreatedPublisher } from '../events/publishers/orderIntegrationCreated.publisher';
 import { logger } from '../services/logger.service';
 import { IntegrationCreatedPublisher } from '../events/publishers/integrationCreated.publisher';
+import { IntegrationUpdatedPublisher } from '../events/publishers/integrationUpdated.publisher';
 import { UserIntegrationSettingsPublisher } from '../events/publishers/userIntegrationSettings.publisher';
 import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/orderIntegrationStatusUpdated.publisher';
 import { ProductMatchedPublisher } from '../events/publishers/productMatched.publisher';
@@ -59,6 +60,9 @@ import { CategoryCreatedPublisher } from '../events/publishers/categoryCreated.p
 import { CategoryUpdatedPublisher } from '../events/publishers/categoryUpdated.publisher';
 import { BrandCreatedPublisher } from '../events/publishers/brandCreated.publisher';
 import { BrandUpdatedPublisher } from '../events/publishers/brandUpdated.publisher';
+import { CustomerUpdatedPublisher } from '../events/publishers/customerUpdated.publisher';
+import { CustomerAddressUpdatedPublisher } from '../events/publishers/customerAddressUpdated.publisher';
+import { CatalogMappingUpdatedPublisher } from '../events/publishers/catalogMappingUpdated.publisher';
 
 
 export class EventPublisherJob {
@@ -338,6 +342,10 @@ export class EventPublisherJob {
                 await new IntegrationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            case Subjects.IntegrationUpdated:
+                await new IntegrationUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
             case Subjects.UserIntegrationSettings:
                 await new UserIntegrationSettingsPublisher(this.natsClient)
                     .publish(event.payload);
@@ -424,6 +432,18 @@ export class EventPublisherJob {
                 break;
             case Subjects.BrandUpdated:
                 await new BrandUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.CustomerUpdated:
+                await new CustomerUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.CustomerAddressUpdated:
+                await new CustomerAddressUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.CatalogMappingUpdated:
+                await new CatalogMappingUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

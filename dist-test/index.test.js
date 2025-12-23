@@ -346,6 +346,11 @@ const createRedisWrapper = () => {
                 // In real implementation, this would track expiration times
                 return Promise.resolve(mockStorage[key] !== undefined ? 300 : -2);
             }),
+            // Lua script execution - orderJob lock/unlock için gerekli
+            eval: jest.fn((script, options) => {
+                // Simple mock - returns 1 (success) for lock operations
+                return Promise.resolve(1);
+            }),
             quit: jest.fn().mockResolvedValue(undefined),
             on: jest.fn((event, handler) => { }) // Add event listener mock
         },

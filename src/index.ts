@@ -123,6 +123,7 @@ export * from './events/publishers/catalogMappingCreated.publisher';
 export * from './events/publishers/orderIntegrationCreated.publisher';
 export * from './events/retryableListener';
 export * from './events/publishers/integrationCreated.publisher';
+export * from './events/publishers/integrationUpdated.publisher';
 export * from './events/publishers/userIntegrationSettings.publisher';
 export * from './events/publishers/orderIntegrationStatusUpdated.publisher';
 export * from './events/publishers/productMatched.publisher';
@@ -139,6 +140,9 @@ export * from './events/publishers/categoryCreated.publisher';
 export * from './events/publishers/categoryUpdated.publisher';
 export * from './events/publishers/brandCreated.publisher';
 export * from './events/publishers/brandUpdated.publisher';
+export * from './events/publishers/customerUpdated.publisher';
+export * from './events/publishers/customerAddressUpdated.publisher';
+export * from './events/publishers/catalogMappingUpdated.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

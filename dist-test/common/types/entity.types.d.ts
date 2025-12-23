@@ -15,6 +15,7 @@ export declare enum EntityType {
     ProductStock = "product-stock",
     User = "user",
     Integration = "integration",
+    UserIntegrationSettings = "user-integration-settings",
     Invoice = "invoice",
     Shipment = "shipment",
     CatalogMapping = "catalog-mapping"

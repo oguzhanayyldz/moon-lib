@@ -125,6 +125,7 @@ __exportStar(require("./events/publishers/catalogMappingCreated.publisher"), exp
 __exportStar(require("./events/publishers/orderIntegrationCreated.publisher"), exports);
 __exportStar(require("./events/retryableListener"), exports);
 __exportStar(require("./events/publishers/integrationCreated.publisher"), exports);
+__exportStar(require("./events/publishers/integrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/userIntegrationSettings.publisher"), exports);
 __exportStar(require("./events/publishers/orderIntegrationStatusUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productMatched.publisher"), exports);
@@ -141,6 +142,9 @@ __exportStar(require("./events/publishers/categoryCreated.publisher"), exports);
 __exportStar(require("./events/publishers/categoryUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/brandCreated.publisher"), exports);
 __exportStar(require("./events/publishers/brandUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/customerUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/customerAddressUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/catalogMappingUpdated.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);

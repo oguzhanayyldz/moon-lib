@@ -37,6 +37,7 @@ import {
     ProductIntegrationSyncedEvent,
     OrderIntegrationCreatedEvent,
     IntegrationCreatedEvent,
+    IntegrationUpdatedEvent,
     UserIntegrationSettingsEvent,
     OrderIntegrationStatusUpdatedEvent,
     ProductMatchedEvent,
@@ -55,6 +56,9 @@ import {
     CategoryUpdatedEvent,
     BrandCreatedEvent,
     BrandUpdatedEvent,
+    CustomerUpdatedEvent,
+    CustomerAddressUpdatedEvent,
+    CatalogMappingUpdatedEvent,
     PlatformCategorySyncedEvent,
     PlatformBrandSyncedEvent,
 } from "../common";
@@ -97,6 +101,7 @@ interface EventPayloadMap {
     [Subjects.OrderIntegrationCreated]: OrderIntegrationCreatedEvent['data'];
     [Subjects.UserIntegrationSettings]: UserIntegrationSettingsEvent['data'];
     [Subjects.IntegrationCreated]: IntegrationCreatedEvent['data'];
+    [Subjects.IntegrationUpdated]: IntegrationUpdatedEvent['data'];
     [Subjects.OrderIntegrationStatusUpdated]: OrderIntegrationStatusUpdatedEvent['data'];
     [Subjects.ProductMatched]: ProductMatchedEvent['data'];
     [Subjects.NotificationCreated]: NotificationCreatedEvent['data'];
@@ -114,6 +119,9 @@ interface EventPayloadMap {
     [Subjects.CategoryUpdated]: CategoryUpdatedEvent['data'];
     [Subjects.BrandCreated]: BrandCreatedEvent['data'];
     [Subjects.BrandUpdated]: BrandUpdatedEvent['data'];
+    [Subjects.CustomerUpdated]: CustomerUpdatedEvent['data'];
+    [Subjects.CustomerAddressUpdated]: CustomerAddressUpdatedEvent['data'];
+    [Subjects.CatalogMappingUpdated]: CatalogMappingUpdatedEvent['data'];
     [Subjects.PlatformCategorySynced]: PlatformCategorySyncedEvent['data'];
     [Subjects.PlatformBrandSynced]: PlatformBrandSyncedEvent['data'];
 }

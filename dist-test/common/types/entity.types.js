@@ -19,6 +19,7 @@ var EntityType;
     EntityType["ProductStock"] = "product-stock";
     EntityType["User"] = "user";
     EntityType["Integration"] = "integration";
+    EntityType["UserIntegrationSettings"] = "user-integration-settings";
     EntityType["Invoice"] = "invoice";
     EntityType["Shipment"] = "shipment";
     EntityType["CatalogMapping"] = "catalog-mapping";

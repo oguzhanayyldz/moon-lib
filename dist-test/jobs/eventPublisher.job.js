@@ -38,6 +38,7 @@ const productIntegrationSynced_publisher_1 = require("../events/publishers/produ
 const orderIntegrationCreated_publisher_1 = require("../events/publishers/orderIntegrationCreated.publisher");
 const logger_service_1 = require("../services/logger.service");
 const integrationCreated_publisher_1 = require("../events/publishers/integrationCreated.publisher");
+const integrationUpdated_publisher_1 = require("../events/publishers/integrationUpdated.publisher");
 const userIntegrationSettings_publisher_1 = require("../events/publishers/userIntegrationSettings.publisher");
 const orderIntegrationStatusUpdated_publisher_1 = require("../events/publishers/orderIntegrationStatusUpdated.publisher");
 const productMatched_publisher_1 = require("../events/publishers/productMatched.publisher");
@@ -60,6 +61,9 @@ const categoryCreated_publisher_1 = require("../events/publishers/categoryCreate
 const categoryUpdated_publisher_1 = require("../events/publishers/categoryUpdated.publisher");
 const brandCreated_publisher_1 = require("../events/publishers/brandCreated.publisher");
 const brandUpdated_publisher_1 = require("../events/publishers/brandUpdated.publisher");
+const customerUpdated_publisher_1 = require("../events/publishers/customerUpdated.publisher");
+const customerAddressUpdated_publisher_1 = require("../events/publishers/customerAddressUpdated.publisher");
+const catalogMappingUpdated_publisher_1 = require("../events/publishers/catalogMappingUpdated.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection) {
         this.natsClient = natsClient;
@@ -307,6 +311,10 @@ class EventPublisherJob {
                 await new integrationCreated_publisher_1.IntegrationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            case common_1.Subjects.IntegrationUpdated:
+                await new integrationUpdated_publisher_1.IntegrationUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
             case common_1.Subjects.UserIntegrationSettings:
                 await new userIntegrationSettings_publisher_1.UserIntegrationSettingsPublisher(this.natsClient)
                     .publish(event.payload);
@@ -393,6 +401,18 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.BrandUpdated:
                 await new brandUpdated_publisher_1.BrandUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.CustomerUpdated:
+                await new customerUpdated_publisher_1.CustomerUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.CustomerAddressUpdated:
+                await new customerAddressUpdated_publisher_1.CustomerAddressUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.CatalogMappingUpdated:
+                await new catalogMappingUpdated_publisher_1.CatalogMappingUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:
