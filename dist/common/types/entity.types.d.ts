@@ -9,10 +9,14 @@ export declare enum EntityType {
     RelationProductLink = "relation-product-link",
     Order = "order",
     OrderProduct = "order-product",
+    OrderCargo = "order-cargo",
+    Payment = "payment",
     Customer = "customer",
     CustomerAddress = "customer-address",
     Stock = "stock",
     ProductStock = "product-stock",
+    Shelf = "shelf",
+    Warehouse = "warehouse",
     User = "user",
     Integration = "integration",
     UserIntegrationSettings = "user-integration-settings",
@@ -34,5 +38,6 @@ export declare enum ServiceName {
     Sync = "sync",
     Invoice = "invoice",
     Shipment = "shipment",
-    Auth = "auth"
+    Auth = "auth",
+    Notification = "notification"
 }
