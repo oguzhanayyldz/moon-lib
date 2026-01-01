@@ -8,6 +8,8 @@ export interface ProductPriceIntegrationUpdated {
     price: number;
     costPrice?: number;
     comparePrice?: number;
+    source?: ResourceName;
+    integrationName?: ResourceName;
 }
 export declare enum PriceUpdateStrategy {
     PRIORITY = "priority",

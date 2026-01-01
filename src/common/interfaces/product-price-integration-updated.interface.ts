@@ -10,6 +10,8 @@ export interface ProductPriceIntegrationUpdated {
     price: number;
     costPrice?: number; // Maliyet fiyatı
     comparePrice?: number; // Karşılaştırma fiyatı
+    source?: ResourceName;
+    integrationName?: ResourceName;
 }
 
 // Fiyat güncelleme stratejileri
