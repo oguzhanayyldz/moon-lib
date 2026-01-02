@@ -1,12 +1,6 @@
 import { IntegrationStatus } from "../types/integration-status";
 import { ResourceName } from "../types/resourceName";
 import { Subjects } from "./subjects";
-export interface CatalogMappingUpdatedEvent {
-    subject: Subjects.CatalogMappingUpdated;
-    data: {
-        list: CatalogMappingUpdated[];
-    };
-}
 export interface CatalogMappingUpdated {
     id: string;
     uuid: string;
@@ -39,4 +33,11 @@ export interface CatalogMappingUpdated {
     uniqueCode?: string | null;
     deleted?: boolean;
     deletionDate?: Date | null;
+}
+export type CatalogMappingUpdatedEventData = CatalogMappingUpdated;
+export interface CatalogMappingUpdatedEvent {
+    subject: Subjects.CatalogMappingUpdated;
+    data: {
+        list: CatalogMappingUpdatedEventData[];
+    };
 }

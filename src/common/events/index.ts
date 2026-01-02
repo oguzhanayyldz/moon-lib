@@ -42,6 +42,7 @@ export * from './product-erp-id-updated-event';
 export * from './product-stock-integration-updated-event'
 export * from './product-image-integration-updated-event';
 export * from './catalog-mapping-created-event';
+export * from './catalog-mapping-updated-event';
 export * from './product-integration-synced-event';
 export * from './integration-created-event';
 export * from './integration-updated-event';

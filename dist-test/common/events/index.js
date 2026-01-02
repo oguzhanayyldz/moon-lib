@@ -58,6 +58,7 @@ __exportStar(require("./product-erp-id-updated-event"), exports);
 __exportStar(require("./product-stock-integration-updated-event"), exports);
 __exportStar(require("./product-image-integration-updated-event"), exports);
 __exportStar(require("./catalog-mapping-created-event"), exports);
+__exportStar(require("./catalog-mapping-updated-event"), exports);
 __exportStar(require("./product-integration-synced-event"), exports);
 __exportStar(require("./integration-created-event"), exports);
 __exportStar(require("./integration-updated-event"), exports);
