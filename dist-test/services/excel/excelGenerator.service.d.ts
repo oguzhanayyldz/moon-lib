@@ -16,6 +16,7 @@ export interface ExcelColumn {
     key: string;
     width?: number;
     style?: Partial<ExcelJS.Style>;
+    numFmt?: string;
     validation?: ExcelValidation;
     hidden?: boolean;
     readOnly?: boolean;

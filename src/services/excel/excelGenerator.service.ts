@@ -18,6 +18,7 @@ export interface ExcelColumn {
   key: string;
   width?: number;
   style?: Partial<ExcelJS.Style>;
+  numFmt?: string;  // Number format (e.g., 'dd/mm/yyyy hh:mm' for dates, '#,##0.00' for decimals)
   validation?: ExcelValidation;
   hidden?: boolean;  // For ID columns
   readOnly?: boolean;  // For read-only columns (price, stock, images, etc.)
@@ -155,9 +156,37 @@ export class ExcelGeneratorService {
       // Add rows
       worksheet.addRows(data);
 
+      // Auto-adjust column widths based on content and header
+      worksheet.columns.forEach((column, colIndex) => {
+        if (!column.key) return;
+
+        const col = columns[colIndex];
+
+        // Calculate optimal width based on header and content
+        let maxLength = column.header?.toString().length || 10;
+
+        // Check all data rows for this column
+        data.forEach((row) => {
+          const cellValue = row[column.key as string];
+          if (cellValue != null) {
+            const cellLength = cellValue.toString().length;
+            if (cellLength > maxLength) {
+              maxLength = cellLength;
+            }
+          }
+        });
+
+        // Set width with min 10, max 60, add padding of 3 for better readability
+        // Use calculated width OR explicitly defined width (whichever is larger)
+        const calculatedWidth = Math.min(Math.max(maxLength + 3, 10), 60);
+        const explicitWidth = col.width || 0;
+
+        column.width = Math.max(calculatedWidth, explicitWidth);
+      });
+
       // Protect header row (row 1) - READ-ONLY for all columns
       // IMPORTANT: Use proper column letter conversion for 26+ columns (AA, AB, etc.)
-      columns.forEach((col, colIndex) => {
+      columns.forEach((_col, colIndex) => {
         const columnLetter = this.columnIndexToLetter(colIndex);
         const headerCell = worksheet.getCell(`${columnLetter}1`);
         headerCell.protection = { locked: true }; // Header always locked
@@ -172,6 +201,11 @@ export class ExcelGeneratorService {
         // Apply to all data cells in this column (including future rows)
         for (let row = startRow; row <= endRow + 1000; row++) { // +1000 for future rows
           const cell = worksheet.getCell(`${columnLetter}${row}`);
+
+          // Apply number format if specified (important for dates, currencies, etc.)
+          if (col.numFmt) {
+            cell.numFmt = col.numFmt;
+          }
 
           // Apply validation if exists
           if (col.validation) {
