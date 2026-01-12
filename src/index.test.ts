@@ -850,7 +850,7 @@ export const createOutboxMock = () => {
             __v: 0
         })
     }));
-    
+
     // Static methods - All Mongoose model methods
     (mockOutboxConstructor as any).deleteMany = jest.fn().mockResolvedValue({ deletedCount: 0 });
     (mockOutboxConstructor as any).findOne = jest.fn().mockResolvedValue(null);
@@ -866,7 +866,17 @@ export const createOutboxMock = () => {
     (mockOutboxConstructor as any).findByIdAndDelete = jest.fn().mockResolvedValue(null);
     (mockOutboxConstructor as any).countDocuments = jest.fn().mockResolvedValue(0);
     (mockOutboxConstructor as any).aggregate = jest.fn().mockResolvedValue([]);
-    
+
+    // Add build() method for services that use it (like Catalog Excel Service)
+    (mockOutboxConstructor as any).build = jest.fn().mockImplementation((attrs: any) => ({
+        ...attrs,
+        save: jest.fn().mockResolvedValue({
+            _id: attrs._id || 'mock-outbox-id',
+            ...attrs,
+            __v: 0
+        })
+    }));
+
     return {
         Outbox: mockOutboxConstructor
     };
