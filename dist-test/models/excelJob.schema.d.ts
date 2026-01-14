@@ -11,6 +11,7 @@ export declare enum ExcelJobStatus {
     FAILED = "failed"
 }
 export interface FailedRow {
+    sheet: string;
     row: number;
     error: string;
     data?: any;

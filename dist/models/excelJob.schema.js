@@ -81,6 +81,7 @@ const excelJobSchemaDefinition = {
         default: 0
     },
     failedRows: [{
+            sheet: { type: String },
             row: { type: Number },
             error: { type: String },
             data: { type: mongoose_1.default.Schema.Types.Mixed }

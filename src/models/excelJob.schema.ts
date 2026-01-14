@@ -14,6 +14,7 @@ export enum ExcelJobStatus {
 }
 
 export interface FailedRow {
+  sheet: string;
   row: number;
   error: string;
   data?: any;
@@ -121,6 +122,7 @@ const excelJobSchemaDefinition = {
     default: 0
   },
   failedRows: [{
+    sheet: { type: String },
     row: { type: Number },
     error: { type: String },
     data: { type: mongoose.Schema.Types.Mixed }
