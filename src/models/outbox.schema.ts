@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
+import { logger } from "../services/logger.service";
 import {
     Subjects,
     ProductCreatedEvent,
@@ -138,6 +139,8 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     error?: string;
     result?: any;
     processedAt?: Date;
+    priority?: number; // 1-5, 1 en yüksek öncelik
+    userId?: string; // User-scoped priority için
 }
 
 export interface OutboxDoc extends BaseDoc {
@@ -150,6 +153,8 @@ export interface OutboxDoc extends BaseDoc {
     error?: string;
     result?: any;
     processedAt?: Date;
+    priority: number; // 1-5, 1 en yüksek öncelik
+    userId: string; // User-scoped priority için (_system_ fallback)
 }
 
 export interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> { }
@@ -181,14 +186,114 @@ const outboxSchemaDefination = {
     },
     processedAt: {
         type: Date
+    },
+    priority: {
+        type: Number,
+        min: 1,
+        max: 5,
+        index: true
+        // NOT: Default yok - pre-save hook'ta hesaplanacak
+    },
+    userId: {
+        type: String,
+        index: true
+        // NOT: Default yok - pre-save hook'ta hesaplanacak
     }
 };
 
 const outboxSchema = createBaseSchema(outboxSchemaDefination);
 
-// Compound index for optimal query performance
-// Optimizes: { status: 'pending', environment: 'production', retryCount: { $lt: 5 } }
-outboxSchema.index({ status: 1, environment: 1, retryCount: 1, createdAt: 1 });
+// Event tipine göre öncelik belirleme
+export function getEventPriority(eventType: string): number {
+    const PRIORITY_MAP: Record<string, number> = {
+        // Priority 1: Core (User) + Delete (silme EN ÖNCELİKLİ!)
+        [Subjects.UserCreated]: 1,
+        [Subjects.UserUpdated]: 1,
+        [Subjects.EntityDeleted]: 1, // Silme işlemi en öncelikli - önce sil, sonra yenisini oluştur
+        
+        // Priority 2: Primary Entity (Create/Update)
+        [Subjects.ProductCreated]: 2,
+        [Subjects.ProductUpdated]: 2,
+        [Subjects.OrderCreated]: 2,
+        [Subjects.OrderUpdated]: 2,
+        [Subjects.IntegrationCreated]: 2,
+        [Subjects.IntegrationUpdated]: 2,
+
+        
+        // Priority 3: Secondary Entity
+        [Subjects.CombinationCreated]: 3,
+        [Subjects.CombinationUpdated]: 3,
+        [Subjects.StockCreated]: 3,
+        [Subjects.StockUpdated]: 3,
+        [Subjects.CategoryCreated]: 3,
+        [Subjects.CategoryUpdated]: 3,
+        [Subjects.BrandCreated]: 3,
+        [Subjects.BrandUpdated]: 3,
+        [Subjects.ProductStockCreated]: 3,
+        [Subjects.ProductStockUpdated]: 3,
+        
+        // Priority 4: Integration Data
+        [Subjects.ProductPriceIntegrationUpdated]: 4,
+        [Subjects.ProductStockIntegrationUpdated]: 4,
+        [Subjects.ProductImageIntegrationUpdated]: 4,
+        [Subjects.ProductIntegrationCreated]: 4,
+        [Subjects.ProductIntegrationSynced]: 4,
+        [Subjects.OrderIntegrationCreated]: 4,
+        [Subjects.ProductPriceUpdated]: 4,
+        [Subjects.CatalogMappingCreated]: 4,
+        [Subjects.CatalogMappingUpdated]: 4,
+        
+        // Priority 5: Sync/Notification
+        [Subjects.EntityVersionUpdated]: 5,
+        [Subjects.EntityVersionBulkUpdated]: 5,
+        [Subjects.NotificationCreated]: 5,
+        [Subjects.SyncRequested]: 5,
+    };
+    
+    return PRIORITY_MAP[eventType] ?? 3;
+}
+
+// Payload'dan userId çıkarma
+export function extractUserIdFromPayload(payload: any): string {
+    // 1. Direkt userId
+    if (payload.userId) return payload.userId;
+    
+    // 2. Direkt user
+    if (payload.user) return payload.user;
+    
+    // 3. list[0].user (ProductCreated, CombinationCreated)
+    if (payload.list?.[0]?.user) return payload.list[0].user;
+    
+    // 4. data içinde (EntityDeleted vb.)
+    if (payload.data?.userId) return payload.data.userId;
+    if (payload.data?.user) return payload.data.user;
+    
+    // 5. items içinde
+    if (payload.items?.[0]?.userId) return payload.items[0].userId;
+    
+    // Bulunamazsa _system_ (en yüksek öncelikli)
+    return '_system_';
+}
+
+// Pre-save hook: priority ve userId her zaman hesapla
+outboxSchema.pre('save', function(next) {
+    const doc = this as unknown as OutboxDoc;
+    if (this.isNew) {
+        // Priority'yi eventType'a göre hesapla (her zaman yeniden hesapla)
+        doc.priority = getEventPriority(doc.eventType);
+        
+        // userId'yi payload'dan çıkar (her zaman yeniden hesapla)
+        doc.userId = extractUserIdFromPayload(doc.payload);
+        
+        logger.debug(`Outbox created: eventType=${doc.eventType}, priority=${doc.priority}, userId=${doc.userId}`);
+    }
+    next();
+});
+
+// Compound index for optimal query performance with priority
+// _system_ users get processed first, then by priority within each user
+outboxSchema.index({ status: 1, environment: 1, userId: 1, priority: 1, creationDate: 1 });
+outboxSchema.index({ status: 1, environment: 1, retryCount: 1, creationDate: 1 });
 
 export function createOutboxModel(connection: mongoose.Connection) {
     try {

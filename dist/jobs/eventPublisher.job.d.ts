@@ -8,11 +8,13 @@ export declare class EventPublisherJob {
     private static readonly VERSION_EVENT_INTERVAL;
     private static readonly ALERT_THRESHOLD;
     private static readonly MAX_JITTER;
+    private static readonly PRIORITY_TRANSITION_DELAY;
     private intervalId;
     private versionEventIntervalId;
     private monitoringId;
     private readonly outboxModel;
     private readonly serviceOffset;
+    private lastProcessedPriority;
     constructor(natsClient: Stan, connection: mongoose.Connection, serviceName?: ServiceName);
     /**
      * Environment variable'dan servis adını çöz
@@ -31,6 +33,10 @@ export declare class EventPublisherJob {
     start(): Promise<void>;
     stop(): void;
     private processEvents;
+    /**
+     * Event batch'ini işle
+     */
+    private processEventBatch;
     /**
      * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
      * Bu metod ayrı bir interval ile çalışır (10 saniye) ve birikmiş version

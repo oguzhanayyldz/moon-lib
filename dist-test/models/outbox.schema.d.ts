@@ -73,6 +73,8 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     error?: string;
     result?: any;
     processedAt?: Date;
+    priority?: number;
+    userId?: string;
 }
 export interface OutboxDoc extends BaseDoc {
     eventType: string;
@@ -84,9 +86,13 @@ export interface OutboxDoc extends BaseDoc {
     error?: string;
     result?: any;
     processedAt?: Date;
+    priority: number;
+    userId: string;
 }
 export interface OutboxModel extends BaseModel<OutboxDoc, OutboxAttrs> {
 }
+export declare function getEventPriority(eventType: string): number;
+export declare function extractUserIdFromPayload(payload: any): string;
 export declare function createOutboxModel(connection: mongoose.Connection): OutboxModel;
 export {};
 //# sourceMappingURL=outbox.schema.d.ts.map

@@ -71,11 +71,16 @@ export class EventPublisherJob {
     private static readonly VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
     private static readonly MAX_JITTER = 500; // 0-500ms random jitter
+    private static readonly PRIORITY_TRANSITION_DELAY = 5000; // 5 saniye - priority geçişlerinde bekleme
     private intervalId: NodeJS.Timeout | null = null;
     private versionEventIntervalId: NodeJS.Timeout | null = null; // Version eventleri için ayrı interval
     private monitoringId: NodeJS.Timeout | null = null;
     private readonly outboxModel: OutboxModel;
     private readonly serviceOffset: number; // Servis bazlı offset (thundering herd prevention)
+    
+    // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
+    private lastProcessedPriority: Map<string, { priority: number; timestamp: number }> = new Map();
+
 
     constructor (
         private natsClient: Stan,
@@ -169,71 +174,184 @@ export class EventPublisherJob {
 
     private async processEvents() {
         try {
-            // Sadece bu environment'a ait pending eventleri al
             const currentEnvironment = process.env.NODE_ENV || 'production';
 
-            // EntityVersionUpdated eventleri AYRI işlenir (bulk interval ile)
-            const pendingEvents = await this.outboxModel.find({
+            // ✅ STEP 1: Önce _system_ kullanıcısının event'lerini işle (en yüksek öncelik)
+            const systemEvents = await this.outboxModel.find({
                 status: 'pending',
                 environment: currentEnvironment,
                 retryCount: { $lt: 5 },
-                eventType: { $ne: Subjects.EntityVersionUpdated } // Version eventlerini hariç tut
+                eventType: { $ne: Subjects.EntityVersionUpdated },
+                $or: [
+                    { userId: '_system_' },
+                    { userId: { $exists: false } }, // Eski kayıtlar
+                    { userId: null }
+                ]
             })
-                .sort({ createdAt: 1 })
-                .limit(50);
+            .sort({ priority: 1, creationDate: 1 })
+            .limit(20);
 
-            if (pendingEvents.length > 0) {
-                logger.debug(`Processing ${pendingEvents.length} events for environment: ${currentEnvironment}`);
+            if (systemEvents.length > 0) {
+                logger.debug(`Processing ${systemEvents.length} _system_ events (highest priority)`);
+                await this.processEventBatch(systemEvents);
+                return; // _system_ bitmeden diğerlerine geçme
             }
-                
-            for (const event of pendingEvents) {
-                try {
-                    // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
-                    // ve aynı zamanda versiyon kontrolü yap
-                    const updated = await this.outboxModel.updateOne(
-                        { 
-                            _id: event.id, 
-                            status: 'pending',
-                            retryCount: event.retryCount // Versiyon kontrolü sağlar
-                        },
-                        { 
-                            $set: { 
-                                status: 'processing',
-                                processingStartedAt: new Date()
-                            }
-                        }
-                    );
+
+            // ✅ STEP 2: Her kullanıcı için sequential priority işleme
+            const usersWithPendingEvents = await this.outboxModel.distinct('userId', {
+                status: 'pending',
+                environment: currentEnvironment,
+                retryCount: { $lt: 5 },
+                eventType: { $ne: Subjects.EntityVersionUpdated },
+                userId: { $nin: ['_system_', null] }
+            });
+
+            if (usersWithPendingEvents.length === 0) {
+                return;
+            }
+
+            // Her kullanıcı için en yüksek öncelikli event'leri işle
+            for (const userId of usersWithPendingEvents.slice(0, 10)) {
+                // Bu kullanıcının en düşük priority numarasını bul
+                const lowestPriorityEvent = await this.outboxModel.findOne({
+                    status: 'pending',
+                    environment: currentEnvironment,
+                    retryCount: { $lt: 5 },
+                    eventType: { $ne: Subjects.EntityVersionUpdated },
+                    userId: userId
+                })
+                .sort({ priority: 1 })
+                .select('priority')
+                .lean();
+
+                if (!lowestPriorityEvent) continue;
+
+                // Priority null/undefined ise default 3 kabul et
+                const currentPriority = lowestPriorityEvent.priority ?? 3;
+
+                // ✅ PRIORITY GEÇİŞ BEKLEMESİ: Önceki priority'den farklı bir priority'ye geçiyorsak bekle
+                const lastProcessed = this.lastProcessedPriority.get(userId);
+                if (lastProcessed && lastProcessed.priority < currentPriority) {
+                    const timeSinceLastProcess = Date.now() - lastProcessed.timestamp;
+                    const requiredWait = EventPublisherJob.PRIORITY_TRANSITION_DELAY;
                     
-                    // Event başka bir pod tarafından alınmış demektir, atla
-                    if (updated.modifiedCount === 0) {
-                        logger.info(`Event ${event.id} is already being processed by another publisher, skipping`);
-                        continue;
+                    if (timeSinceLastProcess < requiredWait) {
+                        const remainingWait = requiredWait - timeSinceLastProcess;
+                        logger.info(`⏳ Priority transition wait for user ${userId}: priority ${lastProcessed.priority} → ${currentPriority}, waiting ${remainingWait}ms for listeners to complete`);
+                        continue; // Bu cycle'da bu kullanıcıyı atla, sonraki cycle'da devam edilecek
                     }
                     
-                    await this.publishEvent(event);
-                    
-                    // Başarılı olarak işaretle
-                    await this.outboxModel.updateOne(
-                        { _id: event.id, status: 'processing' },
-                        { $set: { status: 'published' } }
-                    );
-                    
-                    logger.info(`Successfully published event ${event.id}`);
-                } catch (error) {
-                    await this.outboxModel.updateOne(
-                        { _id: event.id, status: 'processing' },
-                        { 
-                            $set: { status: 'failed', lastAttempt: new Date() },
-                            $inc: { retryCount: 1 } 
-                        }
-                    );
-                    logger.error(`Failed to publish event ${event.id}:`, error);
+                    logger.info(`✅ Priority transition complete for user ${userId}: ${lastProcessed.priority} → ${currentPriority} (waited ${timeSinceLastProcess}ms)`);
                 }
+
+                // ✅ SADECE bu öncelik seviyesindeki event'leri al
+                // Priority null olanlar için: null == priority 3 gibi davran
+                const userEvents = await this.outboxModel.find({
+                    status: 'pending',
+                    environment: currentEnvironment,
+                    retryCount: { $lt: 5 },
+                    eventType: { $ne: Subjects.EntityVersionUpdated },
+                    userId: userId,
+                    $or: [
+                        { priority: currentPriority },
+                        // Eski kayıtlar (priority yok): sadece currentPriority=3 ise işle
+                        ...(currentPriority === 3 ? [
+                            { priority: { $exists: false } },
+                            { priority: null }
+                        ] : [])
+                    ]
+                })
+                .sort({ creationDate: 1 })
+                .limit(50);
+
+                if (userEvents.length > 0) {
+                    logger.debug(`Processing ${userEvents.length} priority-${currentPriority} events for user ${userId}`);
+                    await this.processEventBatch(userEvents);
+                    
+                    // Son işlenen priority'yi güncelle
+                    this.lastProcessedPriority.set(userId, { 
+                        priority: currentPriority, 
+                        timestamp: Date.now() 
+                    });
+
+                    
+                    // ✅ Bu kullanıcı için hâlâ aynı priority'de pending var mı kontrol et
+                    const remainingCount = await this.outboxModel.countDocuments({
+                        status: 'pending',
+                        environment: currentEnvironment,
+                        retryCount: { $lt: 5 },
+                        eventType: { $ne: Subjects.EntityVersionUpdated },
+                        userId: userId,
+                        $or: [
+                            { priority: currentPriority },
+                            ...(currentPriority === 3 ? [
+                                { priority: { $exists: false } },
+                                { priority: null }
+                            ] : [])
+                        ]
+                    });
+                    
+                    if (remainingCount > 0) {
+                        logger.debug(`User ${userId} still has ${remainingCount} priority-${currentPriority} events, will continue next cycle`);
+                    }
+                }
+
             }
         } catch (error) {
             logger.error('Event processing failed:', error);
         }
     }
+
+
+    /**
+     * Event batch'ini işle
+     */
+    private async processEventBatch(events: any[]) {
+        for (const event of events) {
+            try {
+                // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
+                const updated = await this.outboxModel.updateOne(
+                    { 
+                        _id: event.id, 
+                        status: 'pending',
+                        retryCount: event.retryCount
+                    },
+                    { 
+                        $set: { 
+                            status: 'processing',
+                            processingStartedAt: new Date()
+                        }
+                    }
+                );
+                
+                // Event başka bir pod tarafından alınmış demektir, atla
+                if (updated.modifiedCount === 0) {
+                    logger.debug(`Event ${event.id} is already being processed by another publisher, skipping`);
+                    continue;
+                }
+                
+                await this.publishEvent(event);
+                
+                // Başarılı olarak işaretle
+                await this.outboxModel.updateOne(
+                    { _id: event.id, status: 'processing' },
+                    { $set: { status: 'published' } }
+                );
+                
+                logger.info(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
+            } catch (error) {
+                await this.outboxModel.updateOne(
+                    { _id: event.id, status: 'processing' },
+                    { 
+                        $set: { status: 'failed', lastAttempt: new Date() },
+                        $inc: { retryCount: 1 } 
+                    }
+                );
+                logger.error(`Failed to publish event ${event.id}:`, error);
+            }
+        }
+    }
+
 
     /**
      * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
