@@ -1,16 +1,33 @@
 import mongoose from 'mongoose';
 import { Stan } from 'node-nats-streaming';
+import { ServiceName } from '../common/';
 export declare class EventPublisherJob {
     private natsClient;
     private connection;
     private static readonly RETRY_INTERVAL;
     private static readonly VERSION_EVENT_INTERVAL;
     private static readonly ALERT_THRESHOLD;
+    private static readonly MAX_JITTER;
     private intervalId;
     private versionEventIntervalId;
     private monitoringId;
     private readonly outboxModel;
-    constructor(natsClient: Stan, connection: mongoose.Connection);
+    private readonly serviceOffset;
+    constructor(natsClient: Stan, connection: mongoose.Connection, serviceName?: ServiceName);
+    /**
+     * Environment variable'dan servis adını çöz
+     */
+    private resolveServiceNameFromEnv;
+    /**
+     * Servis adından deterministik offset hesapla
+     * Bu sayede farklı servisler farklı zamanlarda çalışır (thundering herd prevention)
+     */
+    private calculateServiceOffset;
+    /**
+     * Random jitter ekle (0-500ms)
+     * Bu sayede aynı servisin farklı pod'ları bile aynı anda çalışmaz
+     */
+    private getJitter;
     start(): Promise<void>;
     stop(): void;
     private processEvents;

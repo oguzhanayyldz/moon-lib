@@ -214,13 +214,10 @@ export class OptimisticLockingUtil {
 
         const versionTrackingConfig = config.versionTrackingConfig;
         if (!versionTrackingConfig) {
-            logger.warn(`⚠️ [VERSION-TRACKING] versionTrackingConfig is null for ${Model.modelName}, skipping event publish`);
             return;
         }
 
         const { entityType, serviceName } = versionTrackingConfig;
-
-        logger.info(`🔧 [UPDATE-WITH-RETRY-EVENT] Publishing EntityVersionUpdated: ${entityType}/${docId} v${newVersion} (service: ${serviceName})`);
 
         // Outbox model'i Model'in database connection'ından al
         // Her microservice kendi MongoDB connection'ını kullanıyor
@@ -251,7 +248,6 @@ export class OptimisticLockingUtil {
         };
 
         await Outbox.create(outboxPayload);
-        logger.info(`✅ [UPDATE-WITH-RETRY-EVENT] Version tracking: ${entityType}/${docId} v${newVersion} → Outbox (previousVersion: ${previousVersion})`);
     }
 
     /**

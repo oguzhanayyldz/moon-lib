@@ -187,12 +187,10 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
             enableVersionTracking: options.enableVersionTracking,
             versionTrackingConfig: options.versionTrackingConfig
         });
-        logger_service_1.logger.info(`🔧 [VERSION-TRACKING-INIT] Enabled for ${options.versionTrackingConfig.entityType} in ${options.versionTrackingConfig.serviceName}`);
         const publishVersionEvent = (doc, Model) => __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c, _d, _e;
             const { entityType, serviceName, includeMetadata, parentField, parentEntityType } = options.versionTrackingConfig;
             const docId = doc.id || ((_a = doc._id) === null || _a === void 0 ? void 0 : _a.toString());
-            logger_service_1.logger.info(`🚀 [VERSION-TRACKING-PUBLISH] START: ${entityType}/${docId} v${doc.version} (service: ${serviceName})`);
             try {
                 const previousVersion = doc.version - 1;
                 // Parent entity bilgisini çıkar (child entity ise)
@@ -204,13 +202,10 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                             entityType: parentEntityType,
                             entityId: parentId
                         };
-                        logger_service_1.logger.info(`👨‍👦 [VERSION-TRACKING-PARENT] Parent entity detected: ${parentEntityType}/${parentId}`);
                     }
                 }
                 // Outbox model'ini al
-                logger_service_1.logger.info(`📦 [VERSION-TRACKING-OUTBOX] Retrieving Outbox model from db...`);
                 const Outbox = Model.db.model('Outbox');
-                logger_service_1.logger.info(`✅ [VERSION-TRACKING-OUTBOX] Outbox model retrieved successfully`);
                 // EntityVersionUpdated event'ini Outbox'a ekle
                 const outboxPayload = {
                     eventType: events_1.Subjects.EntityVersionUpdated,
@@ -225,40 +220,23 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                         metadata: includeMetadata ? {
                             modelName: Model.modelName
                         } : undefined,
-                        parentEntity // ← YENİ: Parent entity bilgisi
+                        parentEntity // Parent entity bilgisi
                     },
                     status: 'pending'
                 };
-                logger_service_1.logger.info(`💾 [VERSION-TRACKING-CREATE] Creating Outbox entry...`, {
-                    entityType,
-                    entityId: docId,
-                    version: doc.version
-                });
                 yield Outbox.create(outboxPayload);
-                logger_service_1.logger.info(`✅ [VERSION-TRACKING-SUCCESS] Version tracking: ${entityType}/${docId} v${doc.version} → Outbox (previousVersion: ${previousVersion})`);
             }
             catch (error) {
                 logger_service_1.logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}:`, error);
-                logger_service_1.logger.error(`❌ [VERSION-TRACKING-ERROR-DETAIL]`, {
-                    entityType,
-                    entityId: docId,
-                    version: doc.version,
-                    service: serviceName,
-                    errorMessage: error.message,
-                    errorStack: error.stack
-                });
                 // Hata logla ama işlemi engelleme
             }
         });
         // POST-SAVE HOOK (create ve doc.save() update için)
         baseSchema.post('save', function (doc, next) {
             return __awaiter(this, void 0, void 0, function* () {
-                logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('save') TRIGGERED for doc: ${doc.id || doc._id}`);
                 try {
                     const Model = this.constructor;
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}, doc.version: ${doc.version}`);
                     yield publishVersionEvent(doc, Model);
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('save') completed successfully with version: ${doc.version}`);
                     next();
                 }
                 catch (error) {
@@ -271,27 +249,20 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         baseSchema.post('findOneAndUpdate', function (doc, next) {
             return __awaiter(this, void 0, void 0, function* () {
                 var _a;
-                logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('findOneAndUpdate') TRIGGERED for doc: ${doc ? (doc.id || doc._id) : 'null'}`);
                 try {
                     if (!doc) {
-                        logger_service_1.logger.warn(`⚠️ [VERSION-TRACKING-HOOK] post('findOneAndUpdate') - doc is null, skipping`);
                         next();
                         return;
                     }
                     const Model = this.constructor;
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Model name: ${Model.modelName}, doc.version from hook param: ${doc.version}`);
-                    // ✅ FIX: Update query'den version bilgisini al
-                    // mongoose-update-if-current plugin ile manuel $set충돌 sorunu çözümü
-                    const query = this; // Query context
+                    // Update query'den version bilgisini al
+                    const query = this;
                     const update = query.getUpdate();
                     const newVersion = (_a = update === null || update === void 0 ? void 0 : update.$set) === null || _a === void 0 ? void 0 : _a.version;
                     if (newVersion !== undefined) {
-                        logger_service_1.logger.info(`🔧 [VERSION-TRACKING-HOOK] Overriding doc.version from ${doc.version} to ${newVersion} (from update query)`);
                         doc.version = newVersion;
                     }
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] Publishing event with version: ${doc.version}`);
                     yield publishVersionEvent(doc, Model);
-                    logger_service_1.logger.info(`🎣 [VERSION-TRACKING-HOOK] post('findOneAndUpdate') completed successfully`);
                     next();
                 }
                 catch (error) {
@@ -300,7 +271,6 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                 }
             });
         });
-        logger_service_1.logger.info(`✅ [VERSION-TRACKING-INIT] Hooks registered successfully for ${options.versionTrackingConfig.entityType} in ${options.versionTrackingConfig.serviceName}`);
     }
     baseSchema.pre('findOneAndUpdate', function (next) {
         const filter = this.getQuery();

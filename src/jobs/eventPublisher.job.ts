@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { Stan } from 'node-nats-streaming';
-import { Subjects } from '../common/';
+import { Subjects, ServiceName } from '../common/';
 import { createOutboxModel, OutboxModel } from '../models/outbox.schema';
 import { ProductCreatedPublisher } from '../events/publishers/productCreated.publisher';
 import { ProductUpdatedPublisher } from '../events/publishers/productUpdated.publisher';
@@ -70,35 +70,92 @@ export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
     private static readonly VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
+    private static readonly MAX_JITTER = 500; // 0-500ms random jitter
     private intervalId: NodeJS.Timeout | null = null;
     private versionEventIntervalId: NodeJS.Timeout | null = null; // Version eventleri için ayrı interval
     private monitoringId: NodeJS.Timeout | null = null;
     private readonly outboxModel: OutboxModel;
+    private readonly serviceOffset: number; // Servis bazlı offset (thundering herd prevention)
 
     constructor (
         private natsClient: Stan,
-        private connection: mongoose.Connection
+        private connection: mongoose.Connection,
+        serviceName?: ServiceName // Optional: Thundering herd prevention için
     ) {
         this.outboxModel = createOutboxModel(connection);
+        
+        // Servis adını belirle: parametre > env > undefined
+        const resolvedServiceName = serviceName || this.resolveServiceNameFromEnv();
+        
+        // Servis adından deterministik offset hesapla (0-2500ms arası)
+        this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
+    }
+
+    /**
+     * Environment variable'dan servis adını çöz
+     */
+    private resolveServiceNameFromEnv(): ServiceName | undefined {
+        const envServiceName = process.env.SERVICE_NAME;
+        if (!envServiceName) return undefined;
+        
+        // ServiceName enum'unda ara (case-insensitive)
+        const serviceValues = Object.values(ServiceName) as string[];
+        const found = serviceValues.find(s => s.toLowerCase() === envServiceName.toLowerCase());
+        return found as ServiceName | undefined;
+    }
+
+
+    /**
+     * Servis adından deterministik offset hesapla
+     * Bu sayede farklı servisler farklı zamanlarda çalışır (thundering herd prevention)
+     */
+    private calculateServiceOffset(serviceName?: ServiceName): number {
+        if (!serviceName) return 0;
+        
+        // ServiceName enum değerlerinin index'ini al (0-based)
+        const serviceValues = Object.values(ServiceName);
+        const serviceIndex = serviceValues.indexOf(serviceName);
+        
+        if (serviceIndex === -1) return 0;
+        
+        // Her servis için 300ms offset (8 servis = 0, 300, 600, 900, 1200, 1500, 1800, 2100ms)
+        const offset = (serviceIndex % 8) * 300;
+        return offset;
+    }
+
+    /**
+     * Random jitter ekle (0-500ms)
+     * Bu sayede aynı servisin farklı pod'ları bile aynı anda çalışmaz
+     */
+    private getJitter(): number {
+        return Math.floor(Math.random() * EventPublisherJob.MAX_JITTER);
     }
 
     async start() {
-        // Normal event publishing job (3 saniye)
-        this.intervalId = setInterval(async () => {
-            await this.processEvents();
-        }, EventPublisherJob.RETRY_INTERVAL);
+        // Servis bazlı offset + random jitter ile başlangıcı geciktir
+        const initialDelay = this.serviceOffset + this.getJitter();
+        
+        logger.info(`EventPublisherJob starting with offset=${this.serviceOffset}ms, initialDelay=${initialDelay}ms`);
 
-        // Version event bulk publishing job (10 saniye - biriktirme için daha uzun)
-        this.versionEventIntervalId = setInterval(async () => {
-            await this.processVersionEventsAsBulk();
-        }, EventPublisherJob.VERSION_EVENT_INTERVAL);
+        // İlk çalışmayı geciktir, sonra normal interval ile devam et
+        setTimeout(() => {
+            // Normal event publishing job (3 saniye)
+            this.intervalId = setInterval(async () => {
+                await this.processEvents();
+            }, EventPublisherJob.RETRY_INTERVAL);
 
-        // Monitoring job
-        this.monitoringId = setInterval(async () => {
-            await this.monitorFailedEvents();
-        }, EventPublisherJob.RETRY_INTERVAL);
+            // Version event bulk publishing job (2 dakika - biriktirme için daha uzun)
+            this.versionEventIntervalId = setInterval(async () => {
+                await this.processVersionEventsAsBulk();
+            }, EventPublisherJob.VERSION_EVENT_INTERVAL);
 
-        logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${EventPublisherJob.VERSION_EVENT_INTERVAL}ms`);
+            // Monitoring job
+            this.monitoringId = setInterval(async () => {
+                await this.monitorFailedEvents();
+            }, EventPublisherJob.RETRY_INTERVAL);
+
+            logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${EventPublisherJob.VERSION_EVENT_INTERVAL}ms, serviceOffset=${this.serviceOffset}ms`);
+        }, initialDelay);
     }
 
     stop() {

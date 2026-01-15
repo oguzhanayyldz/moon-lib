@@ -75,29 +75,75 @@ const customerUpdated_publisher_1 = require("../events/publishers/customerUpdate
 const customerAddressUpdated_publisher_1 = require("../events/publishers/customerAddressUpdated.publisher");
 const catalogMappingUpdated_publisher_1 = require("../events/publishers/catalogMappingUpdated.publisher");
 class EventPublisherJob {
-    constructor(natsClient, connection) {
+    constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
+    ) {
         this.natsClient = natsClient;
         this.connection = connection;
         this.intervalId = null;
         this.versionEventIntervalId = null; // Version eventleri için ayrı interval
         this.monitoringId = null;
         this.outboxModel = (0, outbox_schema_1.createOutboxModel)(connection);
+        // Servis adını belirle: parametre > env > undefined
+        const resolvedServiceName = serviceName || this.resolveServiceNameFromEnv();
+        // Servis adından deterministik offset hesapla (0-2500ms arası)
+        this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
+    }
+    /**
+     * Environment variable'dan servis adını çöz
+     */
+    resolveServiceNameFromEnv() {
+        const envServiceName = process.env.SERVICE_NAME;
+        if (!envServiceName)
+            return undefined;
+        // ServiceName enum'unda ara (case-insensitive)
+        const serviceValues = Object.values(common_1.ServiceName);
+        const found = serviceValues.find(s => s.toLowerCase() === envServiceName.toLowerCase());
+        return found;
+    }
+    /**
+     * Servis adından deterministik offset hesapla
+     * Bu sayede farklı servisler farklı zamanlarda çalışır (thundering herd prevention)
+     */
+    calculateServiceOffset(serviceName) {
+        if (!serviceName)
+            return 0;
+        // ServiceName enum değerlerinin index'ini al (0-based)
+        const serviceValues = Object.values(common_1.ServiceName);
+        const serviceIndex = serviceValues.indexOf(serviceName);
+        if (serviceIndex === -1)
+            return 0;
+        // Her servis için 300ms offset (8 servis = 0, 300, 600, 900, 1200, 1500, 1800, 2100ms)
+        const offset = (serviceIndex % 8) * 300;
+        return offset;
+    }
+    /**
+     * Random jitter ekle (0-500ms)
+     * Bu sayede aynı servisin farklı pod'ları bile aynı anda çalışmaz
+     */
+    getJitter() {
+        return Math.floor(Math.random() * EventPublisherJob.MAX_JITTER);
     }
     start() {
         return __awaiter(this, void 0, void 0, function* () {
-            // Normal event publishing job (3 saniye)
-            this.intervalId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
-                yield this.processEvents();
-            }), EventPublisherJob.RETRY_INTERVAL);
-            // Version event bulk publishing job (10 saniye - biriktirme için daha uzun)
-            this.versionEventIntervalId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
-                yield this.processVersionEventsAsBulk();
-            }), EventPublisherJob.VERSION_EVENT_INTERVAL);
-            // Monitoring job
-            this.monitoringId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
-                yield this.monitorFailedEvents();
-            }), EventPublisherJob.RETRY_INTERVAL);
-            logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${EventPublisherJob.VERSION_EVENT_INTERVAL}ms`);
+            // Servis bazlı offset + random jitter ile başlangıcı geciktir
+            const initialDelay = this.serviceOffset + this.getJitter();
+            logger_service_1.logger.info(`EventPublisherJob starting with offset=${this.serviceOffset}ms, initialDelay=${initialDelay}ms`);
+            // İlk çalışmayı geciktir, sonra normal interval ile devam et
+            setTimeout(() => {
+                // Normal event publishing job (3 saniye)
+                this.intervalId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
+                    yield this.processEvents();
+                }), EventPublisherJob.RETRY_INTERVAL);
+                // Version event bulk publishing job (2 dakika - biriktirme için daha uzun)
+                this.versionEventIntervalId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
+                    yield this.processVersionEventsAsBulk();
+                }), EventPublisherJob.VERSION_EVENT_INTERVAL);
+                // Monitoring job
+                this.monitoringId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
+                    yield this.monitorFailedEvents();
+                }), EventPublisherJob.RETRY_INTERVAL);
+                logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${EventPublisherJob.VERSION_EVENT_INTERVAL}ms, serviceOffset=${this.serviceOffset}ms`);
+            }, initialDelay);
         });
     }
     stop() {
@@ -518,3 +564,4 @@ exports.EventPublisherJob = EventPublisherJob;
 EventPublisherJob.RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
 EventPublisherJob.VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
 EventPublisherJob.ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
+EventPublisherJob.MAX_JITTER = 500; // 0-500ms random jitter
