@@ -51,6 +51,7 @@ export * from './order-integration-status-updated-event';
 export * from './product-matched-event';
 export * from './notification-created-event';
 export * from './entity-version-updated-event';
+export * from './entity-version-bulk-updated-event';
 export * from './sync-requested-event';
 export * from './invoice-created-event';
 export * from './invoice-updated-event';

@@ -44,6 +44,7 @@ import {
     NotificationCreatedEvent,
     OrderProductStockUpdatedEvent,
     EntityVersionUpdatedEvent,
+    EntityVersionBulkUpdatedEvent,
     SyncRequestedEvent,
     InvoiceUpdatedEvent,
     InvoiceCreatedEvent,
@@ -106,6 +107,7 @@ interface EventPayloadMap {
     [Subjects.ProductMatched]: ProductMatchedEvent['data'];
     [Subjects.NotificationCreated]: NotificationCreatedEvent['data'];
     [Subjects.EntityVersionUpdated]: EntityVersionUpdatedEvent['data'];
+    [Subjects.EntityVersionBulkUpdated]: EntityVersionBulkUpdatedEvent['data'];
     [Subjects.SyncRequested]: SyncRequestedEvent['data'];
     [Subjects.InvoiceCreated]: InvoiceCreatedEvent['data'];
     [Subjects.InvoiceUpdated]: InvoiceUpdatedEvent['data'];

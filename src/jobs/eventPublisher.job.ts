@@ -44,6 +44,7 @@ import { ProductMatchedPublisher } from '../events/publishers/productMatched.pub
 import { NotificationCreatedPublisher } from '../events/publishers/notificationCreated.publisher';
 import { OrderProductStockUpdatedPublisher } from '../events/publishers/orderProductUpdated.publisher';
 import { EntityVersionUpdatedPublisher } from '../events/publishers/entityVersionUpdated.publisher';
+import { EntityVersionBulkUpdatedPublisher } from '../events/publishers/entityVersionBulkUpdated.publisher';
 import { SyncRequestedPublisher } from '../events/publishers/syncRequested.publisher';
 import { InvoiceCreatedPublisher } from '../events/publishers/invoiceCreated.publisher';
 import { InvoiceUpdatedPublisher } from '../events/publishers/invoiceUpdated.publisher';
@@ -66,9 +67,11 @@ import { CatalogMappingUpdatedPublisher } from '../events/publishers/catalogMapp
 
 
 export class EventPublisherJob {
-    private static readonly RETRY_INTERVAL = 3000; // 3 saniye (bulk sync için optimize edildi)
+    private static readonly RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
+    private static readonly VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
     private intervalId: NodeJS.Timeout | null = null;
+    private versionEventIntervalId: NodeJS.Timeout | null = null; // Version eventleri için ayrı interval
     private monitoringId: NodeJS.Timeout | null = null;
     private readonly outboxModel: OutboxModel;
 
@@ -80,22 +83,30 @@ export class EventPublisherJob {
     }
 
     async start() {
-        // Event publishing job
+        // Normal event publishing job (3 saniye)
         this.intervalId = setInterval(async () => {
             await this.processEvents();
         }, EventPublisherJob.RETRY_INTERVAL);
+
+        // Version event bulk publishing job (10 saniye - biriktirme için daha uzun)
+        this.versionEventIntervalId = setInterval(async () => {
+            await this.processVersionEventsAsBulk();
+        }, EventPublisherJob.VERSION_EVENT_INTERVAL);
 
         // Monitoring job
         this.monitoringId = setInterval(async () => {
             await this.monitorFailedEvents();
         }, EventPublisherJob.RETRY_INTERVAL);
+
+        logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${EventPublisherJob.VERSION_EVENT_INTERVAL}ms`);
     }
 
     stop() {
-        [this.intervalId, this.monitoringId].forEach(interval => {
+        [this.intervalId, this.versionEventIntervalId, this.monitoringId].forEach(interval => {
             if (interval) clearInterval(interval);
         });
         this.intervalId = null;
+        this.versionEventIntervalId = null;
         this.monitoringId = null;
     }
 
@@ -104,13 +115,15 @@ export class EventPublisherJob {
             // Sadece bu environment'a ait pending eventleri al
             const currentEnvironment = process.env.NODE_ENV || 'production';
 
+            // EntityVersionUpdated eventleri AYRI işlenir (bulk interval ile)
             const pendingEvents = await this.outboxModel.find({
                 status: 'pending',
                 environment: currentEnvironment,
-                retryCount: { $lt: 5 }
+                retryCount: { $lt: 5 },
+                eventType: { $ne: Subjects.EntityVersionUpdated } // Version eventlerini hariç tut
             })
                 .sort({ createdAt: 1 })
-                .limit(50); // Artırıldı: Bulk sync event'leri için yeterli kapasite (26 brand chunks + diğer event'ler)
+                .limit(50);
 
             if (pendingEvents.length > 0) {
                 logger.debug(`Processing ${pendingEvents.length} events for environment: ${currentEnvironment}`);
@@ -162,6 +175,89 @@ export class EventPublisherJob {
             }
         } catch (error) {
             logger.error('Event processing failed:', error);
+        }
+    }
+
+    /**
+     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
+     * Bu metod ayrı bir interval ile çalışır (10 saniye) ve birikmiş version
+     * eventlerini tek bir EntityVersionBulkUpdated mesajı olarak gönderir
+     */
+    private async processVersionEventsAsBulk() {
+        try {
+            const currentEnvironment = process.env.NODE_ENV || 'production';
+
+            // Sadece EntityVersionUpdated eventlerini al
+            const versionEvents = await this.outboxModel.find({
+                status: 'pending',
+                environment: currentEnvironment,
+                retryCount: { $lt: 5 },
+                eventType: Subjects.EntityVersionUpdated
+            })
+                .sort({ createdAt: 1 })
+                .limit(100); // Version eventleri için daha yüksek limit
+
+            if (versionEvents.length === 0) {
+                return; // İşlenecek event yok
+            }
+
+            logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk`);
+
+            const eventIds = versionEvents.map(e => e.id);
+
+            // Atomik olarak tüm eventleri 'processing' yap
+            const updateResult = await this.outboxModel.updateMany(
+                { 
+                    _id: { $in: eventIds }, 
+                    status: 'pending' 
+                },
+                { 
+                    $set: { 
+                        status: 'processing', 
+                        processingStartedAt: new Date() 
+                    } 
+                }
+            );
+
+            // Bazı eventler başka pod tarafından alınmış olabilir
+            if (updateResult.modifiedCount === 0) {
+                logger.debug('All version events already being processed by another publisher');
+                return;
+            }
+
+            try {
+                // Bulk payload oluştur
+                const batchId = `bulk-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+                const bulkPayload = {
+                    updates: versionEvents.map(e => e.payload),
+                    batchId,
+                    batchSize: versionEvents.length,
+                    timestamp: new Date()
+                };
+
+                // TEK NATS mesajı gönder
+                await new EntityVersionBulkUpdatedPublisher(this.natsClient).publish(bulkPayload);
+
+                // Tümünü başarılı işaretle
+                await this.outboxModel.updateMany(
+                    { _id: { $in: eventIds }, status: 'processing' },
+                    { $set: { status: 'published' } }
+                );
+
+                logger.info(`✅ Bulk published ${versionEvents.length} EntityVersionUpdated events (batch: ${batchId})`);
+            } catch (error) {
+                // Hata durumunda tümünü 'failed' yap (retry için)
+                await this.outboxModel.updateMany(
+                    { _id: { $in: eventIds }, status: 'processing' },
+                    { 
+                        $set: { status: 'failed', lastAttempt: new Date() },
+                        $inc: { retryCount: 1 }
+                    }
+                );
+                logger.error('❌ Failed to publish bulk EntityVersionUpdated events:', error);
+            }
+        } catch (error) {
+            logger.error('Version event bulk processing failed:', error);
         }
     }
 

@@ -40,6 +40,7 @@ export enum Subjects {
     ProductMatched = "order:product:matched",
     NotificationCreated = "notification:created",
     EntityVersionUpdated = "entity:version-updated",
+    EntityVersionBulkUpdated = "entity:version-bulk-updated",
     SyncRequested = "sync:requested",
     InvoiceCreated = "invoice:created",
     InvoiceUpdated = "invoice:updated",

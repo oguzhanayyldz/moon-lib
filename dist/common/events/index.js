@@ -67,6 +67,7 @@ __exportStar(require("./order-integration-status-updated-event"), exports);
 __exportStar(require("./product-matched-event"), exports);
 __exportStar(require("./notification-created-event"), exports);
 __exportStar(require("./entity-version-updated-event"), exports);
+__exportStar(require("./entity-version-bulk-updated-event"), exports);
 __exportStar(require("./sync-requested-event"), exports);
 __exportStar(require("./invoice-created-event"), exports);
 __exportStar(require("./invoice-updated-event"), exports);

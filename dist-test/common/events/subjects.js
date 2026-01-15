@@ -44,6 +44,7 @@ var Subjects;
     Subjects["ProductMatched"] = "order:product:matched";
     Subjects["NotificationCreated"] = "notification:created";
     Subjects["EntityVersionUpdated"] = "entity:version-updated";
+    Subjects["EntityVersionBulkUpdated"] = "entity:version-bulk-updated";
     Subjects["SyncRequested"] = "sync:requested";
     Subjects["InvoiceCreated"] = "invoice:created";
     Subjects["InvoiceUpdated"] = "invoice:updated";
