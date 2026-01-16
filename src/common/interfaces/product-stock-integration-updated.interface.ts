@@ -28,8 +28,9 @@ export interface StockSource {
     integrationId: string;
     name: string;
     enabled: boolean;
-    warehouseId: string;
-    shelfId: string | null;
+    sourceLocationId?: string | null;  // 🆕 Entegrasyon tarafındaki source location ID (opsiyonel, null = tüm lokasyonlar)
+    warehouseId: string;               // TARGET: Moon sistemindeki hedef depo
+    shelfId: string | null;            // TARGET: Moon sistemindeki hedef raf
     rules: StockSourceRules;
 }
 

@@ -12,4 +12,5 @@ export * from './order-integration-status-updated.interface';
 export * from './api-client.interface';
 export * from './entity-deletion.interface';
 export * from './batch-deletion.interface';
+export * from './external-location.interface';
 //# sourceMappingURL=index.d.ts.map

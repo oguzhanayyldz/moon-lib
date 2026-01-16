@@ -28,3 +28,4 @@ __exportStar(require("./order-integration-status-updated.interface"), exports);
 __exportStar(require("./api-client.interface"), exports);
 __exportStar(require("./entity-deletion.interface"), exports);
 __exportStar(require("./batch-deletion.interface"), exports);
+__exportStar(require("./external-location.interface"), exports);
