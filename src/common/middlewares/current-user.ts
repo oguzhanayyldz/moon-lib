@@ -155,12 +155,12 @@ export const currentUser = (req: Request, res: Response, next: NextFunction) => 
                             if (!isSessionValid) {
                                 // Session not found in Redis - but don't immediately clear JWT
                                 // This could be a temporary Redis issue or TTL expiry
-                                console.warn('[CurrentUser] Session not found in Redis, but keeping JWT for now:', {
-                                    sessionUserId,
-                                    sessionId: payload.sessionId,
-                                    userEmail: payload.email,
-                                    isSubUserMode: payload.isSubUserMode
-                                });
+                                // console.warn('[CurrentUser] Session not found in Redis, but keeping JWT for now:', {
+                                //     sessionUserId,
+                                //     sessionId: payload.sessionId,
+                                //     userEmail: payload.email,
+                                //     isSubUserMode: payload.isSubUserMode
+                                // });
                                 // Note: NOT clearing JWT here - let currentUser endpoint handle this
                             } else {
                                 // Update session activity (non-blocking)
@@ -169,7 +169,7 @@ export const currentUser = (req: Request, res: Response, next: NextFunction) => 
                                     sessionData.lastActivity = new Date();
                                     redisWrapper.client.hSet(`user_sessions:${sessionUserId}`, payload.sessionId!, JSON.stringify(sessionData))
                                         .catch(updateErr => {
-                                            console.warn('[CurrentUser] Failed to update session activity:', updateErr.message);
+                                            // console.warn('[CurrentUser] Failed to update session activity:', updateErr.message);
                                         });
                                 } catch {
                                     // If update fails, continue anyway
@@ -178,11 +178,11 @@ export const currentUser = (req: Request, res: Response, next: NextFunction) => 
                         })
                         .catch(err => {
                             // Redis error - continue without session validation, don't clear JWT
-                            console.warn('[CurrentUser] Redis error during session validation, continuing with JWT:', {
-                                error: err.message,
-                                sessionUserId,
-                                sessionId: payload.sessionId
-                            });
+                            // console.warn('[CurrentUser] Redis error during session validation, continuing with JWT:', {
+                            //     error: err.message,
+                            //     sessionUserId,
+                            //     sessionId: payload.sessionId
+                            // });
                         });
                 } else {
                     // Redis not available, skip session validation
