@@ -27,6 +27,7 @@ export * from './services/sharedExcel.service';
 export * from './services/response-interpreters/base.interpreter';
 export * from './services/response-interpreters/trendyol.interpreter';
 export * from './services/response-interpreters/shopify.interpreter';
+export * from './services/response-interpreters/hepsiburada.interpreter';
 export * from './services/response-interpreters/interpreter.factory';
 export * from './enums/operation-type.enum';
 export * from './common/enums/aras-status.enum';

@@ -2,6 +2,7 @@ import { ResourceName } from '../../common';
 import { BaseResponseInterpreter } from './base.interpreter';
 import { TrendyolResponseInterpreter } from './trendyol.interpreter';
 import { ShopifyResponseInterpreter } from './shopify.interpreter';
+import { HepsiburadaResponseInterpreter } from './hepsiburada.interpreter';
 import { logger } from '../logger.service';
 
 /**
@@ -32,8 +33,11 @@ export class ResponseInterpreterFactory {
                 interpreter = new ShopifyResponseInterpreter();
                 break;
 
-            // Diğer platform'lar için ileride eklenebilir
             case ResourceName.Hepsiburada:
+                interpreter = new HepsiburadaResponseInterpreter();
+                break;
+
+            // Diğer platform'lar için ileride eklenebilir
             case ResourceName.N11:
             case ResourceName.Amazon:
             case ResourceName.CicekSepeti:
