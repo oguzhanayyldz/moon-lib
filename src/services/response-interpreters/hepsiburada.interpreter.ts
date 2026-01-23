@@ -7,7 +7,8 @@ import { logger } from '../logger.service';
  * Hepsiburada API yanıtlarını yorumlayan interpreter
  *
  * Hepsiburada API Response Formatları:
- * - Batch Status: { success: true, data: [{ importStatus, productStatus, validationResults }] }
+ * - Batch Status (Ticket API): { success: true, data: [{ importStatus, productStatus, validationResults }] }
+ * - Batch Status (Tracking): { status, summary: { total, success, failed }, successItems, failedItems }
  * - Tracking: { trackingId: "xxx" }
  * - Categories: { data: { categories: [...] } }
  * - Brands: { data: { brands: [...] } }
@@ -80,20 +81,91 @@ export class HepsiburadaResponseInterpreter extends BaseResponseInterpreter {
     /**
      * Batch status (tracking status) yanıtını yorumla
      *
-     * Hepsiburada response format:
+     * İki farklı format desteklenir:
+     *
+     * 1. Batch Tracking Format (processBatchResults'tan gelen - fiyat/stok):
+     * {
+     *   "trackingId": "xxx",
+     *   "status": "COMPLETED" | "PARTIAL" | "FAILED",
+     *   "summary": { "total": 1, "success": 1, "failed": 0 },
+     *   "successItems": [{ "hbSku": "xxx", "status": "SUCCESS" }],
+     *   "failedItems": []
+     * }
+     *
+     * 2. Ticket API Format (ürün upload sonuçları):
      * {
      *   "success": true,
      *   "data": [{
      *     "merchantSku": "xxx",
-     *     "barcode": "xxx",
-     *     "hbSku": null,
      *     "importStatus": "SUCCESS" | "FAILED",
-     *     "productStatus": "Incelenecek" | "Matched" | "ForSale" | "Rejected",
+     *     "productStatus": "ForSale" | "Rejected",
      *     "validationResults": [{ "attributeName": "...", "message": "..." }]
      *   }]
      * }
      */
     private interpretBatchStatus(response: any): InterpretedResponse {
+        // YENİ: Batch tracking formatını kontrol et (processBatchResults'tan gelen)
+        // Bu format: { status, summary: { total, success, failed }, successItems, failedItems }
+        if (response?.summary && typeof response.summary === 'object') {
+            return this.interpretBatchTrackingFormat(response);
+        }
+
+        // ESKİ: Ticket API formatı (ürün upload sonuçları)
+        // Bu format: { data: [{ importStatus, productStatus, ... }] }
+        return this.interpretTicketApiFormat(response);
+    }
+
+    /**
+     * Batch tracking formatını yorumla (processBatchResults'tan gelen)
+     * Format: { trackingId, status, summary: { total, success, failed }, successItems, failedItems }
+     */
+    private interpretBatchTrackingFormat(response: any): InterpretedResponse {
+        const summary = response.summary || {};
+        const status = response.status; // "COMPLETED", "PARTIAL", "FAILED"
+        const successCount = summary.success || 0;
+        const failureCount = summary.failed || 0;
+        const totalCount = summary.total || (successCount + failureCount);
+
+        // Status mapping
+        let interpretedStatus: 'completed' | 'partial' | 'failed' | 'pending' = 'pending';
+        if (status === 'COMPLETED') interpretedStatus = 'completed';
+        else if (status === 'PARTIAL') interpretedStatus = 'partial';
+        else if (status === 'FAILED') interpretedStatus = 'failed';
+
+        // Özet mesaj
+        let summaryMessage = '';
+        if (interpretedStatus === 'completed') {
+            summaryMessage = `Batch tamamlandı: ${successCount} ürün başarılı`;
+        } else if (interpretedStatus === 'failed') {
+            summaryMessage = `Batch başarısız: ${failureCount} ürün reddedildi`;
+        } else if (interpretedStatus === 'partial') {
+            summaryMessage = `Batch kısmen başarılı: ${successCount} başarılı, ${failureCount} başarısız`;
+        } else {
+            summaryMessage = 'Batch durumu: İşleniyor...';
+        }
+
+        return {
+            summary: summaryMessage,
+            success: failureCount === 0 && totalCount > 0,
+            successCount,
+            failureCount,
+            details: {
+                total: totalCount,
+                status: interpretedStatus,
+                warningsCount: response.validationWarnings?.length || 0,
+                successItems: response.successItems?.slice(0, 20) || [],
+                failedItems: response.failedItems?.slice(0, 20) || [],
+                itemsWithWarnings: response.validationWarnings?.slice(0, 20) || []
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Ticket API formatını yorumla (ürün upload sonuçları)
+     * Format: { data: [{ merchantSku, importStatus, productStatus, validationResults }] }
+     */
+    private interpretTicketApiFormat(response: any): InterpretedResponse {
         // Hepsiburada data array olarak dönüyor
         const rawData = response?.data || response;
         const items = Array.isArray(rawData) ? rawData : (rawData?.data || []);

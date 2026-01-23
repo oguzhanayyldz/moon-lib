@@ -5,7 +5,8 @@ import { BaseResponseInterpreter } from './base.interpreter';
  * Hepsiburada API yanıtlarını yorumlayan interpreter
  *
  * Hepsiburada API Response Formatları:
- * - Batch Status: { success: true, data: [{ importStatus, productStatus, validationResults }] }
+ * - Batch Status (Ticket API): { success: true, data: [{ importStatus, productStatus, validationResults }] }
+ * - Batch Status (Tracking): { status, summary: { total, success, failed }, successItems, failedItems }
  * - Tracking: { trackingId: "xxx" }
  * - Categories: { data: { categories: [...] } }
  * - Brands: { data: { brands: [...] } }
@@ -20,20 +21,39 @@ export declare class HepsiburadaResponseInterpreter extends BaseResponseInterpre
     /**
      * Batch status (tracking status) yanıtını yorumla
      *
-     * Hepsiburada response format:
+     * İki farklı format desteklenir:
+     *
+     * 1. Batch Tracking Format (processBatchResults'tan gelen - fiyat/stok):
+     * {
+     *   "trackingId": "xxx",
+     *   "status": "COMPLETED" | "PARTIAL" | "FAILED",
+     *   "summary": { "total": 1, "success": 1, "failed": 0 },
+     *   "successItems": [{ "hbSku": "xxx", "status": "SUCCESS" }],
+     *   "failedItems": []
+     * }
+     *
+     * 2. Ticket API Format (ürün upload sonuçları):
      * {
      *   "success": true,
      *   "data": [{
      *     "merchantSku": "xxx",
-     *     "barcode": "xxx",
-     *     "hbSku": null,
      *     "importStatus": "SUCCESS" | "FAILED",
-     *     "productStatus": "Incelenecek" | "Matched" | "ForSale" | "Rejected",
+     *     "productStatus": "ForSale" | "Rejected",
      *     "validationResults": [{ "attributeName": "...", "message": "..." }]
      *   }]
      * }
      */
     private interpretBatchStatus;
+    /**
+     * Batch tracking formatını yorumla (processBatchResults'tan gelen)
+     * Format: { trackingId, status, summary: { total, success, failed }, successItems, failedItems }
+     */
+    private interpretBatchTrackingFormat;
+    /**
+     * Ticket API formatını yorumla (ürün upload sonuçları)
+     * Format: { data: [{ merchantSku, importStatus, productStatus, validationResults }] }
+     */
+    private interpretTicketApiFormat;
     /**
      * Kategori listesi yanıtını yorumla
      * Hepsiburada response: { data: { categories: [...] } }
