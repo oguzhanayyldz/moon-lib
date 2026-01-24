@@ -83,5 +83,31 @@ export declare class HepsiburadaResponseInterpreter extends BaseResponseInterpre
      * Genel yanıt yorumlama
      */
     private interpretGeneric;
+    /**
+     * Paketlenebilir ürünler listesi yanıtını yorumla
+     * Response format: { lineItems: [...] }
+     */
+    private interpretPackageableItems;
+    /**
+     * Paket oluşturma yanıtını yorumla
+     * Response format: { packageNumber: "...", barcode: "..." }
+     */
+    private interpretCreatePackage;
+    /**
+     * Paket listesi yanıtını yorumla
+     */
+    private interpretFetchPackages;
+    /**
+     * Paket bölme yanıtını yorumla
+     */
+    private interpretSplitPackage;
+    /**
+     * Paket açma yanıtını yorumla
+     */
+    private interpretUnpackPackage;
+    /**
+     * Line item iptal yanıtını yorumla
+     */
+    private interpretCancelLineItem;
 }
 //# sourceMappingURL=hepsiburada.interpreter.d.ts.map

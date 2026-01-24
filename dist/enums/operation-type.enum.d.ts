@@ -21,6 +21,12 @@ export declare enum OperationType {
     UPDATE_ORDER = "UPDATE_ORDER",
     CANCEL_ORDER = "CANCEL_ORDER",
     FETCH_ORDERS = "FETCH_ORDERS",
+    CHECK_PACKAGEABLE_ITEMS = "CHECK_PACKAGEABLE_ITEMS",// Birlikte paketlenebilecek ürünleri kontrol et
+    CREATE_PACKAGE = "CREATE_PACKAGE",// Paket oluştur
+    FETCH_PACKAGES = "FETCH_PACKAGES",// Paketleri listele
+    SPLIT_PACKAGE = "SPLIT_PACKAGE",// Paketi böl
+    UNPACK_PACKAGE = "UNPACK_PACKAGE",// Paketi aç
+    CANCEL_LINE_ITEM = "CANCEL_LINE_ITEM",// Line item iptal et
     UPDATE_PRICES = "UPDATE_PRICES",
     FETCH_PRICES = "FETCH_PRICES",
     SEND_INVOICES = "SEND_INVOICES",

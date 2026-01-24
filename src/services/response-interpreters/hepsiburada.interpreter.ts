@@ -45,6 +45,25 @@ export class HepsiburadaResponseInterpreter extends BaseResponseInterpreter {
                 case OperationType.GET_CATEGORY_ATTRIBUTES:
                     return this.interpretCategoryAttributes(response);
 
+                // Paketleme İşlemleri
+                case OperationType.CHECK_PACKAGEABLE_ITEMS:
+                    return this.interpretPackageableItems(response);
+
+                case OperationType.CREATE_PACKAGE:
+                    return this.interpretCreatePackage(response);
+
+                case OperationType.FETCH_PACKAGES:
+                    return this.interpretFetchPackages(response);
+
+                case OperationType.SPLIT_PACKAGE:
+                    return this.interpretSplitPackage(response);
+
+                case OperationType.UNPACK_PACKAGE:
+                    return this.interpretUnpackPackage(response);
+
+                case OperationType.CANCEL_LINE_ITEM:
+                    return this.interpretCancelLineItem(response);
+
                 default:
                     return this.interpretGeneric(response, operationType);
             }
@@ -451,6 +470,150 @@ export class HepsiburadaResponseInterpreter extends BaseResponseInterpreter {
             details: {
                 responseType: typeof response,
                 hasData: !this.isEmptyResponse(response)
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    // ===== PAKETLEME İŞLEMLERİ INTERPRETER METODLARI =====
+
+    /**
+     * Paketlenebilir ürünler listesi yanıtını yorumla
+     * Response format: { lineItems: [...] }
+     */
+    private interpretPackageableItems(response: any): InterpretedResponse {
+        // Response format: { lineItems: [] } veya array
+        const lineItems = Array.isArray(response)
+            ? response
+            : (response?.lineItems || response?.items || response?.data || []);
+
+        const itemCount = Array.isArray(lineItems) ? lineItems.length : 0;
+
+        return {
+            summary: itemCount > 0
+                ? `${itemCount} adet birlikte paketlenebilir ürün bulundu`
+                : 'Birlikte paketlenebilir ürün bulunamadı',
+            success: true,
+            successCount: itemCount,
+            details: {
+                itemCount,
+                lineItems: lineItems.slice(0, 10).map((item: any) => ({
+                    lineItemId: item.lineItemId,
+                    orderNumber: item.orderNumber,
+                    quantity: item.quantity
+                }))
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Paket oluşturma yanıtını yorumla
+     * Response format: { packageNumber: "...", barcode: "..." }
+     */
+    private interpretCreatePackage(response: any): InterpretedResponse {
+        const packageNumber = response?.packageNumber || response?.data?.packageNumber;
+        const barcode = response?.barcode || response?.data?.barcode;
+        const isSuccess = !!packageNumber;
+
+        return {
+            summary: isSuccess
+                ? `Paket oluşturuldu: ${packageNumber}`
+                : 'Paket oluşturma başarısız',
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                packageNumber,
+                barcode
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Paket listesi yanıtını yorumla
+     */
+    private interpretFetchPackages(response: any): InterpretedResponse {
+        const packages = Array.isArray(response)
+            ? response
+            : (response?.packages || response?.data || []);
+
+        const packageCount = Array.isArray(packages) ? packages.length : 0;
+
+        return {
+            summary: `${packageCount} paket getirildi`,
+            success: true,
+            successCount: packageCount,
+            details: {
+                packageCount,
+                packages: packages.slice(0, 10).map((pkg: any) => ({
+                    packageNumber: pkg.packageNumber,
+                    orderNumber: pkg.orderNumber,
+                    status: pkg.status
+                }))
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Paket bölme yanıtını yorumla
+     */
+    private interpretSplitPackage(response: any): InterpretedResponse {
+        const newPackageNumber = response?.newPackageNumber || response?.data?.newPackageNumber;
+        const isSuccess = response?.success !== false;
+
+        return {
+            summary: isSuccess
+                ? `Paket bölündü${newPackageNumber ? `: Yeni paket ${newPackageNumber}` : ''}`
+                : 'Paket bölme başarısız',
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                newPackageNumber
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Paket açma yanıtını yorumla
+     */
+    private interpretUnpackPackage(response: any): InterpretedResponse {
+        const isSuccess = response?.success !== false;
+
+        return {
+            summary: isSuccess
+                ? 'Paket başarıyla açıldı'
+                : 'Paket açma başarısız',
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                responseData: response
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Line item iptal yanıtını yorumla
+     */
+    private interpretCancelLineItem(response: any): InterpretedResponse {
+        const isSuccess = response?.success !== false;
+        const errorMessage = response?.errors?.[0]?.message || response?.message;
+
+        return {
+            summary: isSuccess
+                ? 'Line item başarıyla iptal edildi'
+                : `Line item iptal başarısız${errorMessage ? `: ${errorMessage}` : ''}`,
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                error: errorMessage
             },
             parsedAt: new Date()
         };

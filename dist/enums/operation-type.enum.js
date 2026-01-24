@@ -30,6 +30,13 @@ var OperationType;
     OperationType["UPDATE_ORDER"] = "UPDATE_ORDER";
     OperationType["CANCEL_ORDER"] = "CANCEL_ORDER";
     OperationType["FETCH_ORDERS"] = "FETCH_ORDERS";
+    // Paketleme İşlemleri (Hepsiburada)
+    OperationType["CHECK_PACKAGEABLE_ITEMS"] = "CHECK_PACKAGEABLE_ITEMS";
+    OperationType["CREATE_PACKAGE"] = "CREATE_PACKAGE";
+    OperationType["FETCH_PACKAGES"] = "FETCH_PACKAGES";
+    OperationType["SPLIT_PACKAGE"] = "SPLIT_PACKAGE";
+    OperationType["UNPACK_PACKAGE"] = "UNPACK_PACKAGE";
+    OperationType["CANCEL_LINE_ITEM"] = "CANCEL_LINE_ITEM";
     // Fiyat İşlemleri
     OperationType["UPDATE_PRICES"] = "UPDATE_PRICES";
     OperationType["FETCH_PRICES"] = "FETCH_PRICES";

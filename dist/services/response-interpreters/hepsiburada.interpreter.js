@@ -38,6 +38,19 @@ class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInte
                     return this.interpretBrandList(response);
                 case operation_type_enum_1.OperationType.GET_CATEGORY_ATTRIBUTES:
                     return this.interpretCategoryAttributes(response);
+                // Paketleme İşlemleri
+                case operation_type_enum_1.OperationType.CHECK_PACKAGEABLE_ITEMS:
+                    return this.interpretPackageableItems(response);
+                case operation_type_enum_1.OperationType.CREATE_PACKAGE:
+                    return this.interpretCreatePackage(response);
+                case operation_type_enum_1.OperationType.FETCH_PACKAGES:
+                    return this.interpretFetchPackages(response);
+                case operation_type_enum_1.OperationType.SPLIT_PACKAGE:
+                    return this.interpretSplitPackage(response);
+                case operation_type_enum_1.OperationType.UNPACK_PACKAGE:
+                    return this.interpretUnpackPackage(response);
+                case operation_type_enum_1.OperationType.CANCEL_LINE_ITEM:
+                    return this.interpretCancelLineItem(response);
                 default:
                     return this.interpretGeneric(response, operationType);
             }
@@ -428,6 +441,138 @@ class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInte
             details: {
                 responseType: typeof response,
                 hasData: !this.isEmptyResponse(response)
+            },
+            parsedAt: new Date()
+        };
+    }
+    // ===== PAKETLEME İŞLEMLERİ INTERPRETER METODLARI =====
+    /**
+     * Paketlenebilir ürünler listesi yanıtını yorumla
+     * Response format: { lineItems: [...] }
+     */
+    interpretPackageableItems(response) {
+        // Response format: { lineItems: [] } veya array
+        const lineItems = Array.isArray(response)
+            ? response
+            : ((response === null || response === void 0 ? void 0 : response.lineItems) || (response === null || response === void 0 ? void 0 : response.items) || (response === null || response === void 0 ? void 0 : response.data) || []);
+        const itemCount = Array.isArray(lineItems) ? lineItems.length : 0;
+        return {
+            summary: itemCount > 0
+                ? `${itemCount} adet birlikte paketlenebilir ürün bulundu`
+                : 'Birlikte paketlenebilir ürün bulunamadı',
+            success: true,
+            successCount: itemCount,
+            details: {
+                itemCount,
+                lineItems: lineItems.slice(0, 10).map((item) => ({
+                    lineItemId: item.lineItemId,
+                    orderNumber: item.orderNumber,
+                    quantity: item.quantity
+                }))
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * Paket oluşturma yanıtını yorumla
+     * Response format: { packageNumber: "...", barcode: "..." }
+     */
+    interpretCreatePackage(response) {
+        var _a, _b;
+        const packageNumber = (response === null || response === void 0 ? void 0 : response.packageNumber) || ((_a = response === null || response === void 0 ? void 0 : response.data) === null || _a === void 0 ? void 0 : _a.packageNumber);
+        const barcode = (response === null || response === void 0 ? void 0 : response.barcode) || ((_b = response === null || response === void 0 ? void 0 : response.data) === null || _b === void 0 ? void 0 : _b.barcode);
+        const isSuccess = !!packageNumber;
+        return {
+            summary: isSuccess
+                ? `Paket oluşturuldu: ${packageNumber}`
+                : 'Paket oluşturma başarısız',
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                packageNumber,
+                barcode
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * Paket listesi yanıtını yorumla
+     */
+    interpretFetchPackages(response) {
+        const packages = Array.isArray(response)
+            ? response
+            : ((response === null || response === void 0 ? void 0 : response.packages) || (response === null || response === void 0 ? void 0 : response.data) || []);
+        const packageCount = Array.isArray(packages) ? packages.length : 0;
+        return {
+            summary: `${packageCount} paket getirildi`,
+            success: true,
+            successCount: packageCount,
+            details: {
+                packageCount,
+                packages: packages.slice(0, 10).map((pkg) => ({
+                    packageNumber: pkg.packageNumber,
+                    orderNumber: pkg.orderNumber,
+                    status: pkg.status
+                }))
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * Paket bölme yanıtını yorumla
+     */
+    interpretSplitPackage(response) {
+        var _a;
+        const newPackageNumber = (response === null || response === void 0 ? void 0 : response.newPackageNumber) || ((_a = response === null || response === void 0 ? void 0 : response.data) === null || _a === void 0 ? void 0 : _a.newPackageNumber);
+        const isSuccess = (response === null || response === void 0 ? void 0 : response.success) !== false;
+        return {
+            summary: isSuccess
+                ? `Paket bölündü${newPackageNumber ? `: Yeni paket ${newPackageNumber}` : ''}`
+                : 'Paket bölme başarısız',
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                newPackageNumber
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * Paket açma yanıtını yorumla
+     */
+    interpretUnpackPackage(response) {
+        const isSuccess = (response === null || response === void 0 ? void 0 : response.success) !== false;
+        return {
+            summary: isSuccess
+                ? 'Paket başarıyla açıldı'
+                : 'Paket açma başarısız',
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                responseData: response
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * Line item iptal yanıtını yorumla
+     */
+    interpretCancelLineItem(response) {
+        var _a, _b;
+        const isSuccess = (response === null || response === void 0 ? void 0 : response.success) !== false;
+        const errorMessage = ((_b = (_a = response === null || response === void 0 ? void 0 : response.errors) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) || (response === null || response === void 0 ? void 0 : response.message);
+        return {
+            summary: isSuccess
+                ? 'Line item başarıyla iptal edildi'
+                : `Line item iptal başarısız${errorMessage ? `: ${errorMessage}` : ''}`,
+            success: isSuccess,
+            successCount: isSuccess ? 1 : 0,
+            failureCount: isSuccess ? 0 : 1,
+            details: {
+                error: errorMessage
             },
             parsedAt: new Date()
         };
