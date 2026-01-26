@@ -52,6 +52,7 @@ export * from './common/enums/yurtici-status.enum';
 
 // Constants
 export * from './common/constants/integration-commands';
+export * from './common/constants/cargo-label-support.constants';
 
 // Security
 export * from './security/SecurityValidator';

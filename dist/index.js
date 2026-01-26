@@ -62,6 +62,7 @@ __exportStar(require("./common/enums/aras-status.enum"), exports);
 __exportStar(require("./common/enums/yurtici-status.enum"), exports);
 // Constants
 __exportStar(require("./common/constants/integration-commands"), exports);
+__exportStar(require("./common/constants/cargo-label-support.constants"), exports);
 // Security
 __exportStar(require("./security/SecurityValidator"), exports);
 __exportStar(require("./security/RateLimiter"), exports);
