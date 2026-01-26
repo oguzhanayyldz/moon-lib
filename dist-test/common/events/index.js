@@ -88,4 +88,5 @@ __exportStar(require("./brand-updated-event"), exports);
 __exportStar(require("./customer-updated-event"), exports);
 __exportStar(require("./customer-address-updated-event"), exports);
 __exportStar(require("./catalog-mapping-updated-event"), exports);
+__exportStar(require("./update-order-cargo-label-event"), exports);
 //# sourceMappingURL=index.js.map

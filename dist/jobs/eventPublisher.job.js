@@ -74,6 +74,7 @@ const brandUpdated_publisher_1 = require("../events/publishers/brandUpdated.publ
 const customerUpdated_publisher_1 = require("../events/publishers/customerUpdated.publisher");
 const customerAddressUpdated_publisher_1 = require("../events/publishers/customerAddressUpdated.publisher");
 const catalogMappingUpdated_publisher_1 = require("../events/publishers/catalogMappingUpdated.publisher");
+const updateOrderCargoLabel_publisher_1 = require("../events/publishers/updateOrderCargoLabel.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
     ) {
@@ -654,6 +655,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.CatalogMappingUpdated:
                     yield new catalogMappingUpdated_publisher_1.CatalogMappingUpdatedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.UpdateOrderCargoLabel:
+                    yield new updateOrderCargoLabel_publisher_1.UpdateOrderCargoLabelPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

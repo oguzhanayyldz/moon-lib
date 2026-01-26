@@ -72,4 +72,5 @@ export * from './brand-updated-event';
 export * from './customer-updated-event';
 export * from './customer-address-updated-event';
 export * from './catalog-mapping-updated-event';
+export * from './update-order-cargo-label-event';
 //# sourceMappingURL=index.d.ts.map

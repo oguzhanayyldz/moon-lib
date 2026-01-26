@@ -64,6 +64,7 @@ import { BrandUpdatedPublisher } from '../events/publishers/brandUpdated.publish
 import { CustomerUpdatedPublisher } from '../events/publishers/customerUpdated.publisher';
 import { CustomerAddressUpdatedPublisher } from '../events/publishers/customerAddressUpdated.publisher';
 import { CatalogMappingUpdatedPublisher } from '../events/publishers/catalogMappingUpdated.publisher';
+import { UpdateOrderCargoLabelPublisher } from '../events/publishers/updateOrderCargoLabel.publisher';
 
 
 export class EventPublisherJob {
@@ -715,6 +716,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.CatalogMappingUpdated:
                 await new CatalogMappingUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.UpdateOrderCargoLabel:
+                await new UpdateOrderCargoLabelPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

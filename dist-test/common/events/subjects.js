@@ -66,5 +66,6 @@ var Subjects;
     Subjects["CustomerAddressCreated"] = "customer:address:created";
     Subjects["CustomerAddressUpdated"] = "customer:address:updated";
     Subjects["CatalogMappingUpdated"] = "catalog:mapping:updated";
+    Subjects["UpdateOrderCargoLabel"] = "update:order:cargo:label";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

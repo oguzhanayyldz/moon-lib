@@ -61,5 +61,6 @@ export declare enum Subjects {
     CustomerUpdated = "customer:updated",
     CustomerAddressCreated = "customer:address:created",
     CustomerAddressUpdated = "customer:address:updated",
-    CatalogMappingUpdated = "catalog:mapping:updated"
+    CatalogMappingUpdated = "catalog:mapping:updated",
+    UpdateOrderCargoLabel = "update:order:cargo:label"
 }

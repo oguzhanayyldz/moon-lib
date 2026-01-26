@@ -109,6 +109,7 @@ export * from './events/publishers/brandUpdated.publisher';
 export * from './events/publishers/customerUpdated.publisher';
 export * from './events/publishers/customerAddressUpdated.publisher';
 export * from './events/publishers/catalogMappingUpdated.publisher';
+export * from './events/publishers/updateOrderCargoLabel.publisher';
 export * from './common/errors';
 export * from './common/events';
 export * from './common/interfaces';
