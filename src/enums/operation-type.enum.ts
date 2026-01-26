@@ -31,6 +31,10 @@ export enum OperationType {
     CANCEL_ORDER = 'CANCEL_ORDER',
     FETCH_ORDERS = 'FETCH_ORDERS',
 
+    // Kargo/Tracking İşlemleri
+    SEND_TRACKING = 'SEND_TRACKING',          // Kargo takip numarası gönderme (InTransit)
+    DELIVER_ORDER = 'DELIVER_ORDER',          // Teslim durumu bildirme
+
     // Paketleme İşlemleri (Hepsiburada)
     CHECK_PACKAGEABLE_ITEMS = 'CHECK_PACKAGEABLE_ITEMS', // Birlikte paketlenebilecek ürünleri kontrol et
     CREATE_PACKAGE = 'CREATE_PACKAGE',                   // Paket oluştur

@@ -30,6 +30,9 @@ var OperationType;
     OperationType["UPDATE_ORDER"] = "UPDATE_ORDER";
     OperationType["CANCEL_ORDER"] = "CANCEL_ORDER";
     OperationType["FETCH_ORDERS"] = "FETCH_ORDERS";
+    // Kargo/Tracking İşlemleri
+    OperationType["SEND_TRACKING"] = "SEND_TRACKING";
+    OperationType["DELIVER_ORDER"] = "DELIVER_ORDER";
     // Paketleme İşlemleri (Hepsiburada)
     OperationType["CHECK_PACKAGEABLE_ITEMS"] = "CHECK_PACKAGEABLE_ITEMS";
     OperationType["CREATE_PACKAGE"] = "CREATE_PACKAGE";
