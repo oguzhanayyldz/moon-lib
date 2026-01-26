@@ -88,6 +88,8 @@ export interface OrderIntegrationCargoInfo {
     sentDate?: Date;
     shippedDate?: Date;
     deliveredDate?: Date;
+    /** Etiket kaynağı: 'platform' (entegrasyon API) veya 'panel' (kullanıcı paneli) */
+    labelSource?: 'platform' | 'panel';
     fields?: Record<string, any>;
 }
 

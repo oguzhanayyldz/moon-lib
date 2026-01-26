@@ -63,6 +63,7 @@ import {
     CatalogMappingUpdatedEvent,
     PlatformCategorySyncedEvent,
     PlatformBrandSyncedEvent,
+    UpdateOrderCargoLabelEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -127,6 +128,7 @@ interface EventPayloadMap {
     [Subjects.CatalogMappingUpdated]: CatalogMappingUpdatedEvent['data'];
     [Subjects.PlatformCategorySynced]: PlatformCategorySyncedEvent['data'];
     [Subjects.PlatformBrandSynced]: PlatformBrandSyncedEvent['data'];
+    [Subjects.UpdateOrderCargoLabel]: UpdateOrderCargoLabelEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
