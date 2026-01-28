@@ -5,6 +5,7 @@
  * ortak kullandığı parametre ve sonuç tipleri.
  */
 import { CommonProductExport } from "../interfaces/product-export.interface";
+import { OrderStatus } from "../events/types/order-status";
 export interface SendTrackingParams {
     /** Platform paket/fulfillment ID */
     packageId: string;
@@ -73,7 +74,7 @@ export interface OrderStatusItem {
 }
 export interface UpdateOrderStatusParams {
     orderId: string;
-    orderStatus?: string;
+    orderStatus?: OrderStatus;
     platformStatus?: string;
     items?: OrderStatusItem[];
     notes?: string;

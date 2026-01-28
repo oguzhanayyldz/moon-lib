@@ -6,6 +6,7 @@
  */
 
 import { CommonProductExport } from "../interfaces/product-export.interface";
+import { OrderStatus } from "../events/types/order-status";
 
 // === Kargo & Fatura Parametre Tipleri ===
 
@@ -95,7 +96,7 @@ export interface OrderStatusItem {
 export interface UpdateOrderStatusParams {
     orderId: string;
     // Statü bilgisi
-    orderStatus?: string;
+    orderStatus?: OrderStatus;
     platformStatus?: string;
     // Ortak sipariş bilgileri
     items?: OrderStatusItem[];
