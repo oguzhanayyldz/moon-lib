@@ -8,7 +8,7 @@
  * Opsiyonel komutlar - desteklenmese bile hata gösterilmez
  * Yeni özellikler eklendiğinde buraya eklenmeli
  */
-export declare const OPTIONAL_INTEGRATION_COMMANDS: readonly ["fetchLocations", "getShop", "getCustomers"];
+export declare const OPTIONAL_INTEGRATION_COMMANDS: readonly ["fetchLocations", "getShop", "getCustomers", "createProducts", "updateProducts", "updateOrderStatus", "cancelOrder", "syncBrands", "syncOrderStatuses", "syncSingleOrderStatus", "getShippingLabel", "sendInvoice", "sendTracking", "syncCategories", "syncCategoryAttributes", "getCategories", "getCategoryAttributes", "getReturnReasons", "approveReturn", "rejectReturn", "getOrderById"];
 /**
  * Bir komutun opsiyonel olup olmadığını kontrol eder
  * @param command - Kontrol edilecek komut

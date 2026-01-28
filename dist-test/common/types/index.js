@@ -34,4 +34,5 @@ __exportStar(require("./unit-type"), exports);
 __exportStar(require("./user-role"), exports);
 __exportStar(require("./api-client.types"), exports);
 __exportStar(require("./permission.types"), exports);
+__exportStar(require("./integration-params"), exports);
 //# sourceMappingURL=index.js.map

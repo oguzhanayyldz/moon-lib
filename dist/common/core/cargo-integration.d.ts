@@ -3,18 +3,6 @@ import { BaseIntegration } from "./base-integration";
  * Cargo Integration Base Class
  *
  * Kargo entegrasyonları için temel sınıf.
- * Marketplace ve E-commerce entegrasyonlarından farklı olarak:
- * - Sipariş verilerinden kargo gönderimi oluşturur
- * - Kargo etiketlerini yazdırır
- * - Kargo takip bilgilerini sorgular
- * - Kargo iptal işlemlerini yönetir
- *
- * Örnek Cargo Integration'lar:
- * - Aras Kargo
- * - MNG Kargo
- * - Yurtiçi Kargo
- * - PTT Kargo
- * - UPS, DHL, FedEx (uluslararası)
  *
  * @abstract
  * @extends BaseIntegration
@@ -23,13 +11,6 @@ export declare abstract class CargoIntegration extends BaseIntegration {
     constructor();
     /**
      * Kargo gönderimi oluşturur
-     *
-     * Sipariş bilgilerinden kargo oluşturur ve kargo şirketinin API'sine gönderir.
-     * Başarılı olursa shippingNumber, trackingNumber ve printLink döner.
-     *
-     * @param shipmentData - Kargo verileri (CommonShipmentExport formatında)
-     * @returns Kargo numarası, takip numarası, etiket linki
-     * @abstract
      */
     protected abstract createShipment(shipmentData: any): Promise<{
         shippingNumber: string;
@@ -39,15 +20,6 @@ export declare abstract class CargoIntegration extends BaseIntegration {
     }>;
     /**
      * Kargo etiketi yazdırır/alır
-     *
-     * Oluşturulmuş bir kargonun etiketini PDF veya başka formatlarda alır.
-     * Bazı kargo firmalarında createShipment ile birlikte dönebilir,
-     * bazılarında ayrı bir API call gerekebilir.
-     *
-     * @param shippingNumber - Kargo numarası
-     * @returns Etiket PDF linki veya base64 data
-     * @abstract
-     * @optional - Bazı firmalar createShipment'ta label döner
      */
     protected abstract printLabel?(shippingNumber: string): Promise<{
         printLink?: string;
@@ -56,12 +28,6 @@ export declare abstract class CargoIntegration extends BaseIntegration {
     }>;
     /**
      * Kargo takip bilgilerini sorgular
-     *
-     * Kargonun güncel durumunu, lokasyonunu ve geçmiş hareketlerini sorgular.
-     *
-     * @param shippingNumber - Kargo numarası
-     * @returns Kargo durumu, lokasyon, tarihler
-     * @abstract
      */
     protected abstract trackShipment(shippingNumber: string): Promise<{
         trackingNumber?: string;
@@ -79,15 +45,6 @@ export declare abstract class CargoIntegration extends BaseIntegration {
     }>;
     /**
      * Kargo iptal eder
-     *
-     * Henüz teslim edilmemiş bir kargoyu iptal eder.
-     * NOT: Teslim edilen veya çok ilerlemiş kargolar iptal edilemeyebilir!
-     *
-     * @param shippingNumber - Kargo numarası
-     * @param reason - İptal nedeni (opsiyonel)
-     * @returns İptal durumu
-     * @abstract
-     * @optional - Bazı firmalar iptal desteklemeyebilir
      */
     protected abstract cancelShipment?(shippingNumber: string, reason?: string): Promise<{
         success: boolean;
@@ -95,15 +52,7 @@ export declare abstract class CargoIntegration extends BaseIntegration {
         message?: string;
     }>;
     /**
-     * Toplu kargo takip sorgulama (batch operation)
-     *
-     * Birden fazla kargonun durumunu tek seferde sorgular.
-     * Bazı kargo firmaları batch API sağlar, performans açısından önemli.
-     *
-     * @param params - Object containing cargoIntegrationId and shipments array
-     * @returns Batch tracking sonuçları
-     * @abstract
-     * @optional - Bazı firmalar batch API sağlamaz
+     * Toplu kargo takip sorgulama
      */
     protected abstract fetchTrackingUpdatesBulk?(params: {
         cargoIntegrationId: string;
@@ -125,16 +74,9 @@ export declare abstract class CargoIntegration extends BaseIntegration {
         error?: string;
     }>>;
     /**
-     * Adres doğrulama (opsiyonel)
-     *
-     * Bazı kargo firmaları kargo oluşturmadan önce adres doğrulama API'si sağlar.
-     * Bu sayede geçersiz adresler erken tespit edilebilir.
-     *
-     * @param address - Doğrulanacak adres
-     * @returns Adres geçerli mi, önerilen düzeltmeler
-     * @optional - Override if cargo provider supports address validation
+     * Adres doğrulama
      */
-    protected validateAddress(address: {
+    protected validateAddress(_address: {
         country: string;
         city: string;
         district: string;
@@ -146,16 +88,9 @@ export declare abstract class CargoIntegration extends BaseIntegration {
         message?: string;
     }>;
     /**
-     * Kargo maliyeti hesaplama (opsiyonel)
-     *
-     * Bazı kargo firmaları kargo oluşturmadan önce maliyet hesaplama API'si sağlar.
-     * Gönderici/alıcı adresine ve paket bilgilerine göre tahmini maliyet döner.
-     *
-     * @param params - Maliyet hesaplama parametreleri
-     * @returns Tahmini kargo maliyeti
-     * @optional - Override if cargo provider supports cost calculation
+     * Kargo maliyeti hesaplama
      */
-    protected calculateShippingCost(params: {
+    protected calculateShippingCost(_params: {
         senderCity: string;
         recipientCity: string;
         weight: number;
@@ -167,17 +102,9 @@ export declare abstract class CargoIntegration extends BaseIntegration {
         deliveryTime?: string;
     }>;
     /**
-     * Şube/dağıtım merkezi sorgulama (opsiyonel)
-     *
-     * Belirli bir bölgedeki kargo şubelerini veya dağıtım merkezlerini listeler.
-     * Müşteri kargosunu şubeden teslim alacaksa kullanılır.
-     *
-     * @param city - Şehir
-     * @param district - İlçe (opsiyonel)
-     * @returns Şube listesi
-     * @optional - Override if cargo provider supports branch listing
+     * Şube/dağıtım merkezi sorgulama
      */
-    protected getBranches(city: string, district?: string): Promise<Array<{
+    protected getBranches(_city: string, _district?: string): Promise<Array<{
         branchCode: string;
         branchName: string;
         address: string;

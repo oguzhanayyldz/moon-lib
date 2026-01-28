@@ -158,3 +158,4 @@ export interface UpdatePricesParams {
 export interface UpdateStocksParams {
     stockUpdates: ProductStockUpdateRequest[];
 }
+//# sourceMappingURL=integration-params.d.ts.map

@@ -51,15 +51,6 @@ export interface ProductExportRequest {
     platformParams?: Record<string, any>;
 }
 /**
- * Ürün aktarım sonucu için çıktı modeli
- */
-export interface ProductExportResult {
-    success: boolean;
-    externalId?: string;
-    error?: string;
-    platformResponse?: Record<string, any>;
-}
-/**
  * Platformlara fiyat güncelleme isteği modeli
  */
 export interface ProductPriceUpdateRequest {
@@ -95,14 +86,5 @@ export interface ProductStockUpdateRequest {
         stock: number;
     }>;
     platformParams?: Record<string, any>;
-}
-/**
- * Fiyat/Stok güncelleme işlemi sonuç modeli
- */
-export interface ProductUpdateResult {
-    success: boolean;
-    count?: number;
-    error?: string;
-    platformResponse?: Record<string, any>;
 }
 //# sourceMappingURL=product-export.interface.d.ts.map

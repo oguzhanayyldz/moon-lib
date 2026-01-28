@@ -72,24 +72,6 @@ export interface ProductExportRequest {
   // Platform spesifik ek parametreler
   platformParams?: Record<string, any>;
 }
-
-/**
- * Ürün aktarım sonucu için çıktı modeli
- */
-export interface ProductExportResult {
-  // İşlem başarılı mı?
-  success: boolean;
-  
-  // Platformda oluşan ID
-  externalId?: string;
-  
-  // Hata mesajı (başarısız olduğunda)
-  error?: string;
-  
-  // Platforma özgü yanıt verileri
-  platformResponse?: Record<string, any>;
-}
-
 /**
  * Platformlara fiyat güncelleme isteği modeli
  */
@@ -174,20 +156,3 @@ export interface ProductStockUpdateRequest {
   // Platform spesifik ek parametreler
   platformParams?: Record<string, any>;
 }
-
-/**
- * Fiyat/Stok güncelleme işlemi sonuç modeli
- */
-export interface ProductUpdateResult {
-  // İşlem başarılı mı?
-  success: boolean;
-  
-  // Etkilenen kayıt sayısı
-  count?: number;
-  
-  // Hata mesajı (başarısız olduğunda)
-  error?: string;
-  
-  // Platforma özgü yanıt verileri
-  platformResponse?: Record<string, any>;
-} 
