@@ -18,7 +18,8 @@ export {
     integrationSecurityLogger,
     cdnSecurityLogger,
     shopifySecurityLogger,
-    trendyolSecurityLogger
+    trendyolSecurityLogger,
+    hepsiburadaSecurityLogger
 } from './SecurityLogger';
 
 export {
