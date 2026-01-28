@@ -35,12 +35,14 @@ export interface ShipmentUpdatedEvent {
  */
 export interface ShipmentUpdated {
     id: string;          // Shipment MongoDB ID
+    uuid?: string;       // Shipment UUID
     version: number;
-    user: string;
+    user?: string;
     order: string;       // Order MongoDB ID (Orders Service bu ID ile OrderCargo'yu günceller)
 
     // Kargo integration bilgileri (değişmez ama reference için)
     cargoIntegration?: string;
+    cargoIntegrationId?: string;
 
     // Güncellenen kargo bilgileri (partial - sadece değişenler)
     shippingNumber?: string;
@@ -63,11 +65,24 @@ export interface ShipmentUpdated {
     platformTrackingSent?: boolean;
     platformTrackingSentAt?: Date;
     platformTrackingError?: string;
+    platformTrackingInfo?: {
+        company?: string;
+        number?: string;
+        url?: string;
+    };
+
+    // Platform'a tracking gönderme flag'i
+    sendToPlatform?: boolean;
 
     // Order status suggestion (kargo durumundan türetilen sipariş durumu)
     // Orders Service bu değeri alıp transition validation yaparak order status'ü günceller
     suggestedOrderStatus?: string;
 
+    // Fulfillment bilgileri
+    docSerial?: string;
+    fulfillmentStatus?: string;
+    fulfillmentDate?: Date;
+
     // Timestamp
-    timestamp: Date;
+    timestamp?: Date;
 }

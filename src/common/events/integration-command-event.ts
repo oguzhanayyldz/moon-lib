@@ -8,6 +8,7 @@ export interface IntegrationCommandEvent {
         user: string;
         platform: ResourceName;
         command: string;
+        integration?: string; // Integration MongoDB ID
         params?: any;
         payload?: {
             credentials: Record<string, any>;

@@ -52,6 +52,7 @@ import {
     InvoiceFormalizedEvent,
     InvoiceFailedEvent,
     ShipmentCreatedEvent,
+    ShipmentUpdatedEvent,
     ExcelFileGeneratedEvent,
     ExcelFileStoredEvent,
     CategoryCreatedEvent,
@@ -117,6 +118,7 @@ interface EventPayloadMap {
     [Subjects.InvoiceFailed]: InvoiceFailedEvent['data'];
     [Subjects.OrderCargoUpdated]: OrderCargoUpdatedEvent['data'];
     [Subjects.ShipmentCreated]: ShipmentCreatedEvent['data'];
+    [Subjects.ShipmentUpdated]: ShipmentUpdatedEvent['data'];
     [Subjects.ExcelFileGenerated]: ExcelFileGeneratedEvent['data'];
     [Subjects.ExcelFileStored]: ExcelFileStoredEvent['data'];
     [Subjects.CategoryCreated]: CategoryCreatedEvent['data'];

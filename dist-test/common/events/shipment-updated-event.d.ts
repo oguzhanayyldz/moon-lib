@@ -33,10 +33,12 @@ export interface ShipmentUpdatedEvent {
  */
 export interface ShipmentUpdated {
     id: string;
+    uuid?: string;
     version: number;
-    user: string;
+    user?: string;
     order: string;
     cargoIntegration?: string;
+    cargoIntegrationId?: string;
     shippingNumber?: string;
     trackingNumber?: string;
     printLink?: string;
@@ -49,7 +51,16 @@ export interface ShipmentUpdated {
     platformTrackingSent?: boolean;
     platformTrackingSentAt?: Date;
     platformTrackingError?: string;
+    platformTrackingInfo?: {
+        company?: string;
+        number?: string;
+        url?: string;
+    };
+    sendToPlatform?: boolean;
     suggestedOrderStatus?: string;
-    timestamp: Date;
+    docSerial?: string;
+    fulfillmentStatus?: string;
+    fulfillmentDate?: Date;
+    timestamp?: Date;
 }
 //# sourceMappingURL=shipment-updated-event.d.ts.map

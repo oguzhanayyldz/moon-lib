@@ -7,6 +7,7 @@ export interface IntegrationCommandEvent {
         user: string;
         platform: ResourceName;
         command: string;
+        integration?: string;
         params?: any;
         payload?: {
             credentials: Record<string, any>;

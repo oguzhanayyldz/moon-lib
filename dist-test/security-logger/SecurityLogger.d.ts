@@ -67,4 +67,5 @@ export declare const integrationSecurityLogger: SecurityLogger;
 export declare const cdnSecurityLogger: SecurityLogger;
 export declare const shopifySecurityLogger: SecurityLogger;
 export declare const trendyolSecurityLogger: SecurityLogger;
+export declare const hepsiburadaSecurityLogger: SecurityLogger;
 //# sourceMappingURL=SecurityLogger.d.ts.map
