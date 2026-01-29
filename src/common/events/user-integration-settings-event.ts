@@ -145,7 +145,7 @@ export interface UserIntegrationSettingsData {
     uuid: string;
     user: string;
     version: number;
-    integration: string;
+    integration: string | null; // null = BASE kayıt (global settings)
     credentials: { [key: string]: string };
     active: boolean;
     lastSync?: Date;

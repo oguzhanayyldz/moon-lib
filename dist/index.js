@@ -46,6 +46,7 @@ __exportStar(require("./services/enhancedEntityDeletionRegistry"), exports);
 __exportStar(require("./services/batchProcessingEngine.service"), exports);
 __exportStar(require("./services/strategyCache.service"), exports);
 __exportStar(require("./services/integrationCache.service"), exports);
+__exportStar(require("./services/credentials.service"), exports);
 // Excel utilities
 __exportStar(require("./services/excel/excelGenerator.service"), exports);
 __exportStar(require("./services/excel/excelParser.service"), exports);

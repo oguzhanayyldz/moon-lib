@@ -108,7 +108,7 @@ export interface UserIntegrationSettingsData {
     uuid: string;
     user: string;
     version: number;
-    integration: string;
+    integration: string | null;
     credentials: {
         [key: string]: string;
     };

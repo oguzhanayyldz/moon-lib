@@ -32,6 +32,7 @@ export * from './services/enhancedEntityDeletionRegistry';
 export * from './services/batchProcessingEngine.service';
 export * from './services/strategyCache.service';
 export * from './services/integrationCache.service';
+export * from './services/credentials.service';
 
 // Excel utilities
 export * from './services/excel/excelGenerator.service';
