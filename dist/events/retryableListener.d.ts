@@ -8,6 +8,7 @@ interface RetryOptions {
     deadLetterMaxRetries?: number;
     lockTimeoutSec?: number;
     enableLock?: boolean;
+    ackWaitSec?: number;
 }
 /**
  * Retry özellikli temel listener sınıfı

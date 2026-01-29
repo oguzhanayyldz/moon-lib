@@ -13,8 +13,9 @@ interface RetryOptions {
     enableDeadLetter?: boolean;
     maxRetries?: number;
     deadLetterMaxRetries?: number;
-    lockTimeoutSec?: number;      // Yeni: Distributed lock için timeout süresi
-    enableLock?: boolean;         // Yeni: Distributed lock'u etkinleştirme
+    lockTimeoutSec?: number;      // Distributed lock için timeout süresi
+    enableLock?: boolean;         // Distributed lock'u etkinleştirme
+    ackWaitSec?: number;          // NATS ack timeout süresi (saniye)
 }
 
 /**
@@ -32,7 +33,8 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         maxRetries: 5,            // Redis'te izlenen toplam deneme sayısı
         deadLetterMaxRetries: 5,  // Ölü mektup kuyruğu için maksimum deneme
         lockTimeoutSec: 30,       // Lock için varsayılan timeout süresi (saniye)
-        enableLock: true          // Varsayılan olarak lock etkin
+        enableLock: true,         // Varsayılan olarak lock etkin
+        ackWaitSec: 60            // NATS ack timeout - lock TTL'inden büyük olmalı
     };
 
     constructor (client: Stan, options: RetryOptions = {}, connection: mongoose.Connection = mongoose.connection) {
@@ -41,6 +43,8 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             ...RetryableListener.DEFAULT_OPTIONS,
             ...options
         };
+        // ackWait'i override et (base class'ta 5s, burada options'dan alıyoruz)
+        this.ackWait = this.options.ackWaitSec * 1000;
         this.retryManager = new RetryManager();
         this.connection = connection;
     }
@@ -162,11 +166,64 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                     return;
                 } catch (lockError: any) {
                     if (lockError.message?.includes('Lock acquisition failed')) {
-                        // Başka bir instance işlemi zaten yapıyor - log ve ack
-                        logger.info(`Event ${eventType}:${eventId} is being processed by another instance`);
-                        span.setTag('lock.conflict', true);
-                        msg.ack(); // Mesajı onaylayalım, başka instance işliyor zaten
-                        return;
+                        // Lock alınamadı - TTL kontrol et ve akıllıca davran
+                        const lockKey = `lock:${this.subject}:${eventId}`;
+                        const lockValue = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
+
+                        try {
+                            const ttl = await redisWrapper.client.ttl(lockKey);
+                            span.setTag('lock.conflict', true);
+                            span.setTag('lock.ttl', ttl);
+
+                            if (ttl === -2 || ttl === -1) {
+                                // Key yok veya expire olmuş - muhtemelen race condition
+                                // Kısa bekle ve NATS redeliver etsin
+                                logger.warn(`Lock key not found or expired (ttl: ${ttl}), NATS will redeliver: ${eventType}:${eventId}`);
+                                span.setTag('lock.orphan', true);
+                                await new Promise(resolve => setTimeout(resolve, 1000)); // 1s bekle
+                                return; // msg.ack() YOK - NATS redeliver edecek
+                            }
+
+                            if (ttl > 0 && ttl <= 10) {
+                                // Lock yakında expire olacak - bekle ve retry
+                                const waitTime = ttl + 2; // TTL + 2s buffer
+                                logger.info(`Lock expiring soon (ttl: ${ttl}s), waiting ${waitTime}s: ${eventType}:${eventId}`);
+                                span.setTag('lock.wait', waitTime);
+
+                                await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+
+                                // Tekrar lock almayı dene
+                                const retryAcquired = await this.tryAcquireLock(lockKey, lockValue, this.options.lockTimeoutSec);
+                                if (retryAcquired) {
+                                    try {
+                                        await this.processEvent(data);
+                                        await this.retryManager.resetRetryCount(eventType, eventId);
+                                        span.setTag('lock.retry_success', true);
+                                        msg.ack();
+                                        return;
+                                    } finally {
+                                        await this.releaseLock(lockKey, lockValue);
+                                    }
+                                }
+
+                                // Hala alınamadı - NATS redeliver etsin
+                                logger.warn(`Lock still held after wait, NATS will redeliver: ${eventType}:${eventId}`);
+                                return; // msg.ack() YOK
+                            }
+
+                            // TTL > 10s - gerçekten başka bir instance işliyor
+                            // Güvenli şekilde ack et
+                            logger.info(`Another instance actively processing (ttl: ${ttl}s): ${eventType}:${eventId}`);
+                            span.setTag('lock.active_processing', true);
+                            msg.ack();
+                            return;
+
+                        } catch (ttlError) {
+                            // TTL kontrolü başarısız - güvenli tarafta kal, NATS redeliver etsin
+                            logger.error(`Failed to check lock TTL: ${eventType}:${eventId}`, ttlError);
+                            span.setTag('lock.ttl_error', true);
+                            return; // msg.ack() YOK
+                        }
                     }
                     // Diğer lock hataları için normal exception akışına devam et
                     throw lockError;
