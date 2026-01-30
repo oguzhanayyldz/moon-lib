@@ -524,11 +524,20 @@ export abstract class BaseApiClient implements IApiClient {
   private async logRequest(requestConfig: RequestConfig): Promise<string> {
     if (!this.logService) return '';
 
+    // Request body: data varsa data, yoksa params (query string için)
+    // GET isteklerinde body boş olur, query params önemli
+    const requestBody = requestConfig.data || requestConfig.params
+      ? {
+          ...(requestConfig.data ? { body: requestConfig.data } : {}),
+          ...(requestConfig.params ? { queryParams: requestConfig.params } : {})
+        }
+      : {};
+
     return this.logService.logRequest({
       method: requestConfig.method?.toUpperCase() || 'GET',
-      endpoint: this.buildFullUrl(requestConfig.url || ''),
+      endpoint: this.buildFullUrl(requestConfig.url || '', requestConfig.baseURL),
       requestHeaders: { ...this.getDefaultHeaders(), ...requestConfig.headers },
-      requestBody: requestConfig.data,
+      requestBody,
       userId: this.config.userId || 'unknown',
       integrationName: this.integrationName,
       operationType: requestConfig.operationType // İşlem kategorisi
@@ -541,13 +550,14 @@ export abstract class BaseApiClient implements IApiClient {
     await this.logService.logResponse(logId, params);
   }
 
-  private buildFullUrl(url: string): string {
+  private buildFullUrl(url: string, customBaseURL?: string): string {
     if (url.startsWith('http')) return url;
-    const baseURL = this.getBaseURL();
+    const baseURL = customBaseURL || this.getBaseURL();
     const fullUrl = `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
-    logger.debug('Building full URL', { 
-      baseURL, 
-      url, 
+    logger.debug('Building full URL', {
+      baseURL,
+      customBaseURL: customBaseURL ? 'provided' : 'default',
+      url,
       fullUrl,
       integrationName: this.integrationName
     });

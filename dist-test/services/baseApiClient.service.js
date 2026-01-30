@@ -394,7 +394,7 @@ class BaseApiClient {
             return '';
         return this.logService.logRequest({
             method: ((_a = requestConfig.method) === null || _a === void 0 ? void 0 : _a.toUpperCase()) || 'GET',
-            endpoint: this.buildFullUrl(requestConfig.url || ''),
+            endpoint: this.buildFullUrl(requestConfig.url || '', requestConfig.baseURL),
             requestHeaders: Object.assign(Object.assign({}, this.getDefaultHeaders()), requestConfig.headers),
             requestBody: requestConfig.data,
             userId: this.config.userId || 'unknown',
@@ -407,13 +407,14 @@ class BaseApiClient {
             return;
         await this.logService.logResponse(logId, params);
     }
-    buildFullUrl(url) {
+    buildFullUrl(url, customBaseURL) {
         if (url.startsWith('http'))
             return url;
-        const baseURL = this.getBaseURL();
+        const baseURL = customBaseURL || this.getBaseURL();
         const fullUrl = `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
         logger_service_1.logger.debug('Building full URL', {
             baseURL,
+            customBaseURL: customBaseURL ? 'provided' : 'default',
             url,
             fullUrl,
             integrationName: this.integrationName
