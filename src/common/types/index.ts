@@ -12,6 +12,7 @@ export * from './integration-type';
 export * from './number-comparisons-type';
 export * from './resourceName';
 export * from './shelf-barcodes-list';
+export * from './device-barcodes-list';
 export * from './sort-type';
 export * from './stock-action-type';
 export * from './unit-type';

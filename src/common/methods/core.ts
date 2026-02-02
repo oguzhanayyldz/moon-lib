@@ -3,6 +3,7 @@
 import { ObjectId } from "bson";
 import { BadRequestError } from "../errors/bad-request-error";
 import { ShelfBarcodesList } from "../types/shelf-barcodes-list";
+import { DeviceBarcodesList } from "../types/device-barcodes-list";
 
 //NOTE - Veriler ile unique bir string yaratıyor. 
 // Veritabanı içerisinde benzer kayıtların oluşmaması için kullanılır
@@ -245,3 +246,55 @@ export function mergeMaps(map1: Map<any, any>, map2: Map<any, any>): Map<any, an
 
     return merged;
 }
+
+interface DeviceBarcode {
+    warehouse: number;
+    device: number;
+    row: number;
+    column: number;
+}
+
+//NOTE - Device slot barkodlarını decode ederek hangi depo, device, satır ve sütun olduğunu döner.
+// Barkod formatı: warehouseAlternativeId X deviceAlternativeId X row X column (örn: 1X2X3X1)
+export const encodeDeviceBarcode = (barcode: string): DeviceBarcode | null => {
+    let splitStr = barcode.split("X");
+    if (splitStr.length == 4) {
+        for (const split of splitStr) {
+            if (!parseIntTry(split)) {
+                return null;
+            }
+        }
+        return {
+            warehouse: parseInt(splitStr[0]),
+            device: parseInt(splitStr[1]),
+            row: parseInt(splitStr[2]),
+            column: parseInt(splitStr[3])
+        };
+    }
+    return null;
+};
+
+interface Device {
+    warehouseAlternativeId: number | string;
+    alternativeId: number | string;
+    capacity: {
+        rows: number;
+        columns: number;
+    };
+}
+
+//NOTE - Bir SortingRack device'ının tüm slot barkodlarını oluşturur.
+// Barkod formatı: warehouseAlternativeId X deviceAlternativeId X row X column
+export const createDeviceBarcodes = (device: Device): DeviceBarcodesList[] => {
+    let barcodes: DeviceBarcodesList[] = [];
+    const rows = device.capacity?.rows || 0;
+    const columns = device.capacity?.columns || 0;
+
+    for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= columns; c++) {
+            let barcode = `${device.warehouseAlternativeId}X${device.alternativeId}X${r}X${c}`;
+            barcodes.push({ row: r, column: c, barcode: barcode });
+        }
+    }
+    return barcodes;
+};

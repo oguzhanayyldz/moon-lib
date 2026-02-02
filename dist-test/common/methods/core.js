@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.chunkArray = exports.sortByField = exports.calculatePriceWithoutTax = exports.calculateTaxPrice = exports.sleep = exports.clearRef = exports.generateEanBarcode = exports.parseFloatTry = exports.parseIntTry = exports.createShelfBarcodes = exports.encodeShelfBarcode = exports.getRefDataId = exports.generateRandomString = exports.createUniqueCode = void 0;
+exports.createDeviceBarcodes = exports.encodeDeviceBarcode = exports.chunkArray = exports.sortByField = exports.calculatePriceWithoutTax = exports.calculateTaxPrice = exports.sleep = exports.clearRef = exports.generateEanBarcode = exports.parseFloatTry = exports.parseIntTry = exports.createShelfBarcodes = exports.encodeShelfBarcode = exports.getRefDataId = exports.generateRandomString = exports.createUniqueCode = void 0;
 exports.convertMapToObject = convertMapToObject;
 exports.convertObjectToMap = convertObjectToMap;
 exports.mergeMaps = mergeMaps;
@@ -225,4 +225,40 @@ function mergeMaps(map1, map2) {
     }
     return merged;
 }
+//NOTE - Device slot barkodlarını decode ederek hangi depo, device, satır ve sütun olduğunu döner.
+// Barkod formatı: warehouseAlternativeId X deviceAlternativeId X row X column (örn: 1X2X3X1)
+const encodeDeviceBarcode = (barcode) => {
+    let splitStr = barcode.split("X");
+    if (splitStr.length == 4) {
+        for (const split of splitStr) {
+            if (!(0, exports.parseIntTry)(split)) {
+                return null;
+            }
+        }
+        return {
+            warehouse: parseInt(splitStr[0]),
+            device: parseInt(splitStr[1]),
+            row: parseInt(splitStr[2]),
+            column: parseInt(splitStr[3])
+        };
+    }
+    return null;
+};
+exports.encodeDeviceBarcode = encodeDeviceBarcode;
+//NOTE - Bir SortingRack device'ının tüm slot barkodlarını oluşturur.
+// Barkod formatı: warehouseAlternativeId X deviceAlternativeId X row X column
+const createDeviceBarcodes = (device) => {
+    var _a, _b;
+    let barcodes = [];
+    const rows = ((_a = device.capacity) === null || _a === void 0 ? void 0 : _a.rows) || 0;
+    const columns = ((_b = device.capacity) === null || _b === void 0 ? void 0 : _b.columns) || 0;
+    for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= columns; c++) {
+            let barcode = `${device.warehouseAlternativeId}X${device.alternativeId}X${r}X${c}`;
+            barcodes.push({ row: r, column: c, barcode: barcode });
+        }
+    }
+    return barcodes;
+};
+exports.createDeviceBarcodes = createDeviceBarcodes;
 //# sourceMappingURL=core.js.map

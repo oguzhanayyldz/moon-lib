@@ -1,4 +1,5 @@
 import { ShelfBarcodesList } from "../types/shelf-barcodes-list";
+import { DeviceBarcodesList } from "../types/device-barcodes-list";
 export declare const createUniqueCode: (obj: any) => string;
 export declare const generateRandomString: (length: number) => string;
 export declare const getRefDataId: (data: any) => string;
@@ -28,5 +29,21 @@ export declare const chunkArray: (array: any[], chunkSize: number) => any[][];
 export declare function convertMapToObject(obj: any): any;
 export declare function convertObjectToMap(obj: any): Map<any, any> | null;
 export declare function mergeMaps(map1: Map<any, any>, map2: Map<any, any>): Map<any, any>;
+interface DeviceBarcode {
+    warehouse: number;
+    device: number;
+    row: number;
+    column: number;
+}
+export declare const encodeDeviceBarcode: (barcode: string) => DeviceBarcode | null;
+interface Device {
+    warehouseAlternativeId: number | string;
+    alternativeId: number | string;
+    capacity: {
+        rows: number;
+        columns: number;
+    };
+}
+export declare const createDeviceBarcodes: (device: Device) => DeviceBarcodesList[];
 export {};
 //# sourceMappingURL=core.d.ts.map

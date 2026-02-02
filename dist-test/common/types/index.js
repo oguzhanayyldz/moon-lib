@@ -28,6 +28,7 @@ __exportStar(require("./integration-type"), exports);
 __exportStar(require("./number-comparisons-type"), exports);
 __exportStar(require("./resourceName"), exports);
 __exportStar(require("./shelf-barcodes-list"), exports);
+__exportStar(require("./device-barcodes-list"), exports);
 __exportStar(require("./sort-type"), exports);
 __exportStar(require("./stock-action-type"), exports);
 __exportStar(require("./unit-type"), exports);
