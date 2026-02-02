@@ -392,11 +392,15 @@ class BaseApiClient {
         var _a;
         if (!this.logService)
             return '';
+        // Request body: data varsa data, yoksa params (query string için)
+        // GET isteklerinde body boş olur, query params önemli
+        const requestBody = requestConfig.data || requestConfig.params
+            ? Object.assign(Object.assign({}, (requestConfig.data ? { body: requestConfig.data } : {})), (requestConfig.params ? { queryParams: requestConfig.params } : {})) : {};
         return this.logService.logRequest({
             method: ((_a = requestConfig.method) === null || _a === void 0 ? void 0 : _a.toUpperCase()) || 'GET',
             endpoint: this.buildFullUrl(requestConfig.url || '', requestConfig.baseURL),
             requestHeaders: Object.assign(Object.assign({}, this.getDefaultHeaders()), requestConfig.headers),
-            requestBody: requestConfig.data,
+            requestBody,
             userId: this.config.userId || 'unknown',
             integrationName: this.integrationName,
             operationType: requestConfig.operationType // İşlem kategorisi

@@ -1,0 +1,1 @@
+{"version":3,"file":"device-status.d.ts","sourceRoot":"","sources":["../../../../src/common/events/types/device-status.ts"],"names":[],"mappings":"AAAA;;;GAGG;AACH,oBAAY,YAAY;IACpB,6BAA6B;IAC7B,SAAS,cAAc;IACvB,iBAAiB;IACjB,KAAK,UAAU;IACf,cAAc;IACd,WAAW,gBAAgB;IAC3B,kBAAkB;IAClB,YAAY,iBAAiB;CAChC"}

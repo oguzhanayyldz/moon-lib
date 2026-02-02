@@ -67,4 +67,6 @@ var Subjects;
     Subjects["CustomerAddressUpdated"] = "customer:address:updated";
     Subjects["CatalogMappingUpdated"] = "catalog:mapping:updated";
     Subjects["UpdateOrderCargoLabel"] = "update:order:cargo:label";
+    // Order WorkPackage Info Bulk Event (Inventory → Orders)
+    Subjects["OrderWorkPackageInfoBulkUpdated"] = "order:workpackage-info:bulk-updated";
 })(Subjects || (exports.Subjects = Subjects = {}));

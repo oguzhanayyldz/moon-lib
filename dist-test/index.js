@@ -151,6 +151,7 @@ __exportStar(require("./events/publishers/customerUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/customerAddressUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/catalogMappingUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/updateOrderCargoLabel.publisher"), exports);
+__exportStar(require("./events/publishers/orderWorkPackageInfoBulkUpdated.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);

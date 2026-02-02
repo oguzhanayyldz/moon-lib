@@ -63,4 +63,7 @@ export enum Subjects {
     CustomerAddressUpdated = "customer:address:updated",
     CatalogMappingUpdated = "catalog:mapping:updated",
     UpdateOrderCargoLabel = "update:order:cargo:label",
+
+    // Order WorkPackage Info Bulk Event (Inventory → Orders)
+    OrderWorkPackageInfoBulkUpdated = "order:workpackage-info:bulk-updated",
 }
