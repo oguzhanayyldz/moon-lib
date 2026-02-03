@@ -20,13 +20,13 @@ export interface WorkPackageInfo {
 }
 /**
  * Tek bir sipariş güncellemesi
+ * Sadeleştirildi: orderUuid, version, previousStatus kaldırıldı
+ * - Version kontrolü gereksiz çakışmalara neden oluyordu
+ * - Status progression kontrolü listener'da yapılıyor
  */
 export interface OrderWorkPackageInfoUpdate {
     orderId: string;
-    orderUuid: string;
-    version: number;
     workPackageInfo: WorkPackageInfo;
-    previousStatus?: string;
 }
 /**
  * OrderWorkPackageInfoBulkUpdatedEvent
