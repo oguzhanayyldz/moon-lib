@@ -49,6 +49,8 @@ export declare enum WorkPackageActionType {
     OrderMarkedProblematic = "OrderMarkedProblematic",
     /** Sorunlu sipariş çözüldü */
     ProblematicOrderResolved = "ProblematicOrderResolved",
+    /** Sipariş başka pakete taşındı */
+    OrderReassigned = "OrderReassigned",
     /** Stok bloke edildi */
     StockBlocked = "StockBlocked",
     /** Stok blokesi serbest bırakıldı (blockedQuantity azaltıldı) */

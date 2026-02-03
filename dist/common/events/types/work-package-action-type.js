@@ -60,6 +60,8 @@ var WorkPackageActionType;
     WorkPackageActionType["OrderMarkedProblematic"] = "OrderMarkedProblematic";
     /** Sorunlu sipariş çözüldü */
     WorkPackageActionType["ProblematicOrderResolved"] = "ProblematicOrderResolved";
+    /** Sipariş başka pakete taşındı */
+    WorkPackageActionType["OrderReassigned"] = "OrderReassigned";
     // Stok Aksiyonları
     /** Stok bloke edildi */
     WorkPackageActionType["StockBlocked"] = "StockBlocked";
