@@ -66,6 +66,8 @@ export enum WorkPackageActionType {
     // Stok Aksiyonları
     /** Stok bloke edildi */
     StockBlocked = "StockBlocked",
+    /** Stok blokesi serbest bırakıldı (blockedQuantity azaltıldı) */
+    StockBlockedReleased = "StockBlockedReleased",
     /** Stok serbest bırakıldı */
     StockReleased = "StockReleased",
     /** Stok düşüldü */

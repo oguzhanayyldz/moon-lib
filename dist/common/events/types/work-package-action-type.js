@@ -63,6 +63,8 @@ var WorkPackageActionType;
     // Stok Aksiyonları
     /** Stok bloke edildi */
     WorkPackageActionType["StockBlocked"] = "StockBlocked";
+    /** Stok blokesi serbest bırakıldı (blockedQuantity azaltıldı) */
+    WorkPackageActionType["StockBlockedReleased"] = "StockBlockedReleased";
     /** Stok serbest bırakıldı */
     WorkPackageActionType["StockReleased"] = "StockReleased";
     /** Stok düşüldü */
