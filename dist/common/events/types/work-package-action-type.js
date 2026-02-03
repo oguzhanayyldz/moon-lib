@@ -84,4 +84,11 @@ var WorkPackageActionType;
     // Performans Aksiyonları
     /** Performans metrikleri kaydedildi */
     WorkPackageActionType["PhaseMetricsRecorded"] = "PhaseMetricsRecorded";
+    // Frontend-First Aksiyonları
+    /** İlerleme kaydedildi (ara kayıt - sayfa terk edilirken) */
+    WorkPackageActionType["ProgressSaved"] = "ProgressSaved";
+    /** Slot atandı (ayrıştırma için) */
+    WorkPackageActionType["SlotAssigned"] = "SlotAssigned";
+    /** Ürün doğrulandı (paketleme için) */
+    WorkPackageActionType["ItemVerified"] = "ItemVerified";
 })(WorkPackageActionType || (exports.WorkPackageActionType = WorkPackageActionType = {}));

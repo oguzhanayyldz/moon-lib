@@ -68,5 +68,11 @@ export declare enum WorkPackageActionType {
     /** Batch ayrıştırma tamamlandı */
     BatchSortingCompleted = "BatchSortingCompleted",
     /** Performans metrikleri kaydedildi */
-    PhaseMetricsRecorded = "PhaseMetricsRecorded"
+    PhaseMetricsRecorded = "PhaseMetricsRecorded",
+    /** İlerleme kaydedildi (ara kayıt - sayfa terk edilirken) */
+    ProgressSaved = "ProgressSaved",
+    /** Slot atandı (ayrıştırma için) */
+    SlotAssigned = "SlotAssigned",
+    /** Ürün doğrulandı (paketleme için) */
+    ItemVerified = "ItemVerified"
 }
