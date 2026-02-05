@@ -7,8 +7,12 @@ export enum WorkPackageStatus {
     Created = "Created",
     /** Toplama aşamasında */
     Picking = "Picking",
+    /** Toplama tamamlandı */
+    Picked = "Picked",
     /** Ayrıştırma aşamasında (sadece MultiItem için) */
     Sorting = "Sorting",
+    /** Ayrıştırma tamamlandı (sadece MultiItem için) */
+    Sorted = "Sorted",
     /** Paketleme aşamasında */
     Packing = "Packing",
     /** Tamamlandı */
@@ -26,11 +30,22 @@ export const WORK_PACKAGE_STATUS_TRANSITIONS: Record<WorkPackageStatus, WorkPack
         WorkPackageStatus.Cancelled
     ],
     [WorkPackageStatus.Picking]: [
-        WorkPackageStatus.Sorting,  // MultiItem için
-        WorkPackageStatus.Packing,  // SingleItem için
+        WorkPackageStatus.Picked,   // Toplama tamamlandı
+        WorkPackageStatus.Sorting,  // MultiItem için direkt ayrıştırmaya
+        WorkPackageStatus.Packing,  // SingleItem için direkt paketlemeye
+        WorkPackageStatus.Cancelled
+    ],
+    [WorkPackageStatus.Picked]: [
+        WorkPackageStatus.Sorting,  // MultiItem için ayrıştırmaya
+        WorkPackageStatus.Packing,  // SingleItem için paketlemeye
         WorkPackageStatus.Cancelled
     ],
     [WorkPackageStatus.Sorting]: [
+        WorkPackageStatus.Sorted,   // Ayrıştırma tamamlandı
+        WorkPackageStatus.Packing,
+        WorkPackageStatus.Cancelled
+    ],
+    [WorkPackageStatus.Sorted]: [
         WorkPackageStatus.Packing,
         WorkPackageStatus.Cancelled
     ],

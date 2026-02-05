@@ -11,8 +11,12 @@ var WorkPackageStatus;
     WorkPackageStatus["Created"] = "Created";
     /** Toplama aşamasında */
     WorkPackageStatus["Picking"] = "Picking";
+    /** Toplama tamamlandı */
+    WorkPackageStatus["Picked"] = "Picked";
     /** Ayrıştırma aşamasında (sadece MultiItem için) */
     WorkPackageStatus["Sorting"] = "Sorting";
+    /** Ayrıştırma tamamlandı (sadece MultiItem için) */
+    WorkPackageStatus["Sorted"] = "Sorted";
     /** Paketleme aşamasında */
     WorkPackageStatus["Packing"] = "Packing";
     /** Tamamlandı */
@@ -29,11 +33,22 @@ exports.WORK_PACKAGE_STATUS_TRANSITIONS = {
         WorkPackageStatus.Cancelled
     ],
     [WorkPackageStatus.Picking]: [
-        WorkPackageStatus.Sorting, // MultiItem için
-        WorkPackageStatus.Packing, // SingleItem için
+        WorkPackageStatus.Picked, // Toplama tamamlandı
+        WorkPackageStatus.Sorting, // MultiItem için direkt ayrıştırmaya
+        WorkPackageStatus.Packing, // SingleItem için direkt paketlemeye
+        WorkPackageStatus.Cancelled
+    ],
+    [WorkPackageStatus.Picked]: [
+        WorkPackageStatus.Sorting, // MultiItem için ayrıştırmaya
+        WorkPackageStatus.Packing, // SingleItem için paketlemeye
         WorkPackageStatus.Cancelled
     ],
     [WorkPackageStatus.Sorting]: [
+        WorkPackageStatus.Sorted, // Ayrıştırma tamamlandı
+        WorkPackageStatus.Packing,
+        WorkPackageStatus.Cancelled
+    ],
+    [WorkPackageStatus.Sorted]: [
         WorkPackageStatus.Packing,
         WorkPackageStatus.Cancelled
     ],

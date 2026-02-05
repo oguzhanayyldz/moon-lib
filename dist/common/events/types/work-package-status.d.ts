@@ -7,8 +7,12 @@ export declare enum WorkPackageStatus {
     Created = "Created",
     /** Toplama aşamasında */
     Picking = "Picking",
+    /** Toplama tamamlandı */
+    Picked = "Picked",
     /** Ayrıştırma aşamasında (sadece MultiItem için) */
     Sorting = "Sorting",
+    /** Ayrıştırma tamamlandı (sadece MultiItem için) */
+    Sorted = "Sorted",
     /** Paketleme aşamasında */
     Packing = "Packing",
     /** Tamamlandı */
