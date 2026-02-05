@@ -65,6 +65,12 @@ export enum WorkPackageActionType {
     /** Sipariş başka pakete taşındı */
     OrderReassigned = "OrderReassigned",
 
+    // İptal Aksiyonları
+    /** Sipariş iptal edildi */
+    OrderCancelled = "OrderCancelled",
+    /** Sipariş güncellendi (kısmi iptal vb.) */
+    OrderUpdated = "OrderUpdated",
+
     // Stok Aksiyonları
     /** Stok bloke edildi */
     StockBlocked = "StockBlocked",

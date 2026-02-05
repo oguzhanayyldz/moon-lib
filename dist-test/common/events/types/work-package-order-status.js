@@ -23,6 +23,8 @@ var WorkPackageOrderStatus;
     WorkPackageOrderStatus["Packed"] = "Packed";
     /** Sorunlu sipariş */
     WorkPackageOrderStatus["Problematic"] = "Problematic";
+    /** İptal edildi */
+    WorkPackageOrderStatus["Cancelled"] = "Cancelled";
 })(WorkPackageOrderStatus || (exports.WorkPackageOrderStatus = WorkPackageOrderStatus = {}));
 /**
  * Sorunlu sipariş nedenleri

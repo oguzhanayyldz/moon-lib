@@ -4,7 +4,7 @@ export interface NotificationCreatedEvent {
     subject: Subjects.NotificationCreated;
     data: {
         userId: string;
-        type: "order" | "integration" | "stock" | "system" | "security";
+        type: "order" | "integration" | "stock" | "system" | "security" | "workpackage";
         category: string;
         // Legacy fields (optional for backward compatibility)
         title?: string;
@@ -18,6 +18,9 @@ export interface NotificationCreatedEvent {
             orderId?: string;
             integrationId?: string;
             productId?: string;
+            workPackageId?: string;
+            workPackageOrderId?: string;
+            cancellationType?: string;
             severity?: "info" | "success" | "warning" | "error";
             actionUrl?: string;
             additionalData?: any;

@@ -62,6 +62,11 @@ var WorkPackageActionType;
     WorkPackageActionType["ProblematicOrderResolved"] = "ProblematicOrderResolved";
     /** Sipariş başka pakete taşındı */
     WorkPackageActionType["OrderReassigned"] = "OrderReassigned";
+    // İptal Aksiyonları
+    /** Sipariş iptal edildi */
+    WorkPackageActionType["OrderCancelled"] = "OrderCancelled";
+    /** Sipariş güncellendi (kısmi iptal vb.) */
+    WorkPackageActionType["OrderUpdated"] = "OrderUpdated";
     // Stok Aksiyonları
     /** Stok bloke edildi */
     WorkPackageActionType["StockBlocked"] = "StockBlocked";

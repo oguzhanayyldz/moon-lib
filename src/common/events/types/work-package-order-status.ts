@@ -18,7 +18,9 @@ export enum WorkPackageOrderStatus {
     /** Paketleme tamamlandı */
     Packed = "Packed",
     /** Sorunlu sipariş */
-    Problematic = "Problematic"
+    Problematic = "Problematic",
+    /** İptal edildi */
+    Cancelled = "Cancelled"
 }
 
 /**
