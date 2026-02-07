@@ -65,7 +65,8 @@ export const RESOURCES = {
     CATALOGS: 'catalogs',       // catalog mappings, product mappings
     SUBUSERS: 'subusers',       // sub user management (sadece admin/user)
     ANALYTICS: 'analytics',     // reports, analytics, dashboards
-    SETTINGS: 'settings'        // system settings, user preferences
+    SETTINGS: 'settings',       // system settings, user preferences
+    FULFILLMENT: 'fulfillment'  // work packages, picking, sorting, packing
 } as const;
 
 /**
@@ -173,3 +174,10 @@ export const requireAnalyticsRead = requirePermission(RESOURCES.ANALYTICS, ACTIO
 
 export const requireSettingsRead = requirePermission(RESOURCES.SETTINGS, ACTIONS.READ);
 export const requireSettingsUpdate = requirePermission(RESOURCES.SETTINGS, ACTIONS.UPDATE);
+
+// Fulfillment Resource Middleware'leri
+export const requireFulfillment = requirePermission(RESOURCES.FULFILLMENT, ACTIONS.MANAGE);
+export const requireFulfillmentRead = requirePermission(RESOURCES.FULFILLMENT, ACTIONS.READ);
+export const requireFulfillmentCreate = requirePermission(RESOURCES.FULFILLMENT, ACTIONS.CREATE);
+export const requireFulfillmentUpdate = requirePermission(RESOURCES.FULFILLMENT, ACTIONS.UPDATE);
+export const requireFulfillmentDelete = requirePermission(RESOURCES.FULFILLMENT, ACTIONS.DELETE);

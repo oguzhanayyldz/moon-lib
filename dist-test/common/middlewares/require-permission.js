@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireRelatedProductsCreate = exports.requireRelatedProductsRead = exports.requirePackagesDelete = exports.requirePackagesUpdate = exports.requirePackagesCreate = exports.requirePackagesRead = exports.requireCombinationsDelete = exports.requireCombinationsUpdate = exports.requireCombinationsCreate = exports.requireCombinationsRead = exports.requireAttributeValuesDelete = exports.requireAttributeValuesUpdate = exports.requireAttributeValuesCreate = exports.requireAttributeValuesRead = exports.requireAttributesDelete = exports.requireAttributesUpdate = exports.requireAttributesCreate = exports.requireAttributesRead = exports.requireCategoriesDelete = exports.requireCategoriesUpdate = exports.requireCategoriesCreate = exports.requireCategoriesRead = exports.requireBrandsDelete = exports.requireBrandsUpdate = exports.requireBrandsCreate = exports.requireBrandsRead = exports.requireInventoryDelete = exports.requireInventoryUpdate = exports.requireInventoryCreate = exports.requireInventoryRead = exports.requireOrdersDelete = exports.requireOrdersUpdate = exports.requireOrdersCreate = exports.requireOrdersRead = exports.requireProductsDelete = exports.requireProductsUpdate = exports.requireProductsCreate = exports.requireProductsRead = exports.requireSettings = exports.requireAnalytics = exports.requireSubUsers = exports.requireCatalogs = exports.requireIntegrations = exports.requirePricing = exports.requireInventory = exports.requireOrders = exports.requireProducts = exports.ACTIONS = exports.RESOURCES = exports.requirePermission = void 0;
-exports.requireSettingsUpdate = exports.requireSettingsRead = exports.requireAnalyticsRead = exports.requireSubUsersDelete = exports.requireSubUsersUpdate = exports.requireSubUsersCreate = exports.requireSubUsersRead = exports.requireCatalogsDelete = exports.requireCatalogsUpdate = exports.requireCatalogsCreate = exports.requireCatalogsRead = exports.requireIntegrationsDelete = exports.requireIntegrationsUpdate = exports.requireIntegrationsCreate = exports.requireIntegrationsRead = exports.requirePricingDelete = exports.requirePricingUpdate = exports.requirePricingCreate = exports.requirePricingRead = exports.requireRelatedProductsDelete = exports.requireRelatedProductsUpdate = void 0;
+exports.requireFulfillmentDelete = exports.requireFulfillmentUpdate = exports.requireFulfillmentCreate = exports.requireFulfillmentRead = exports.requireFulfillment = exports.requireSettingsUpdate = exports.requireSettingsRead = exports.requireAnalyticsRead = exports.requireSubUsersDelete = exports.requireSubUsersUpdate = exports.requireSubUsersCreate = exports.requireSubUsersRead = exports.requireCatalogsDelete = exports.requireCatalogsUpdate = exports.requireCatalogsCreate = exports.requireCatalogsRead = exports.requireIntegrationsDelete = exports.requireIntegrationsUpdate = exports.requireIntegrationsCreate = exports.requireIntegrationsRead = exports.requirePricingDelete = exports.requirePricingUpdate = exports.requirePricingCreate = exports.requirePricingRead = exports.requireRelatedProductsDelete = exports.requireRelatedProductsUpdate = void 0;
 const current_user_1 = require("./current-user");
 /**
  * Basit ve Merkezi Permission Middleware Sistemi
@@ -56,7 +56,8 @@ exports.RESOURCES = {
     CATALOGS: 'catalogs', // catalog mappings, product mappings
     SUBUSERS: 'subusers', // sub user management (sadece admin/user)
     ANALYTICS: 'analytics', // reports, analytics, dashboards
-    SETTINGS: 'settings' // system settings, user preferences
+    SETTINGS: 'settings', // system settings, user preferences
+    FULFILLMENT: 'fulfillment' // work packages, picking, sorting, packing
 };
 /**
  * Basic Action Tanımları
@@ -145,4 +146,10 @@ exports.requireSubUsersDelete = (0, exports.requirePermission)(exports.RESOURCES
 exports.requireAnalyticsRead = (0, exports.requirePermission)(exports.RESOURCES.ANALYTICS, exports.ACTIONS.READ);
 exports.requireSettingsRead = (0, exports.requirePermission)(exports.RESOURCES.SETTINGS, exports.ACTIONS.READ);
 exports.requireSettingsUpdate = (0, exports.requirePermission)(exports.RESOURCES.SETTINGS, exports.ACTIONS.UPDATE);
+// Fulfillment Resource Middleware'leri
+exports.requireFulfillment = (0, exports.requirePermission)(exports.RESOURCES.FULFILLMENT, exports.ACTIONS.MANAGE);
+exports.requireFulfillmentRead = (0, exports.requirePermission)(exports.RESOURCES.FULFILLMENT, exports.ACTIONS.READ);
+exports.requireFulfillmentCreate = (0, exports.requirePermission)(exports.RESOURCES.FULFILLMENT, exports.ACTIONS.CREATE);
+exports.requireFulfillmentUpdate = (0, exports.requirePermission)(exports.RESOURCES.FULFILLMENT, exports.ACTIONS.UPDATE);
+exports.requireFulfillmentDelete = (0, exports.requirePermission)(exports.RESOURCES.FULFILLMENT, exports.ACTIONS.DELETE);
 //# sourceMappingURL=require-permission.js.map

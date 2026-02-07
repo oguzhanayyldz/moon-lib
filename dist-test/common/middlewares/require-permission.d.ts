@@ -25,6 +25,7 @@ export declare const RESOURCES: {
     readonly SUBUSERS: "subusers";
     readonly ANALYTICS: "analytics";
     readonly SETTINGS: "settings";
+    readonly FULFILLMENT: "fulfillment";
 };
 /**
  * Basic Action Tanımları
@@ -104,4 +105,9 @@ export declare const requireSubUsersDelete: (req: Request, res: Response, next: 
 export declare const requireAnalyticsRead: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
 export declare const requireSettingsRead: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
 export declare const requireSettingsUpdate: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const requireFulfillment: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const requireFulfillmentRead: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const requireFulfillmentCreate: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const requireFulfillmentUpdate: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const requireFulfillmentDelete: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
 //# sourceMappingURL=require-permission.d.ts.map
