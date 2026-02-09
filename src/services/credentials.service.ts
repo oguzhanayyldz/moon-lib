@@ -46,6 +46,19 @@ export interface ParsedStockUpdateSettings {
     sources: any[];
 }
 
+export interface ParsedInvoiceSettings {
+    enabled: boolean;
+    sources: any[];
+    autoFormalize?: boolean;
+    invoiceCreation?: any;
+    formalization?: any;
+    pdfFetch?: any;
+    minOrderAmount?: number;
+    maxOrderAmount?: number;
+    enabledForThisIntegration?: boolean;
+    currentSource?: any;
+}
+
 export interface ParsedCredentials {
     // Integration-specific fields (API keys, etc.)
     [key: string]: any;
@@ -56,6 +69,7 @@ export interface ParsedCredentials {
     stock_update_settings?: ParsedStockUpdateSettings;
     order_update_settings?: ParsedOrderUpdateSettings;
     shipment_settings?: ParsedShipmentSettings;
+    invoice_settings?: ParsedInvoiceSettings;
 
     // Root-level mapped fields (from shipment_settings)
     shipmentEnabled?: boolean;
@@ -66,6 +80,12 @@ export interface ParsedCredentials {
     shipmentSenderInfo?: any;
     fallbackCargoIntegrationId?: string | null;
     fallbackCargoName?: string | null;
+
+    // Root-level mapped fields (from invoice_settings)
+    invoiceEnabled?: boolean;
+    invoiceAutoFormalize?: boolean;
+    invoiceErpIntegrationId?: string | null;
+    invoiceErpName?: string | null;
 
     // Root-level mapped fields (from order_update_settings)
     syncOrderStatus?: boolean;
@@ -179,6 +199,27 @@ export class CredentialsService {
                 useIntegrationCargoLabel: rootFields.useIntegrationCargoLabel,
                 customCargoIntegrationId: rootFields.customCargoIntegrationId,
                 autoSendToCustomCargo: rootFields.autoSendToCustomCargo
+            });
+        }
+
+        // ALL TYPES: Invoice settings (MARKETPLACE, ECOMMERCE ve ERP için geçerli)
+        if (merged.invoice_settings) {
+            const { settings, rootFields } = this.parseInvoiceSettings(
+                merged.invoice_settings,
+                integrationId,
+                integrationName
+            );
+            merged.invoice_settings = settings;
+
+            // Root level mapping
+            Object.assign(merged, rootFields);
+
+            logger.debug('CredentialsService - Invoice settings mapped to root level', {
+                integrationName,
+                integrationType,
+                invoiceEnabled: rootFields.invoiceEnabled,
+                invoiceAutoFormalize: rootFields.invoiceAutoFormalize,
+                invoiceErpIntegrationId: rootFields.invoiceErpIntegrationId
             });
         }
 
@@ -322,6 +363,52 @@ export class CredentialsService {
             ...settings,
             enabled: settings.enabled ?? false,
             useIntegrationCargoLabel: settings.useIntegrationCargoLabel ?? true,
+            enabledForThisIntegration: matchingSource?.enabled ?? false,
+            currentSource: matchingSource || null,
+            sources: settings.sources?.filter(
+                (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+            ) || []
+        };
+
+        return { settings: parsedSettings, rootFields };
+    }
+
+    /**
+     * Invoice settings parse ve filter
+     */
+    private static parseInvoiceSettings(
+        raw: string | any,
+        integrationId: string,
+        integrationName: string
+    ): { settings: ParsedInvoiceSettings; rootFields: Record<string, any> } {
+        const settings = this.safeJsonParse(raw);
+
+        if (!settings) {
+            return {
+                settings: { enabled: false, sources: [] },
+                rootFields: {
+                    invoiceEnabled: false,
+                    invoiceAutoFormalize: false,
+                    invoiceErpIntegrationId: null,
+                    invoiceErpName: null
+                }
+            };
+        }
+
+        const matchingSource = settings.sources?.find(
+            (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+        );
+
+        const rootFields = {
+            invoiceEnabled: matchingSource?.enabled ?? false,
+            invoiceAutoFormalize: settings.autoFormalize ?? false,
+            invoiceErpIntegrationId: matchingSource?.erpIntegrationId || null,
+            invoiceErpName: matchingSource?.erpName || null
+        };
+
+        const parsedSettings: ParsedInvoiceSettings = {
+            ...settings,
+            enabled: settings.enabled ?? false,
             enabledForThisIntegration: matchingSource?.enabled ?? false,
             currentSource: matchingSource || null,
             sources: settings.sources?.filter(

@@ -133,6 +133,119 @@ export interface ShipmentSettings {
     currentSource?: ShipmentSettingsSource | null;
 }
 
+// =====================================
+// Invoice Settings Types
+// =====================================
+
+/**
+ * InvoiceAutomationTrigger - Fatura otomasyon tetikleme tipi
+ */
+export enum InvoiceAutomationTrigger {
+    STATUS_CHANGE = 'STATUS_CHANGE',
+    SCHEDULED = 'SCHEDULED',
+    MANUAL = 'MANUAL',
+    INVOICE_FORMALIZATION = 'INVOICE_FORMALIZATION',
+}
+
+/**
+ * InvoiceScheduleFrequency - Fatura zamanlama sıklığı
+ */
+export enum InvoiceScheduleFrequency {
+    MINUTE = 'minute',
+    HOURLY = 'hourly',
+    DAILY = 'daily',
+    WEEKLY = 'weekly',
+}
+
+/**
+ * InvoiceSettingsSource - Platform → ERP eşleştirmesi
+ */
+export interface InvoiceSettingsSource {
+    integrationId: string;      // Kaynak platform integration ID (Trendyol, Shopify, etc.)
+    name: string;               // Platform adı
+    erpIntegrationId: string;   // Hedef ERP integration ID (Parasut, Logo, etc.)
+    erpName: string;            // ERP adı
+    enabled: boolean;           // Bu mapping aktif mi
+}
+
+/**
+ * InvoiceJobConfig - Fatura job yapılandırması
+ */
+export interface InvoiceJobConfig {
+    enabled: boolean;
+    trigger?: InvoiceAutomationTrigger;
+    targetOrderStatus?: string;              // STATUS_CHANGE için hedef order status
+    scheduleFrequency?: InvoiceScheduleFrequency;
+    scheduleValue?: string;                  // Dakika/saat sayısı veya HH:MM
+    scheduledTime?: string;                  // Hesaplanan cron expression
+}
+
+/**
+ * InvoiceJobStatistics - Job istatistikleri
+ */
+export interface InvoiceJobStatistics {
+    totalProcessed: number;
+    totalSuccess: number;
+    totalFailed: number;
+    lastRunAt?: Date | string | null;
+    lastRunStatus?: 'SUCCESS' | 'FAILED' | 'PARTIAL' | null;
+}
+
+/**
+ * InvoiceStatistics - Tüm fatura job istatistikleri
+ */
+export interface InvoiceStatistics {
+    invoiceCreation?: InvoiceJobStatistics;
+    formalization?: InvoiceJobStatistics;
+    pdfFetch?: InvoiceJobStatistics;
+}
+
+/**
+ * InvoiceSettings - Ana fatura ayarları objesi
+ * UserIntegrationSettings.credentials.get('invoice_settings') içinde JSON olarak saklanır
+ *
+ * NOT: enabledForThisIntegration ve currentSource alanları runtime'da
+ * Integration Service tarafından parse sırasında eklenir.
+ */
+export interface InvoiceSettings {
+    enabled: boolean;
+
+    // Platform → ERP eşleştirmeleri
+    sources: InvoiceSettingsSource[];
+
+    // Otomatik resmileştirme (fatura oluşturulduğu anda hemen ERP'de resmileştir)
+    autoFormalize?: boolean;
+
+    // Fatura Oluşturma Job Ayarları
+    invoiceCreation?: InvoiceJobConfig;
+
+    // Fatura Resmileştirme Job Ayarları (ayrı süreç)
+    formalization?: InvoiceJobConfig;
+
+    // PDF Çekme Job Ayarları
+    pdfFetch?: InvoiceJobConfig;
+
+    // Filtreleme koşulları
+    minOrderAmount?: number;
+    maxOrderAmount?: number;
+
+    // İstatistikler
+    statistics?: InvoiceStatistics;
+
+    // Son güncelleme zamanı
+    lastUpdate?: Date | string | null;
+
+    // ===== RUNTIME-PARSED FIELDS =====
+    // Bu alanlar Integration Service tarafından credential parsing sırasında eklenir
+    // Her entegrasyon için özel değerler hesaplanır
+
+    /** Bu entegrasyon için invoice ayarları aktif mi (runtime'da hesaplanır) */
+    enabledForThisIntegration?: boolean;
+
+    /** Bu entegrasyon için eşleşen source bilgisi (runtime'da hesaplanır) */
+    currentSource?: InvoiceSettingsSource | null;
+}
+
 export interface UserIntegrationSettingsEvent {
     subject: Subjects.UserIntegrationSettings;
     data: {

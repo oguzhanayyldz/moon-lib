@@ -90,6 +90,20 @@ class CredentialsService {
                 autoSendToCustomCargo: rootFields.autoSendToCustomCargo
             });
         }
+        // ALL TYPES: Invoice settings (MARKETPLACE, ECOMMERCE ve ERP için geçerli)
+        if (merged.invoice_settings) {
+            const { settings, rootFields } = this.parseInvoiceSettings(merged.invoice_settings, integrationId, integrationName);
+            merged.invoice_settings = settings;
+            // Root level mapping
+            Object.assign(merged, rootFields);
+            logger_service_1.logger.debug('CredentialsService - Invoice settings mapped to root level', {
+                integrationName,
+                integrationType,
+                invoiceEnabled: rootFields.invoiceEnabled,
+                invoiceAutoFormalize: rootFields.invoiceAutoFormalize,
+                invoiceErpIntegrationId: rootFields.invoiceErpIntegrationId
+            });
+        }
         return merged;
     }
     /**
@@ -185,6 +199,33 @@ class CredentialsService {
             fallbackCargoName: settings.fallbackCargoName || null
         };
         const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_e = settings.enabled) !== null && _e !== void 0 ? _e : false, useIntegrationCargoLabel: (_f = settings.useIntegrationCargoLabel) !== null && _f !== void 0 ? _f : true, enabledForThisIntegration: (_g = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _g !== void 0 ? _g : false, currentSource: matchingSource || null, sources: ((_h = settings.sources) === null || _h === void 0 ? void 0 : _h.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
+        return { settings: parsedSettings, rootFields };
+    }
+    /**
+     * Invoice settings parse ve filter
+     */
+    static parseInvoiceSettings(raw, integrationId, integrationName) {
+        var _a, _b, _c, _d, _e, _f;
+        const settings = this.safeJsonParse(raw);
+        if (!settings) {
+            return {
+                settings: { enabled: false, sources: [] },
+                rootFields: {
+                    invoiceEnabled: false,
+                    invoiceAutoFormalize: false,
+                    invoiceErpIntegrationId: null,
+                    invoiceErpName: null
+                }
+            };
+        }
+        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => s.integrationId === integrationId.toString() || s.name === integrationName);
+        const rootFields = {
+            invoiceEnabled: (_b = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _b !== void 0 ? _b : false,
+            invoiceAutoFormalize: (_c = settings.autoFormalize) !== null && _c !== void 0 ? _c : false,
+            invoiceErpIntegrationId: (matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.erpIntegrationId) || null,
+            invoiceErpName: (matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.erpName) || null
+        };
+        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_d = settings.enabled) !== null && _d !== void 0 ? _d : false, enabledForThisIntegration: (_e = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _e !== void 0 ? _e : false, currentSource: matchingSource || null, sources: ((_f = settings.sources) === null || _f === void 0 ? void 0 : _f.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
         return { settings: parsedSettings, rootFields };
     }
 }

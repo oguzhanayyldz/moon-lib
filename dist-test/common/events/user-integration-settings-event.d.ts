@@ -97,6 +97,86 @@ export interface ShipmentSettings {
     /** Bu entegrasyon için eşleşen source bilgisi (runtime'da hesaplanır) */
     currentSource?: ShipmentSettingsSource | null;
 }
+/**
+ * InvoiceAutomationTrigger - Fatura otomasyon tetikleme tipi
+ */
+export declare enum InvoiceAutomationTrigger {
+    STATUS_CHANGE = "STATUS_CHANGE",
+    SCHEDULED = "SCHEDULED",
+    MANUAL = "MANUAL",
+    INVOICE_FORMALIZATION = "INVOICE_FORMALIZATION"
+}
+/**
+ * InvoiceScheduleFrequency - Fatura zamanlama sıklığı
+ */
+export declare enum InvoiceScheduleFrequency {
+    MINUTE = "minute",
+    HOURLY = "hourly",
+    DAILY = "daily",
+    WEEKLY = "weekly"
+}
+/**
+ * InvoiceSettingsSource - Platform → ERP eşleştirmesi
+ */
+export interface InvoiceSettingsSource {
+    integrationId: string;
+    name: string;
+    erpIntegrationId: string;
+    erpName: string;
+    enabled: boolean;
+}
+/**
+ * InvoiceJobConfig - Fatura job yapılandırması
+ */
+export interface InvoiceJobConfig {
+    enabled: boolean;
+    trigger?: InvoiceAutomationTrigger;
+    targetOrderStatus?: string;
+    scheduleFrequency?: InvoiceScheduleFrequency;
+    scheduleValue?: string;
+    scheduledTime?: string;
+}
+/**
+ * InvoiceJobStatistics - Job istatistikleri
+ */
+export interface InvoiceJobStatistics {
+    totalProcessed: number;
+    totalSuccess: number;
+    totalFailed: number;
+    lastRunAt?: Date | string | null;
+    lastRunStatus?: 'SUCCESS' | 'FAILED' | 'PARTIAL' | null;
+}
+/**
+ * InvoiceStatistics - Tüm fatura job istatistikleri
+ */
+export interface InvoiceStatistics {
+    invoiceCreation?: InvoiceJobStatistics;
+    formalization?: InvoiceJobStatistics;
+    pdfFetch?: InvoiceJobStatistics;
+}
+/**
+ * InvoiceSettings - Ana fatura ayarları objesi
+ * UserIntegrationSettings.credentials.get('invoice_settings') içinde JSON olarak saklanır
+ *
+ * NOT: enabledForThisIntegration ve currentSource alanları runtime'da
+ * Integration Service tarafından parse sırasında eklenir.
+ */
+export interface InvoiceSettings {
+    enabled: boolean;
+    sources: InvoiceSettingsSource[];
+    autoFormalize?: boolean;
+    invoiceCreation?: InvoiceJobConfig;
+    formalization?: InvoiceJobConfig;
+    pdfFetch?: InvoiceJobConfig;
+    minOrderAmount?: number;
+    maxOrderAmount?: number;
+    statistics?: InvoiceStatistics;
+    lastUpdate?: Date | string | null;
+    /** Bu entegrasyon için invoice ayarları aktif mi (runtime'da hesaplanır) */
+    enabledForThisIntegration?: boolean;
+    /** Bu entegrasyon için eşleşen source bilgisi (runtime'da hesaplanır) */
+    currentSource?: InvoiceSettingsSource | null;
+}
 export interface UserIntegrationSettingsEvent {
     subject: Subjects.UserIntegrationSettings;
     data: {

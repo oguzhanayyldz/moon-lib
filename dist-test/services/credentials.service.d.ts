@@ -39,6 +39,18 @@ export interface ParsedStockUpdateSettings {
     enabled: boolean;
     sources: any[];
 }
+export interface ParsedInvoiceSettings {
+    enabled: boolean;
+    sources: any[];
+    autoFormalize?: boolean;
+    invoiceCreation?: any;
+    formalization?: any;
+    pdfFetch?: any;
+    minOrderAmount?: number;
+    maxOrderAmount?: number;
+    enabledForThisIntegration?: boolean;
+    currentSource?: any;
+}
 export interface ParsedCredentials {
     [key: string]: any;
     productUpdate?: any;
@@ -46,6 +58,7 @@ export interface ParsedCredentials {
     stock_update_settings?: ParsedStockUpdateSettings;
     order_update_settings?: ParsedOrderUpdateSettings;
     shipment_settings?: ParsedShipmentSettings;
+    invoice_settings?: ParsedInvoiceSettings;
     shipmentEnabled?: boolean;
     useIntegrationCargoLabel?: boolean;
     customCargoIntegrationId?: string | null;
@@ -54,6 +67,10 @@ export interface ParsedCredentials {
     shipmentSenderInfo?: any;
     fallbackCargoIntegrationId?: string | null;
     fallbackCargoName?: string | null;
+    invoiceEnabled?: boolean;
+    invoiceAutoFormalize?: boolean;
+    invoiceErpIntegrationId?: string | null;
+    invoiceErpName?: string | null;
     syncOrderStatus?: boolean;
     syncCancelledOrders?: boolean;
     syncReturnedOrders?: boolean;
@@ -97,5 +114,9 @@ export declare class CredentialsService {
      * Shipment settings parse ve filter
      */
     private static parseShipmentSettings;
+    /**
+     * Invoice settings parse ve filter
+     */
+    private static parseInvoiceSettings;
 }
 //# sourceMappingURL=credentials.service.d.ts.map
