@@ -205,7 +205,7 @@ class CredentialsService {
      * Invoice settings parse ve filter
      */
     static parseInvoiceSettings(raw, integrationId, integrationName) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
         const settings = this.safeJsonParse(raw);
         if (!settings) {
             return {
@@ -214,18 +214,24 @@ class CredentialsService {
                     invoiceEnabled: false,
                     invoiceAutoFormalize: false,
                     invoiceErpIntegrationId: null,
-                    invoiceErpName: null
+                    invoiceErpName: null,
+                    invoicePrintFromErp: false,
+                    invoicePrintWaitTimeout: 8000,
+                    invoiceSellerInfo: null
                 }
             };
         }
         const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => s.integrationId === integrationId.toString() || s.name === integrationName);
         const rootFields = {
             invoiceEnabled: (_b = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _b !== void 0 ? _b : false,
-            invoiceAutoFormalize: (_c = settings.autoFormalize) !== null && _c !== void 0 ? _c : false,
+            invoiceAutoFormalize: (_e = (_c = settings.autoFormalize) !== null && _c !== void 0 ? _c : (_d = settings.invoiceCreation) === null || _d === void 0 ? void 0 : _d.autoFormalize) !== null && _e !== void 0 ? _e : false,
             invoiceErpIntegrationId: (matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.erpIntegrationId) || null,
-            invoiceErpName: (matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.erpName) || null
+            invoiceErpName: (matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.erpName) || null,
+            invoicePrintFromErp: (_f = settings.printFromErp) !== null && _f !== void 0 ? _f : false,
+            invoicePrintWaitTimeout: (_g = settings.printWaitTimeout) !== null && _g !== void 0 ? _g : 8000,
+            invoiceSellerInfo: settings.sellerInfo || null
         };
-        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_d = settings.enabled) !== null && _d !== void 0 ? _d : false, enabledForThisIntegration: (_e = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _e !== void 0 ? _e : false, currentSource: matchingSource || null, sources: ((_f = settings.sources) === null || _f === void 0 ? void 0 : _f.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
+        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_h = settings.enabled) !== null && _h !== void 0 ? _h : false, enabledForThisIntegration: (_j = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _j !== void 0 ? _j : false, currentSource: matchingSource || null, printFromErp: (_k = settings.printFromErp) !== null && _k !== void 0 ? _k : false, printWaitTimeout: (_l = settings.printWaitTimeout) !== null && _l !== void 0 ? _l : 8000, sellerInfo: settings.sellerInfo || null, sources: ((_m = settings.sources) === null || _m === void 0 ? void 0 : _m.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
         return { settings: parsedSettings, rootFields };
     }
 }

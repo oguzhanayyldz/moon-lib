@@ -50,6 +50,14 @@ export interface ParsedInvoiceSettings {
     maxOrderAmount?: number;
     enabledForThisIntegration?: boolean;
     currentSource?: any;
+    printFromErp?: boolean;
+    printWaitTimeout?: number;
+    sellerInfo?: {
+        name?: string;
+        address?: string;
+        phone?: string;
+        taxNumber?: string;
+    };
 }
 export interface ParsedCredentials {
     [key: string]: any;
@@ -71,6 +79,14 @@ export interface ParsedCredentials {
     invoiceAutoFormalize?: boolean;
     invoiceErpIntegrationId?: string | null;
     invoiceErpName?: string | null;
+    invoicePrintFromErp?: boolean;
+    invoicePrintWaitTimeout?: number;
+    invoiceSellerInfo?: {
+        name?: string;
+        address?: string;
+        phone?: string;
+        taxNumber?: string;
+    };
     syncOrderStatus?: boolean;
     syncCancelledOrders?: boolean;
     syncReturnedOrders?: boolean;

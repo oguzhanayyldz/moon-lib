@@ -57,6 +57,16 @@ export interface ParsedInvoiceSettings {
     maxOrderAmount?: number;
     enabledForThisIntegration?: boolean;
     currentSource?: any;
+    // Paketleme sırasında yazdırma ayarları
+    printFromErp?: boolean;
+    printWaitTimeout?: number;
+    // Fatura satıcı bilgileri (System fatura için)
+    sellerInfo?: {
+        name?: string;
+        address?: string;
+        phone?: string;
+        taxNumber?: string;
+    };
 }
 
 export interface ParsedCredentials {
@@ -86,6 +96,14 @@ export interface ParsedCredentials {
     invoiceAutoFormalize?: boolean;
     invoiceErpIntegrationId?: string | null;
     invoiceErpName?: string | null;
+    invoicePrintFromErp?: boolean;
+    invoicePrintWaitTimeout?: number;
+    invoiceSellerInfo?: {
+        name?: string;
+        address?: string;
+        phone?: string;
+        taxNumber?: string;
+    };
 
     // Root-level mapped fields (from order_update_settings)
     syncOrderStatus?: boolean;
@@ -390,7 +408,10 @@ export class CredentialsService {
                     invoiceEnabled: false,
                     invoiceAutoFormalize: false,
                     invoiceErpIntegrationId: null,
-                    invoiceErpName: null
+                    invoiceErpName: null,
+                    invoicePrintFromErp: false,
+                    invoicePrintWaitTimeout: 8000,
+                    invoiceSellerInfo: null
                 }
             };
         }
@@ -401,9 +422,12 @@ export class CredentialsService {
 
         const rootFields = {
             invoiceEnabled: matchingSource?.enabled ?? false,
-            invoiceAutoFormalize: settings.autoFormalize ?? false,
+            invoiceAutoFormalize: settings.autoFormalize ?? settings.invoiceCreation?.autoFormalize ?? false,
             invoiceErpIntegrationId: matchingSource?.erpIntegrationId || null,
-            invoiceErpName: matchingSource?.erpName || null
+            invoiceErpName: matchingSource?.erpName || null,
+            invoicePrintFromErp: settings.printFromErp ?? false,
+            invoicePrintWaitTimeout: settings.printWaitTimeout ?? 8000,
+            invoiceSellerInfo: settings.sellerInfo || null
         };
 
         const parsedSettings: ParsedInvoiceSettings = {
@@ -411,6 +435,9 @@ export class CredentialsService {
             enabled: settings.enabled ?? false,
             enabledForThisIntegration: matchingSource?.enabled ?? false,
             currentSource: matchingSource || null,
+            printFromErp: settings.printFromErp ?? false,
+            printWaitTimeout: settings.printWaitTimeout ?? 8000,
+            sellerInfo: settings.sellerInfo || null,
             sources: settings.sources?.filter(
                 (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
             ) || []
