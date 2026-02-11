@@ -85,6 +85,7 @@ __exportStar(require("./utils/performanceMonitor.util"), exports);
 __exportStar(require("./utils/audit-helper"), exports);
 __exportStar(require("./utils/batchOperationHelpers.util"), exports);
 __exportStar(require("./utils/redisFailoverManager"), exports);
+__exportStar(require("./utils/userContext.util"), exports);
 // Database - MongoDB Atlas Native Transactions
 __exportStar(require("./database"), exports);
 // Middleware - Transaction Middleware

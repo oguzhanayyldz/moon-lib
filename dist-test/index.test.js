@@ -22,7 +22,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
+exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.resetUserContextMocks = exports.getParentUserId = exports.isSubUserMode = exports.getDataOwnerId = exports.getPerformerId = exports.createNormalUserPayload = exports.createSubUserPayload = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
 const index_1 = require("./index");
 // Global test cleanup registry
 let testTimers = new Set();
@@ -514,6 +514,89 @@ const createMicroserviceSecurityService = (config = {}) => {
 exports.createMicroserviceSecurityService = createMicroserviceSecurityService;
 // Export mock security service instances for direct usage in tests
 exports.microserviceSecurityService = (0, exports.createMicroserviceSecurityService)();
+// ============================================================================
+// UserContext Utility Mocks - SubUser Mode Testing
+// ============================================================================
+/**
+ * SubUser mode test payload oluşturur
+ * @param parentUserId Parent User ID (veri erişimi için)
+ * @param subUserId SubUser'ın gerçek ID'si (loglama için)
+ */
+const createSubUserPayload = (parentUserId, subUserId) => ({
+    id: parentUserId, // Parent User ID (veri erişimi için)
+    email: "parent@test.com",
+    name: "Parent",
+    surname: "User",
+    role: 1, // UserRole.User
+    isSubUserMode: true, // SubUser modunda
+    subUserId: subUserId, // SubUser'ın gerçek ID'si
+    subUserEmail: "subuser@test.com",
+    subUserRole: 2 // UserRole.SubUser
+});
+exports.createSubUserPayload = createSubUserPayload;
+/**
+ * Normal user payload oluşturur
+ * @param userId User ID
+ */
+const createNormalUserPayload = (userId) => ({
+    id: userId,
+    email: "user@test.com",
+    name: "Normal",
+    surname: "User",
+    role: 1, // UserRole.User
+    isSubUserMode: false
+});
+exports.createNormalUserPayload = createNormalUserPayload;
+/**
+ * İşlemi yapan kullanıcının ID'sini döndürür
+ * SubUser modunda subUserId, normal modda id döner
+ *
+ * Loglama alanları için kullanılmalı:
+ * - StockHistory.user, PriceHistory.user
+ * - WorkPackageHistory.performedBy, OrderHistory.performedBy
+ * - assignee alanları
+ */
+exports.getPerformerId = jest.fn().mockImplementation((user) => {
+    if (user.isSubUserMode && user.subUserId) {
+        return user.subUserId; // SubUser'ın gerçek ID'si
+    }
+    return user.id; // Normal kullanıcı ID'si (Parent User)
+});
+/**
+ * Veri erişimi için kullanıcı ID'sini döndürür
+ * Her zaman parent user ID döner (SubUser modunda bile)
+ *
+ * Veri sahipliği alanları için kullanılmalı:
+ * - Entity.user alanı (filtreleme için)
+ * - Sahiplik kontrolü
+ */
+exports.getDataOwnerId = jest.fn().mockImplementation((user) => {
+    return user.id; // Bu zaten parent ID (SubUser modunda)
+});
+/**
+ * SubUser modu kontrolü
+ */
+exports.isSubUserMode = jest.fn().mockImplementation((user) => {
+    return user.isSubUserMode === true && !!user.subUserId;
+});
+/**
+ * SubUser'ın parent User ID'sini döndürür
+ * Güvenlik kontrollerinde kullanılır
+ */
+exports.getParentUserId = jest.fn().mockImplementation((user) => {
+    // SubUser modunda req.currentUser.id zaten parent ID
+    return user.id;
+});
+/**
+ * UserContext mock'larını resetler
+ */
+const resetUserContextMocks = () => {
+    exports.getPerformerId.mockClear();
+    exports.getDataOwnerId.mockClear();
+    exports.isSubUserMode.mockClear();
+    exports.getParentUserId.mockClear();
+};
+exports.resetUserContextMocks = resetUserContextMocks;
 exports.tracer = {
     startSpan: jest.fn().mockReturnValue({
         setTag: jest.fn().mockReturnThis(),
@@ -812,6 +895,11 @@ exports.createOutboxMock = createOutboxMock;
 const setupTestEnvironment = () => {
     // Clear all mocks before each test
     jest.clearAllMocks();
+    // Reset UserContext mocks
+    exports.getPerformerId.mockClear();
+    exports.getDataOwnerId.mockClear();
+    exports.isSubUserMode.mockClear();
+    exports.getParentUserId.mockClear();
     // Reset OptimisticLockingUtil to default behavior
     exports.OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(async (doc, operationName) => {
         if (doc && typeof doc.save === 'function') {

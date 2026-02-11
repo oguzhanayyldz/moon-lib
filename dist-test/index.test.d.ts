@@ -233,6 +233,66 @@ export declare const microserviceSecurityService: {
     isBlocked: jest.Mock<any, any, any>;
     getAttemptCount: jest.Mock<any, any, any>;
 };
+/**
+ * SubUser mode test payload oluşturur
+ * @param parentUserId Parent User ID (veri erişimi için)
+ * @param subUserId SubUser'ın gerçek ID'si (loglama için)
+ */
+export declare const createSubUserPayload: (parentUserId: string, subUserId: string) => {
+    id: string;
+    email: string;
+    name: string;
+    surname: string;
+    role: number;
+    isSubUserMode: boolean;
+    subUserId: string;
+    subUserEmail: string;
+    subUserRole: number;
+};
+/**
+ * Normal user payload oluşturur
+ * @param userId User ID
+ */
+export declare const createNormalUserPayload: (userId: string) => {
+    id: string;
+    email: string;
+    name: string;
+    surname: string;
+    role: number;
+    isSubUserMode: boolean;
+};
+/**
+ * İşlemi yapan kullanıcının ID'sini döndürür
+ * SubUser modunda subUserId, normal modda id döner
+ *
+ * Loglama alanları için kullanılmalı:
+ * - StockHistory.user, PriceHistory.user
+ * - WorkPackageHistory.performedBy, OrderHistory.performedBy
+ * - assignee alanları
+ */
+export declare const getPerformerId: jest.Mock<any, any, any>;
+/**
+ * Veri erişimi için kullanıcı ID'sini döndürür
+ * Her zaman parent user ID döner (SubUser modunda bile)
+ *
+ * Veri sahipliği alanları için kullanılmalı:
+ * - Entity.user alanı (filtreleme için)
+ * - Sahiplik kontrolü
+ */
+export declare const getDataOwnerId: jest.Mock<any, any, any>;
+/**
+ * SubUser modu kontrolü
+ */
+export declare const isSubUserMode: jest.Mock<any, any, any>;
+/**
+ * SubUser'ın parent User ID'sini döndürür
+ * Güvenlik kontrollerinde kullanılır
+ */
+export declare const getParentUserId: jest.Mock<any, any, any>;
+/**
+ * UserContext mock'larını resetler
+ */
+export declare const resetUserContextMocks: () => void;
 export declare const tracer: {
     startSpan: jest.Mock<any, any, any>;
     inject: jest.Mock<any, any, any>;

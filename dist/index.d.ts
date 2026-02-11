@@ -50,6 +50,7 @@ export * from './utils/performanceMonitor.util';
 export * from './utils/audit-helper';
 export * from './utils/batchOperationHelpers.util';
 export * from './utils/redisFailoverManager';
+export * from './utils/userContext.util';
 export * from './database';
 export * from './middleware';
 export * from './jobs/eventPublisher.job';

@@ -535,6 +535,94 @@ export const createMicroserviceSecurityService = (config: any = {}) => {
 // Export mock security service instances for direct usage in tests
 export const microserviceSecurityService = createMicroserviceSecurityService();
 
+// ============================================================================
+// UserContext Utility Mocks - SubUser Mode Testing
+// ============================================================================
+
+/**
+ * SubUser mode test payload oluşturur
+ * @param parentUserId Parent User ID (veri erişimi için)
+ * @param subUserId SubUser'ın gerçek ID'si (loglama için)
+ */
+export const createSubUserPayload = (parentUserId: string, subUserId: string) => ({
+    id: parentUserId,           // Parent User ID (veri erişimi için)
+    email: "parent@test.com",
+    name: "Parent",
+    surname: "User",
+    role: 1,                    // UserRole.User
+    isSubUserMode: true,        // SubUser modunda
+    subUserId: subUserId,       // SubUser'ın gerçek ID'si
+    subUserEmail: "subuser@test.com",
+    subUserRole: 2              // UserRole.SubUser
+});
+
+/**
+ * Normal user payload oluşturur
+ * @param userId User ID
+ */
+export const createNormalUserPayload = (userId: string) => ({
+    id: userId,
+    email: "user@test.com",
+    name: "Normal",
+    surname: "User",
+    role: 1,                    // UserRole.User
+    isSubUserMode: false
+});
+
+/**
+ * İşlemi yapan kullanıcının ID'sini döndürür
+ * SubUser modunda subUserId, normal modda id döner
+ *
+ * Loglama alanları için kullanılmalı:
+ * - StockHistory.user, PriceHistory.user
+ * - WorkPackageHistory.performedBy, OrderHistory.performedBy
+ * - assignee alanları
+ */
+export const getPerformerId = jest.fn().mockImplementation((user: any) => {
+    if (user.isSubUserMode && user.subUserId) {
+        return user.subUserId;  // SubUser'ın gerçek ID'si
+    }
+    return user.id;  // Normal kullanıcı ID'si (Parent User)
+});
+
+/**
+ * Veri erişimi için kullanıcı ID'sini döndürür
+ * Her zaman parent user ID döner (SubUser modunda bile)
+ *
+ * Veri sahipliği alanları için kullanılmalı:
+ * - Entity.user alanı (filtreleme için)
+ * - Sahiplik kontrolü
+ */
+export const getDataOwnerId = jest.fn().mockImplementation((user: any) => {
+    return user.id;  // Bu zaten parent ID (SubUser modunda)
+});
+
+/**
+ * SubUser modu kontrolü
+ */
+export const isSubUserMode = jest.fn().mockImplementation((user: any) => {
+    return user.isSubUserMode === true && !!user.subUserId;
+});
+
+/**
+ * SubUser'ın parent User ID'sini döndürür
+ * Güvenlik kontrollerinde kullanılır
+ */
+export const getParentUserId = jest.fn().mockImplementation((user: any) => {
+    // SubUser modunda req.currentUser.id zaten parent ID
+    return user.id;
+});
+
+/**
+ * UserContext mock'larını resetler
+ */
+export const resetUserContextMocks = () => {
+    getPerformerId.mockClear();
+    getDataOwnerId.mockClear();
+    isSubUserMode.mockClear();
+    getParentUserId.mockClear();
+};
+
 export const tracer = {
     startSpan: jest.fn().mockReturnValue({
         setTag: jest.fn().mockReturnThis(),
@@ -886,6 +974,12 @@ export const createOutboxMock = () => {
 export const setupTestEnvironment = () => {
     // Clear all mocks before each test
     jest.clearAllMocks();
+
+    // Reset UserContext mocks
+    getPerformerId.mockClear();
+    getDataOwnerId.mockClear();
+    isSubUserMode.mockClear();
+    getParentUserId.mockClear();
     
     // Reset OptimisticLockingUtil to default behavior
     OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(async (doc, operationName) => {

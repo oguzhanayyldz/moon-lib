@@ -80,6 +80,7 @@ export * from './utils/performanceMonitor.util';
 export * from './utils/audit-helper';
 export * from './utils/batchOperationHelpers.util';
 export * from './utils/redisFailoverManager';
+export * from './utils/userContext.util';
 
 // Database - MongoDB Atlas Native Transactions
 export * from './database';
