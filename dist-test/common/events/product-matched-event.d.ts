@@ -1,4 +1,15 @@
 import { Subjects } from './subjects';
+/**
+ * ProductMatchedEvent
+ *
+ * Bu event SADECE stok rezervasyonu için kullanılır.
+ * OrderProduct güncellemesi artık OrderUpdatedEvent ile yapılıyor.
+ *
+ * Refaktör sonrası:
+ * - orderProductVersion ve productType alanları kaldırıldı
+ * - Bu event'i SADECE Inventory servisi dinler
+ * - Invoice ve Shipment artık OrderUpdatedEvent ile güncelleniyor
+ */
 export interface ProductMatchedEvent {
     subject: Subjects.ProductMatched;
     data: {
