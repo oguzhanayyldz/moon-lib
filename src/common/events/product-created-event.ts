@@ -48,6 +48,8 @@ export interface ProductCreatedEventDataListItem {
     image: string;
     currency: CurrencyCode;
     tax: number;
+    price: number;
+    listPrice: number;
     status: ProductStatus;
     type: ProductType;
     unitType: UnitType;
@@ -75,6 +77,7 @@ export interface ProductCreatedEventDataListItemCombination {
     version: number;
     barcode: string;
     sku: string;
+    price: number;
     status: FixStatus;
     erpId?: string | null;
     erpPlatform?: string | null; // ERP platform adı (Parasut, Logo, Netsis...)
