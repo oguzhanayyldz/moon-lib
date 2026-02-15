@@ -172,7 +172,8 @@ export class OptimisticLockingUtil {
 
         // ✅ FIX: updateWithRetry ile version set edildiğinde EntityVersionUpdated event publish et
         // Çünkü findByIdAndUpdate post('save') hook'unu tetiklemiyor
-        const targetVersion = updateFields?.$set?.version;
+        // Her iki format için de çalışır: { version: x } veya { $set: { version: x } }
+        const targetVersion = updateFields?.$set?.version ?? updateFields?.version;
         if (targetVersion !== undefined && result) {
             try {
                 await this.publishVersionEventForUpdate(Model, result, targetVersion);

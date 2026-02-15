@@ -141,7 +141,7 @@ class OptimisticLockingUtil {
     * @description Session-aware doküman güncelleme. Session varsa transaction içinde çalışır.
     */
     static async updateWithRetry(Model, id, updateFields, options = {}, operationName, session) {
-        var _a;
+        var _a, _b;
         const docName = operationName || `${Model.modelName} ${id}`;
         const result = await this.retryWithOptimisticLocking(async () => {
             const updateOptions = Object.assign(Object.assign({ new: true, omitUndefined: true }, options), (session ? { session } : {}));
@@ -153,7 +153,8 @@ class OptimisticLockingUtil {
         }, 5, 100, `${docName} update${session ? ' (transactional)' : ''}`);
         // ✅ FIX: updateWithRetry ile version set edildiğinde EntityVersionUpdated event publish et
         // Çünkü findByIdAndUpdate post('save') hook'unu tetiklemiyor
-        const targetVersion = (_a = updateFields === null || updateFields === void 0 ? void 0 : updateFields.$set) === null || _a === void 0 ? void 0 : _a.version;
+        // Her iki format için de çalışır: { version: x } veya { $set: { version: x } }
+        const targetVersion = (_b = (_a = updateFields === null || updateFields === void 0 ? void 0 : updateFields.$set) === null || _a === void 0 ? void 0 : _a.version) !== null && _b !== void 0 ? _b : updateFields === null || updateFields === void 0 ? void 0 : updateFields.version;
         if (targetVersion !== undefined && result) {
             try {
                 await this.publishVersionEventForUpdate(Model, result, targetVersion);
