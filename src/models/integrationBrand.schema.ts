@@ -9,6 +9,7 @@ export interface IntegrationBrandAttrs extends BaseAttrs {
     code?: string;
     metadata?: Record<string, any>;
     lastSyncedAt?: Date;
+    contentHash?: string;
 }
 
 export interface IntegrationBrandDoc extends BaseDoc {
@@ -18,6 +19,7 @@ export interface IntegrationBrandDoc extends BaseDoc {
     code?: string;
     metadata?: Record<string, any>;
     lastSyncedAt: Date;
+    contentHash?: string;
 }
 
 export interface IntegrationBrandModel extends BaseModel<IntegrationBrandDoc, IntegrationBrandAttrs> { }
@@ -45,6 +47,10 @@ const integrationBrandSchemaDefinition = {
     lastSyncedAt: {
         type: Date,
         default: Date.now
+    },
+    contentHash: {
+        type: String,
+        index: true
     }
 };
 

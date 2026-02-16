@@ -16,7 +16,9 @@ export interface PlatformBrandSyncedEvent {
         displayOrder?: number;
         [key: string]: any;
       };
+      changeType?: 'new' | 'updated';  // Delta sync: Değişiklik türü
     }>;
+    deletedExternalIds?: string[];  // Delta sync: Silinen kayıt ID'leri
     syncedAt: string;
     isLastChunk: boolean;
   };

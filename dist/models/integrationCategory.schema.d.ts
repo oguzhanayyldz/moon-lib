@@ -10,6 +10,7 @@ export interface IntegrationCategoryAttrs extends BaseAttrs {
     level?: number;
     metadata?: Record<string, any>;
     lastSyncedAt?: Date;
+    contentHash?: string;
 }
 export interface IntegrationCategoryDoc extends BaseDoc {
     integrationName: ResourceName;
@@ -20,6 +21,7 @@ export interface IntegrationCategoryDoc extends BaseDoc {
     level?: number;
     metadata?: Record<string, any>;
     lastSyncedAt: Date;
+    contentHash?: string;
 }
 export interface IntegrationCategoryModel extends BaseModel<IntegrationCategoryDoc, IntegrationCategoryAttrs> {
 }

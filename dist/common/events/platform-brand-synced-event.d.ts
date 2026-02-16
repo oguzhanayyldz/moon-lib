@@ -15,7 +15,9 @@ export interface PlatformBrandSyncedEvent {
                 displayOrder?: number;
                 [key: string]: any;
             };
+            changeType?: 'new' | 'updated';
         }>;
+        deletedExternalIds?: string[];
         syncedAt: string;
         isLastChunk: boolean;
     };

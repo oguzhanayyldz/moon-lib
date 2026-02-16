@@ -11,6 +11,7 @@ export interface IntegrationCategoryAttrs extends BaseAttrs {
     level?: number;
     metadata?: Record<string, any>;
     lastSyncedAt?: Date;
+    contentHash?: string;
 }
 
 export interface IntegrationCategoryDoc extends BaseDoc {
@@ -22,6 +23,7 @@ export interface IntegrationCategoryDoc extends BaseDoc {
     level?: number;
     metadata?: Record<string, any>;
     lastSyncedAt: Date;
+    contentHash?: string;
 }
 
 export interface IntegrationCategoryModel extends BaseModel<IntegrationCategoryDoc, IntegrationCategoryAttrs> { }
@@ -55,6 +57,10 @@ const integrationCategorySchemaDefinition = {
     lastSyncedAt: {
         type: Date,
         default: Date.now
+    },
+    contentHash: {
+        type: String,
+        index: true
     }
 };
 

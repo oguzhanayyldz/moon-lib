@@ -30,6 +30,10 @@ const integrationBrandSchemaDefinition = {
     lastSyncedAt: {
         type: Date,
         default: Date.now
+    },
+    contentHash: {
+        type: String,
+        index: true
     }
 };
 // Marka ID ve entegrasyon adı için tekil indeks oluştur

@@ -45,6 +45,10 @@ const integrationCategorySchemaDefinition = {
     lastSyncedAt: {
         type: Date,
         default: Date.now
+    },
+    contentHash: {
+        type: String,
+        index: true
     }
 };
 // Kategori ID ve entegrasyon adı için tekil indeks oluştur

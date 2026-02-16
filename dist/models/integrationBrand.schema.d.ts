@@ -8,6 +8,7 @@ export interface IntegrationBrandAttrs extends BaseAttrs {
     code?: string;
     metadata?: Record<string, any>;
     lastSyncedAt?: Date;
+    contentHash?: string;
 }
 export interface IntegrationBrandDoc extends BaseDoc {
     integrationName: ResourceName;
@@ -16,6 +17,7 @@ export interface IntegrationBrandDoc extends BaseDoc {
     code?: string;
     metadata?: Record<string, any>;
     lastSyncedAt: Date;
+    contentHash?: string;
 }
 export interface IntegrationBrandModel extends BaseModel<IntegrationBrandDoc, IntegrationBrandAttrs> {
 }
