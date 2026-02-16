@@ -44,6 +44,13 @@ const integrationBrandSchemaDefinition = {
 // Marka ID ve entegrasyon adı için tekil indeks oluştur
 const integrationBrandSchema = (0, base_schema_1.createBaseSchema)(integrationBrandSchemaDefinition);
 integrationBrandSchema.index({ integrationName: 1, externalId: 1 }, { unique: true });
+// Arama performansı için compound index - platform, deleted ve name filtreleri için
+integrationBrandSchema.index({ integrationName: 1, deleted: 1, name: 1 });
+// Text index for full-text search on name (Turkish collation için daha iyi sonuç)
+integrationBrandSchema.index({ name: 'text' }, {
+    default_language: 'turkish',
+    weights: { name: 10 }
+});
 integrationBrandSchema.pre('save', function (next) {
     return __awaiter(this, void 0, void 0, function* () {
         const shouldUpdateUniqueCode = (!this.deleted && !this.deletionDate && this.uniqueCode.indexOf("base-") !== -1) ||
