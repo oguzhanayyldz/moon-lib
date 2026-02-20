@@ -2,6 +2,7 @@ import { CurrencyCode } from "../types/currency-code";
 import { ResourceName } from "../types/resourceName";
 import { Subjects } from "./subjects";
 import { OrderStatus } from "./types/order-status";
+import { OrderStatus2 } from "./types/order-status2";
 import { OrderType } from "./types/order-type";
 import { PaymentType } from "./types/payment-type";
 import { ReturnStatus } from "./types/return-status";
@@ -108,6 +109,7 @@ export interface OrderCreated {
     docSerial?: string;
     type?: OrderType;
     status?: OrderStatus;
+    status2?: OrderStatus2;
     total: number;
     totalWithOutTax?: number;
     taxTotal?: number;
