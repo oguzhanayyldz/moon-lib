@@ -23,6 +23,13 @@ export enum EntityType {
   Invoice = 'invoice',
   Shipment = 'shipment',
   CatalogMapping = 'catalog-mapping',
+  // Reporting Service Entities
+  DailyMetrics = 'daily-metrics',
+  HourlyMetrics = 'hourly-metrics',
+  WeeklyMetrics = 'weekly-metrics',
+  InventorySnapshot = 'inventory-snapshot',
+  IntegrationHealth = 'integration-health',
+  ReportConfig = 'report-config',
 }
 
 /**
@@ -41,4 +48,5 @@ export enum ServiceName {
   Shipment = 'shipment',
   Auth = 'auth',
   Notification = 'notification',
+  Reporting = 'reporting',
 }

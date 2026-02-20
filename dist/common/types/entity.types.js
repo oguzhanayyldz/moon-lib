@@ -27,6 +27,13 @@ var EntityType;
     EntityType["Invoice"] = "invoice";
     EntityType["Shipment"] = "shipment";
     EntityType["CatalogMapping"] = "catalog-mapping";
+    // Reporting Service Entities
+    EntityType["DailyMetrics"] = "daily-metrics";
+    EntityType["HourlyMetrics"] = "hourly-metrics";
+    EntityType["WeeklyMetrics"] = "weekly-metrics";
+    EntityType["InventorySnapshot"] = "inventory-snapshot";
+    EntityType["IntegrationHealth"] = "integration-health";
+    EntityType["ReportConfig"] = "report-config";
 })(EntityType || (exports.EntityType = EntityType = {}));
 /**
  * Service Names
@@ -45,4 +52,5 @@ var ServiceName;
     ServiceName["Shipment"] = "shipment";
     ServiceName["Auth"] = "auth";
     ServiceName["Notification"] = "notification";
+    ServiceName["Reporting"] = "reporting";
 })(ServiceName || (exports.ServiceName = ServiceName = {}));
