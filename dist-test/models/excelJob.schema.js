@@ -36,12 +36,12 @@ const excelJobSchemaDefinition = {
         type: String,
         required: true,
         index: true,
-        enum: ['products', 'orders', 'inventory', 'catalog', 'pricing']
+        enum: ['products', 'orders', 'inventory', 'catalog', 'pricing', 'reporting']
     },
     entityType: {
         type: String,
         index: true,
-        enum: ['product', 'category', 'brand', 'order', 'stock', 'mapping', 'catalog', 'price', 'attributes', 'category-mapping', 'brand-mapping', 'system-prices', 'catalog-prices']
+        enum: ['product', 'category', 'brand', 'order', 'stock', 'mapping', 'catalog', 'price', 'attributes', 'category-mapping', 'brand-mapping', 'system-prices', 'catalog-prices', 'report-sales', 'report-orders', 'report-products']
     },
     type: {
         type: String,
