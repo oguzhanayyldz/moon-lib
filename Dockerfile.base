@@ -1,0 +1,24 @@
+# Moon-lib Base Image
+# This image is built once and used by all services to avoid redundant builds
+# Build: docker build -f Dockerfile.base -t moon-moon-lib-base .
+# Used by: All service Dockerfile.production files
+
+FROM node:18-alpine
+
+WORKDIR /moon-lib
+
+# Copy moon-lib source
+COPY package*.json ./
+COPY tsconfig.json ./
+COPY src ./src
+
+# Install dependencies (including devDependencies for build tools like typescript)
+# Note: Using npm install instead of npm ci because moon-lib has no package-lock.json
+# Install peerDependencies explicitly for Docker build
+RUN npm install && \
+    npm install mongoose@^7.2.2 mongoose-update-if-current@^1.4.0 redis@^4.6.13 \
+    node-nats-streaming@^0.3.2 jaeger-client@^3.19.0 moment-timezone@^0.5.45 uuid@^9.0.0 && \
+    npm run build
+
+# Result: /moon-lib/dist, /moon-lib/package.json, /moon-lib/tsconfig.json, /moon-lib/node_modules
+# These paths match exactly what services expect from moon-lib-builder stage
