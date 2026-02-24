@@ -120,6 +120,7 @@ export interface OrderUpdated {
     shippingTaxRate?: number;
     note?: string;
     date?: Date;
+    dueDate?: Date;
     currency?: CurrencyCode;
     uniqueCode?: string | null;
     deleted?: boolean;

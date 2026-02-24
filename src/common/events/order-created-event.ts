@@ -122,6 +122,7 @@ export interface OrderCreated {
     shippingTaxRate?: number;
     note?: string;
     date: Date;
+    dueDate?: Date;
     currency: CurrencyCode;
     uniqueCode?: string | null;
     orderProducts?: OrderProductCretedEvent[];
