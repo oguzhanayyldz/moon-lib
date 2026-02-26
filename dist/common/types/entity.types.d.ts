@@ -28,7 +28,13 @@ export declare enum EntityType {
     WeeklyMetrics = "weekly-metrics",
     InventorySnapshot = "inventory-snapshot",
     IntegrationHealth = "integration-health",
-    ReportConfig = "report-config"
+    ReportConfig = "report-config",
+    Plan = "plan",
+    Addon = "addon",
+    Subscription = "subscription",
+    SubscriptionPayment = "subscription-payment",
+    PaymentMethod = "payment-method",
+    UserConfig = "user-config"
 }
 /**
  * Service Names
@@ -46,5 +52,6 @@ export declare enum ServiceName {
     Shipment = "shipment",
     Auth = "auth",
     Notification = "notification",
-    Reporting = "reporting"
+    Reporting = "reporting",
+    Subscription = "subscription"
 }

@@ -63,6 +63,8 @@ export declare enum Subjects {
     CustomerAddressUpdated = "customer:address:updated",
     CatalogMappingUpdated = "catalog:mapping:updated",
     UpdateOrderCargoLabel = "update:order:cargo:label",
-    OrderWorkPackageInfoBulkUpdated = "order:workpackage-info:bulk-updated"
+    OrderWorkPackageInfoBulkUpdated = "order:workpackage-info:bulk-updated",
+    SubscriptionUpdated = "subscription:updated",
+    SubscriptionPaymentCompleted = "subscription:payment:completed"
 }
 //# sourceMappingURL=subjects.d.ts.map

@@ -30,6 +30,13 @@ export enum EntityType {
   InventorySnapshot = 'inventory-snapshot',
   IntegrationHealth = 'integration-health',
   ReportConfig = 'report-config',
+  // Subscription Service Entities
+  Plan = 'plan',
+  Addon = 'addon',
+  Subscription = 'subscription',
+  SubscriptionPayment = 'subscription-payment',
+  PaymentMethod = 'payment-method',
+  UserConfig = 'user-config',
 }
 
 /**
@@ -49,4 +56,5 @@ export enum ServiceName {
   Auth = 'auth',
   Notification = 'notification',
   Reporting = 'reporting',
+  Subscription = 'subscription',
 }

@@ -93,6 +93,9 @@ function getEventPriority(eventType) {
         [common_1.Subjects.EntityVersionBulkUpdated]: 5,
         [common_1.Subjects.NotificationCreated]: 5,
         [common_1.Subjects.SyncRequested]: 5,
+        // Priority 2: Subscription (ana entity)
+        [common_1.Subjects.SubscriptionUpdated]: 2,
+        [common_1.Subjects.SubscriptionPaymentCompleted]: 2,
     };
     return (_a = PRIORITY_MAP[eventType]) !== null && _a !== void 0 ? _a : 3;
 }

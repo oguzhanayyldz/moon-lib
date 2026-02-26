@@ -82,3 +82,5 @@ export * from './customer-address-updated-event';
 export * from './catalog-mapping-updated-event';
 export * from './update-order-cargo-label-event';
 export * from './order-workpackage-info-updated-event';
+export * from './subscription-updated-event';
+export * from './subscription-payment-completed-event';

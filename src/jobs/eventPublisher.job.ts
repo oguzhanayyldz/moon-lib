@@ -66,6 +66,8 @@ import { CustomerAddressUpdatedPublisher } from '../events/publishers/customerAd
 import { CatalogMappingUpdatedPublisher } from '../events/publishers/catalogMappingUpdated.publisher';
 import { UpdateOrderCargoLabelPublisher } from '../events/publishers/updateOrderCargoLabel.publisher';
 import { OrderWorkPackageInfoBulkUpdatedPublisher } from '../events/publishers/orderWorkPackageInfoBulkUpdated.publisher';
+import { SubscriptionUpdatedPublisher } from '../events/publishers/subscriptionUpdated.publisher';
+import { SubscriptionPaymentCompletedPublisher } from '../events/publishers/subscriptionPaymentCompleted.publisher';
 
 
 export class EventPublisherJob {
@@ -725,6 +727,14 @@ export class EventPublisherJob {
                 break;
             case Subjects.OrderWorkPackageInfoBulkUpdated:
                 await new OrderWorkPackageInfoBulkUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.SubscriptionUpdated:
+                await new SubscriptionUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.SubscriptionPaymentCompleted:
+                await new SubscriptionPaymentCompletedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

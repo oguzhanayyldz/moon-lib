@@ -65,7 +65,9 @@ import {
     PlatformCategorySyncedEvent,
     PlatformBrandSyncedEvent,
     UpdateOrderCargoLabelEvent,
-    OrderWorkPackageInfoBulkUpdatedEvent
+    OrderWorkPackageInfoBulkUpdatedEvent,
+    SubscriptionUpdatedEvent,
+    SubscriptionPaymentCompletedEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -133,6 +135,8 @@ interface EventPayloadMap {
     [Subjects.PlatformBrandSynced]: PlatformBrandSyncedEvent['data'];
     [Subjects.UpdateOrderCargoLabel]: UpdateOrderCargoLabelEvent['data'];
     [Subjects.OrderWorkPackageInfoBulkUpdated]: OrderWorkPackageInfoBulkUpdatedEvent['data'];
+    [Subjects.SubscriptionUpdated]: SubscriptionUpdatedEvent['data'];
+    [Subjects.SubscriptionPaymentCompleted]: SubscriptionPaymentCompletedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
@@ -254,6 +258,10 @@ export function getEventPriority(eventType: string): number {
         [Subjects.EntityVersionBulkUpdated]: 5,
         [Subjects.NotificationCreated]: 5,
         [Subjects.SyncRequested]: 5,
+
+        // Priority 2: Subscription (ana entity)
+        [Subjects.SubscriptionUpdated]: 2,
+        [Subjects.SubscriptionPaymentCompleted]: 2,
     };
     
     return PRIORITY_MAP[eventType] ?? 3;

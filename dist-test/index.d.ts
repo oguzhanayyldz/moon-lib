@@ -114,6 +114,8 @@ export * from './events/publishers/customerAddressUpdated.publisher';
 export * from './events/publishers/catalogMappingUpdated.publisher';
 export * from './events/publishers/updateOrderCargoLabel.publisher';
 export * from './events/publishers/orderWorkPackageInfoBulkUpdated.publisher';
+export * from './events/publishers/subscriptionUpdated.publisher';
+export * from './events/publishers/subscriptionPaymentCompleted.publisher';
 export * from './common/errors';
 export * from './common/events';
 export * from './common/interfaces';

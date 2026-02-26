@@ -34,6 +34,13 @@ var EntityType;
     EntityType["InventorySnapshot"] = "inventory-snapshot";
     EntityType["IntegrationHealth"] = "integration-health";
     EntityType["ReportConfig"] = "report-config";
+    // Subscription Service Entities
+    EntityType["Plan"] = "plan";
+    EntityType["Addon"] = "addon";
+    EntityType["Subscription"] = "subscription";
+    EntityType["SubscriptionPayment"] = "subscription-payment";
+    EntityType["PaymentMethod"] = "payment-method";
+    EntityType["UserConfig"] = "user-config";
 })(EntityType || (exports.EntityType = EntityType = {}));
 /**
  * Service Names
@@ -53,4 +60,5 @@ var ServiceName;
     ServiceName["Auth"] = "auth";
     ServiceName["Notification"] = "notification";
     ServiceName["Reporting"] = "reporting";
+    ServiceName["Subscription"] = "subscription";
 })(ServiceName || (exports.ServiceName = ServiceName = {}));
