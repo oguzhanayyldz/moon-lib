@@ -1,4 +1,5 @@
 import { Subjects } from "./subjects";
+import { IntegrationLimits } from "../types/integration-limits";
 
 export interface SubscriptionUpdatedEvent {
     subject: Subjects.SubscriptionUpdated;
@@ -10,6 +11,7 @@ export interface SubscriptionUpdatedEvent {
         planSlug: string;
         limits: {
             integrationLimit: number;
+            integrationLimits?: IntegrationLimits;
             orderLimit: number;
             productLimit: number;
             subUserLimit: number;
@@ -17,6 +19,7 @@ export interface SubscriptionUpdatedEvent {
         };
         addons: Array<{ type: string; value: number; quantity: number }>;
         status: "active" | "trial" | "past_due" | "cancelled" | "expired";
+        currentPeriodStart?: Date;
         currentPeriodEnd: Date;
     };
 }

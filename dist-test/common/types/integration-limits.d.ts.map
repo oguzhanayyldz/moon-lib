@@ -1,0 +1,1 @@
+{"version":3,"file":"integration-limits.d.ts","sourceRoot":"","sources":["../../../src/common/types/integration-limits.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,iBAAiB;IAC9B,WAAW,EAAE,MAAM,CAAC;IACpB,SAAS,EAAE,MAAM,CAAC;IAClB,GAAG,EAAE,MAAM,CAAC;IACZ,KAAK,EAAE,MAAM,CAAC;IACd,MAAM,EAAE,MAAM,CAAC;IACf,OAAO,EAAE,MAAM,CAAC;IAChB,KAAK,EAAE,MAAM,CAAC;CACjB"}

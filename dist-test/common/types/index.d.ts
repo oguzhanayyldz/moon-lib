@@ -20,4 +20,5 @@ export * from './user-role';
 export * from './api-client.types';
 export * from './permission.types';
 export * from './integration-params';
+export * from './integration-limits';
 //# sourceMappingURL=index.d.ts.map
