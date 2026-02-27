@@ -17,7 +17,7 @@ export interface SubscriptionUpdatedEvent {
             subUserLimit: number;
             warehouseLimit: number;
         };
-        addons: Array<{ type: string; value: number; quantity: number }>;
+        addons: Array<{ type: string; value: number; quantity: number; integrationGroup?: string }>;
         status: "active" | "trial" | "past_due" | "cancelled" | "expired";
         currentPeriodStart?: Date;
         currentPeriodEnd: Date;

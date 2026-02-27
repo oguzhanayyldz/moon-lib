@@ -20,6 +20,7 @@ export interface SubscriptionUpdatedEvent {
             type: string;
             value: number;
             quantity: number;
+            integrationGroup?: string;
         }>;
         status: "active" | "trial" | "past_due" | "cancelled" | "expired";
         currentPeriodStart?: Date;
