@@ -3,7 +3,7 @@ import { IntegrationLimits } from "../types/integration-limits";
 export interface SubscriptionUpdatedEvent {
     subject: Subjects.SubscriptionUpdated;
     data: {
-        action: "created" | "plan_changed" | "addon_changed" | "cancelled" | "renewed" | "expired";
+        action: "created" | "plan_changed" | "addon_changed" | "cancelled" | "renewed" | "expired" | "trial_started" | "trial_expiring" | "trial_expired" | "trial_converted" | "addon_expired" | "limits_enforced";
         subscriptionId: string;
         userId: string;
         planId: string;
