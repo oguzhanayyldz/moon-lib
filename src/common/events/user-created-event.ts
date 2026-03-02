@@ -15,6 +15,8 @@ export interface UserCreatedEvent {
         role: UserRole;
         parentUser: string | null;
         uniqueCode?: string | null;
+        preferredLanguage?: 'tr' | 'en';
+        onboardingCompleted?: boolean;
         creationDate?: Date;
         updatedOn?: Date;
     };
