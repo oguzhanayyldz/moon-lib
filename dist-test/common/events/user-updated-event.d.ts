@@ -14,6 +14,8 @@ export interface UserUpdatedEvent {
         role: UserRole;
         parentUser?: string | null;
         uniqueCode?: string | null;
+        preferredLanguage?: 'tr' | 'en';
+        onboardingCompleted?: boolean;
         deleted?: boolean;
         deletionDate?: Date;
     };
