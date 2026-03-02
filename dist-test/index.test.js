@@ -756,6 +756,15 @@ exports.OptimisticLockingUtil = {
         }
         return result;
     }),
+    bulkWithRetry: jest.fn().mockImplementation(async (model, operations, session, operationName) => {
+        // Mock bulk operations
+        return {
+            insertedCount: operations.filter((op) => op.insertOne).length,
+            modifiedCount: operations.filter((op) => op.updateOne || op.updateMany).length,
+            deletedCount: operations.filter((op) => op.deleteOne || op.deleteMany).length,
+            matchedCount: operations.length
+        };
+    }),
     bulkWithContext: jest.fn().mockImplementation(async (model, operations, req, operationName, options = {}) => {
         // Extract session from request if available
         const session = req === null || req === void 0 ? void 0 : req.dbSession;
@@ -921,6 +930,14 @@ const setupTestEnvironment = () => {
             throw new Error(`Document not found: ${id}`);
         }
         return result;
+    });
+    exports.OptimisticLockingUtil.bulkWithRetry = jest.fn().mockImplementation(async (model, operations, session, operationName) => {
+        return {
+            insertedCount: operations.filter((op) => op.insertOne).length,
+            modifiedCount: operations.filter((op) => op.updateOne || op.updateMany).length,
+            deletedCount: operations.filter((op) => op.deleteOne || op.deleteMany).length,
+            matchedCount: operations.length
+        };
     });
     exports.OptimisticLockingUtil.bulkWithContext = jest.fn().mockImplementation(async (model, operations, req, operationName, options = {}) => {
         return {

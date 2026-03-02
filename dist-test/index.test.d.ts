@@ -340,6 +340,7 @@ export declare const OptimisticLockingUtil: {
     getStats: jest.Mock<any, any, any>;
     saveWithContext: jest.Mock<any, any, any>;
     updateWithContext: jest.Mock<any, any, any>;
+    bulkWithRetry: jest.Mock<any, any, any>;
     bulkWithContext: jest.Mock<any, any, any>;
 };
 export declare const EventPublisher: {

@@ -806,6 +806,17 @@ export const OptimisticLockingUtil = {
             return result;
         }
     ),
+    bulkWithRetry: jest.fn().mockImplementation(
+        async (model: any, operations: any[], session?: any, operationName?: string) => {
+            // Mock bulk operations
+            return {
+                insertedCount: operations.filter((op: any) => op.insertOne).length,
+                modifiedCount: operations.filter((op: any) => op.updateOne || op.updateMany).length,
+                deletedCount: operations.filter((op: any) => op.deleteOne || op.deleteMany).length,
+                matchedCount: operations.length
+            };
+        }
+    ),
     bulkWithContext: jest.fn().mockImplementation(
         async (model, operations, req, operationName, options = {}) => {
             // Extract session from request if available
@@ -1012,6 +1023,17 @@ export const setupTestEnvironment = () => {
         }
     );
 
+    OptimisticLockingUtil.bulkWithRetry = jest.fn().mockImplementation(
+        async (model: any, operations: any[], session?: any, operationName?: string) => {
+            return {
+                insertedCount: operations.filter((op: any) => op.insertOne).length,
+                modifiedCount: operations.filter((op: any) => op.updateOne || op.updateMany).length,
+                deletedCount: operations.filter((op: any) => op.deleteOne || op.deleteMany).length,
+                matchedCount: operations.length
+            };
+        }
+    );
+
     OptimisticLockingUtil.bulkWithContext = jest.fn().mockImplementation(
         async (model, operations, req, operationName, options = {}) => {
             return {
@@ -1022,7 +1044,7 @@ export const setupTestEnvironment = () => {
             };
         }
     );
-    
+
     // Reset NATS publish mock
     natsWrapper.client.publish = jest.fn().mockImplementation((subject: string, data: string, callback: () => void) => {
         if (callback) callback();
