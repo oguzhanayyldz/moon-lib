@@ -19,6 +19,8 @@ export interface UserPayload {
     subUserId?: string;       // SubUser'ın gerçek ID'si
     subUserEmail?: string;    // SubUser'ın email'i
     subUserRole?: UserRole;   // SubUser'ın rolü (her zaman SubUser)
+    emailVerified?: boolean;
+    onboardingCompleted?: boolean;
 }
 
 // Helper functions for SubUser context

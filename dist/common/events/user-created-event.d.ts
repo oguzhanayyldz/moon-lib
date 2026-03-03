@@ -15,6 +15,7 @@ export interface UserCreatedEvent {
         parentUser: string | null;
         uniqueCode?: string | null;
         preferredLanguage?: 'tr' | 'en';
+        emailVerified?: boolean;
         onboardingCompleted?: boolean;
         creationDate?: Date;
         updatedOn?: Date;

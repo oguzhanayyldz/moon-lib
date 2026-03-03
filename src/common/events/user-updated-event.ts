@@ -16,6 +16,7 @@ export interface UserUpdatedEvent {
         parentUser?: string | null;
         uniqueCode?: string | null;
         preferredLanguage?: 'tr' | 'en';
+        emailVerified?: boolean;
         onboardingCompleted?: boolean;
         deleted?: boolean;
         deletionDate?: Date;

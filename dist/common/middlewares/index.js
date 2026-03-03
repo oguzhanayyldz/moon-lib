@@ -23,3 +23,6 @@ __exportStar(require("./validate-body"), exports);
 __exportStar(require("./require-permission"), exports);
 __exportStar(require("./require-platform-permission"), exports);
 __exportStar(require("./sub-user-context"), exports);
+__exportStar(require("./require-email-verified"), exports);
+__exportStar(require("./require-onboarding"), exports);
+__exportStar(require("./require-active-subscription"), exports);
