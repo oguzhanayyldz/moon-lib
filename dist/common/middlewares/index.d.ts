@@ -7,3 +7,6 @@ export * from './validate-body';
 export * from './require-permission';
 export * from './require-platform-permission';
 export * from './sub-user-context';
+export * from './require-email-verified';
+export * from './require-onboarding';
+export * from './require-active-subscription';

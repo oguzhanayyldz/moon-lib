@@ -15,6 +15,8 @@ export interface UserPayload {
     subUserId?: string;
     subUserEmail?: string;
     subUserRole?: UserRole;
+    emailVerified?: boolean;
+    onboardingCompleted?: boolean;
 }
 export declare const getEffectiveUserId: (user: UserPayload) => string;
 export declare const getActualUserId: (user: UserPayload) => string;
