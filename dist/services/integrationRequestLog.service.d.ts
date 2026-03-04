@@ -165,4 +165,8 @@ export declare class IntegrationRequestLogService {
      * Nested objelerde hassas bilgileri temizler
      */
     private static recursiveSanitize;
+    /**
+     * String body'lerdeki hassas bilgileri temizler (XML, URL-encoded)
+     */
+    private static sanitizeStringBody;
 }
