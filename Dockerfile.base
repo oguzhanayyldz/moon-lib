@@ -1,19 +1,17 @@
 # Moon-lib Base Image
-# This image is built once and used by all services to avoid redundant builds
-# Build: docker build -f Dockerfile.base -t moon-moon-lib-base .
-# Used by: All service Dockerfile.production files
+# Built once, used by all services as moon-lib-builder stage
+# dist/ is pre-built in the repo, only need npm install for runtime node_modules
 
 FROM node:18-alpine
 
 WORKDIR /moon-lib
 
-# Copy moon-lib source
-COPY package*.json ./
-COPY tsconfig.json ./
-COPY src ./src
+# Copy pre-built dist (already in repo, no need to run tsc)
+COPY dist ./dist
 
-# Install all dependencies + peer dependencies in a single command, then build
-RUN npm install --install-peer-deps && npm run build
+# Copy package files and install runtime dependencies only
+COPY package.json ./
+COPY tsconfig.json ./
+RUN npm install --omit=dev --install-peer-deps
 
 # Result: /moon-lib/dist, /moon-lib/package.json, /moon-lib/tsconfig.json, /moon-lib/node_modules
-# These paths match exactly what services expect from moon-lib-builder stage
