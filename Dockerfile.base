@@ -12,6 +12,6 @@ COPY dist ./dist
 # Copy package files and install runtime dependencies only
 COPY package.json ./
 COPY tsconfig.json ./
-RUN npm install --omit=dev --install-peer-deps
+RUN npm install --omit=dev
 
 # Result: /moon-lib/dist, /moon-lib/package.json, /moon-lib/tsconfig.json, /moon-lib/node_modules
