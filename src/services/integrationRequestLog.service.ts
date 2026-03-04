@@ -679,17 +679,14 @@ export class IntegrationRequestLogService {
      */
     private static sanitizeHeaders(headers: Record<string, any>): Record<string, any> {
         const sanitized = { ...headers };
-        const sensitiveKeys = ['authorization', 'x-shopify-access-token', 'api-key', 'x-api-key'];
-        
-        sensitiveKeys.forEach(key => {
-            if (sanitized[key]) {
-                sanitized[key] = '***REDACTED***';
-            }
-            if (sanitized[key.toLowerCase()]) {
-                sanitized[key.toLowerCase()] = '***REDACTED***';
+        const sensitiveKeys = ['authorization', 'x-shopify-access-token', 'api-key', 'x-api-key', 'x-amz-access-token'];
+
+        Object.keys(sanitized).forEach(headerKey => {
+            if (sensitiveKeys.includes(headerKey.toLowerCase())) {
+                sanitized[headerKey] = '***REDACTED***';
             }
         });
-        
+
         return sanitized;
     }
 
@@ -729,10 +726,17 @@ export class IntegrationRequestLogService {
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeRequestBody(body: Record<string, any>): any {
-        if (!body || typeof body !== 'object') return this.formatBodyForStorage(body);
+        if (!body) return this.formatBodyForStorage(body);
+
+        // String body: XML veya URL-encoded olabilir
+        if (typeof body === 'string') {
+            return this.formatBodyForStorage(this.sanitizeStringBody(body as unknown as string));
+        }
+
+        if (typeof body !== 'object') return this.formatBodyForStorage(body);
 
         const sanitized = JSON.parse(JSON.stringify(body));
-        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token'];
+        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret'];
 
         this.recursiveSanitize(sanitized, sensitiveKeys);
 
@@ -745,10 +749,17 @@ export class IntegrationRequestLogService {
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeResponseBody(body: Record<string, any>): any {
-        if (!body || typeof body !== 'object') return this.formatBodyForStorage(body);
+        if (!body) return this.formatBodyForStorage(body);
+
+        // String body: XML veya URL-encoded olabilir
+        if (typeof body === 'string') {
+            return this.formatBodyForStorage(this.sanitizeStringBody(body as unknown as string));
+        }
+
+        if (typeof body !== 'object') return this.formatBodyForStorage(body);
 
         const sanitized = JSON.parse(JSON.stringify(body));
-        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token'];
+        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret'];
 
         this.recursiveSanitize(sanitized, sensitiveKeys);
 
@@ -761,7 +772,7 @@ export class IntegrationRequestLogService {
      */
     private static recursiveSanitize(obj: any, sensitiveKeys: string[]): void {
         if (typeof obj !== 'object' || obj === null) return;
-        
+
         for (const key in obj) {
             if (sensitiveKeys.includes(key.toLowerCase())) {
                 obj[key] = '***REDACTED***';
@@ -769,5 +780,28 @@ export class IntegrationRequestLogService {
                 this.recursiveSanitize(obj[key], sensitiveKeys);
             }
         }
+    }
+
+    /**
+     * String body'lerdeki hassas bilgileri temizler (XML, URL-encoded)
+     */
+    private static sanitizeStringBody(body: string): string {
+        let sanitized = body;
+
+        // XML tag'lerindeki hassas bilgileri maskele (Aras, Yurtici SOAP)
+        const xmlSensitiveTags = ['Password', 'UserName', 'wsPassword', 'wsUserName', 'CustomerCode', 'password', 'userName'];
+        xmlSensitiveTags.forEach(tag => {
+            const regex = new RegExp(`(<${tag}>)(.*?)(</${tag}>)`, 'gi');
+            sanitized = sanitized.replace(regex, `$1***REDACTED***$3`);
+        });
+
+        // URL-encoded body'deki hassas bilgileri maskele (Amazon LWA)
+        const urlSensitiveKeys = ['client_secret', 'refresh_token', 'password', 'access_token', 'token', 'secret'];
+        urlSensitiveKeys.forEach(key => {
+            const regex = new RegExp(`(${key}=)([^&]*)`, 'gi');
+            sanitized = sanitized.replace(regex, `$1***REDACTED***`);
+        });
+
+        return sanitized;
     }
 }
