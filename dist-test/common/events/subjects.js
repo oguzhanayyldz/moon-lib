@@ -72,5 +72,6 @@ var Subjects;
     // Subscription Events
     Subjects["SubscriptionUpdated"] = "subscription:updated";
     Subjects["SubscriptionPaymentCompleted"] = "subscription:payment:completed";
+    Subjects["SubscriptionPaymentFailed"] = "subscription:payment:failed";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

@@ -68,6 +68,7 @@ import { UpdateOrderCargoLabelPublisher } from '../events/publishers/updateOrder
 import { OrderWorkPackageInfoBulkUpdatedPublisher } from '../events/publishers/orderWorkPackageInfoBulkUpdated.publisher';
 import { SubscriptionUpdatedPublisher } from '../events/publishers/subscriptionUpdated.publisher';
 import { SubscriptionPaymentCompletedPublisher } from '../events/publishers/subscriptionPaymentCompleted.publisher';
+import { SubscriptionPaymentFailedPublisher } from '../events/publishers/subscriptionPaymentFailed.publisher';
 
 
 export class EventPublisherJob {
@@ -735,6 +736,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.SubscriptionPaymentCompleted:
                 await new SubscriptionPaymentCompletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.SubscriptionPaymentFailed:
+                await new SubscriptionPaymentFailedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

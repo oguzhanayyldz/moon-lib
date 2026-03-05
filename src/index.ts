@@ -154,6 +154,7 @@ export * from './events/publishers/updateOrderCargoLabel.publisher';
 export * from './events/publishers/orderWorkPackageInfoBulkUpdated.publisher';
 export * from './events/publishers/subscriptionUpdated.publisher';
 export * from './events/publishers/subscriptionPaymentCompleted.publisher';
+export * from './events/publishers/subscriptionPaymentFailed.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

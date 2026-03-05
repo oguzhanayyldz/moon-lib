@@ -102,3 +102,4 @@ __exportStar(require("./order-workpackage-info-updated-event"), exports);
 // Subscription Events
 __exportStar(require("./subscription-updated-event"), exports);
 __exportStar(require("./subscription-payment-completed-event"), exports);
+__exportStar(require("./subscription-payment-failed-event"), exports);

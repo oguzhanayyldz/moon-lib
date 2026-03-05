@@ -88,3 +88,4 @@ export * from './order-workpackage-info-updated-event';
 // Subscription Events
 export * from './subscription-updated-event';
 export * from './subscription-payment-completed-event';
+export * from './subscription-payment-failed-event';

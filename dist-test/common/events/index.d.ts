@@ -84,4 +84,5 @@ export * from './update-order-cargo-label-event';
 export * from './order-workpackage-info-updated-event';
 export * from './subscription-updated-event';
 export * from './subscription-payment-completed-event';
+export * from './subscription-payment-failed-event';
 //# sourceMappingURL=index.d.ts.map

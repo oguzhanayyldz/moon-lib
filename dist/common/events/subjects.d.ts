@@ -65,5 +65,6 @@ export declare enum Subjects {
     UpdateOrderCargoLabel = "update:order:cargo:label",
     OrderWorkPackageInfoBulkUpdated = "order:workpackage-info:bulk-updated",
     SubscriptionUpdated = "subscription:updated",
-    SubscriptionPaymentCompleted = "subscription:payment:completed"
+    SubscriptionPaymentCompleted = "subscription:payment:completed",
+    SubscriptionPaymentFailed = "subscription:payment:failed"
 }
