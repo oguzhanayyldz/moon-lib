@@ -4,6 +4,9 @@
 
 FROM node:18-alpine
 
+# Fix npm 10.8.2 "Tracker idealTree already exists" bug in BuildKit
+RUN npm install -g npm@9.9.3
+
 WORKDIR /moon-lib
 
 # Copy pre-built dist (already in repo, no need to run tsc)
