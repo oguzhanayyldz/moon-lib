@@ -59,6 +59,7 @@ function getEventPriority(eventType) {
         // Priority 1: Core (User) + Delete (silme EN ÖNCELİKLİ!)
         [common_1.Subjects.UserCreated]: 1,
         [common_1.Subjects.UserUpdated]: 1,
+        [common_1.Subjects.UserConfigUpdated]: 1,
         [common_1.Subjects.EntityDeleted]: 1, // Silme işlemi en öncelikli - önce sil, sonra yenisini oluştur
         // Priority 2: Primary Entity (Create/Update)
         [common_1.Subjects.ProductCreated]: 2,

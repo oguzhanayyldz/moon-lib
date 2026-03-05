@@ -12,6 +12,7 @@ import { CombinationCreatedPublisher } from '../events/publishers/combinationCre
 import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpdated.publisher';
 import { UserCreatedPublisher } from '../events/publishers/userCreated.publisher';
 import { UserUpdatedPublisher } from '../events/publishers/userUpdated.publisher';
+import { UserConfigUpdatedPublisher } from '../events/publishers/userConfigUpdated.publisher';
 import { IntegrationCommandPublisher } from '../events/publishers/integrationCommand.publisher';
 import { ProductStockCreatedPublisher } from '../events/publishers/productStockCreated.publisher';
 import { ProductStockUpdatedPublisher } from '../events/publishers/productStockUpdated.publisher';
@@ -520,6 +521,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.UserUpdated:
                 await new UserUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.UserConfigUpdated:
+                await new UserConfigUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case Subjects.IntegrationCommand:

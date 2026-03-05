@@ -4,6 +4,7 @@ export * from './event.interface';
 export * from './subjects';
 export * from './user-created-event';
 export * from './user-updated-event';
+export * from './user-config-updated-event';
 export * from './product-created-event';
 export * from './product-integration-created-event';
 export * from './product-updated-event';

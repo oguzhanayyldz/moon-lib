@@ -17,6 +17,7 @@ var Subjects;
     Subjects["RelationProductLinkUpdated"] = "relation:product:link:updated";
     Subjects["UserCreated"] = "user:created";
     Subjects["UserUpdated"] = "user:updated";
+    Subjects["UserConfigUpdated"] = "user:config:updated";
     Subjects["StockCreated"] = "stock:created";
     Subjects["StockUpdated"] = "stock:updated";
     Subjects["OrderCreated"] = "order:created";

@@ -13,6 +13,7 @@ export enum Subjects {
     RelationProductLinkUpdated = "relation:product:link:updated",
     UserCreated = "user:created",
     UserUpdated = "user:updated",
+    UserConfigUpdated = "user:config:updated",
     StockCreated = "stock:created",
     StockUpdated = "stock:updated",
     OrderCreated = "order:created",

@@ -96,6 +96,7 @@ __exportStar(require("./jobs/deadLetterProcessor.job"), exports);
 // Events
 __exportStar(require("./events/publishers/userCreated.publisher"), exports);
 __exportStar(require("./events/publishers/userUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/userConfigUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productIntegrationCreated.publisher"), exports);

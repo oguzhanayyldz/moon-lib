@@ -95,6 +95,7 @@ export * from './jobs/deadLetterProcessor.job';
 // Events
 export * from './events/publishers/userCreated.publisher';
 export * from './events/publishers/userUpdated.publisher';
+export * from './events/publishers/userConfigUpdated.publisher';
 export * from './events/publishers/productCreated.publisher';
 export * from './events/publishers/productUpdated.publisher';
 export * from './events/publishers/productIntegrationCreated.publisher';

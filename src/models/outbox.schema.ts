@@ -14,6 +14,7 @@ import {
     CombinationUpdatedEvent,
     UserCreatedEvent,
     UserUpdatedEvent,
+    UserConfigUpdatedEvent,
     IntegrationCommandEvent,
     ProductStockCreatedEvent,
     ProductStockUpdatedEvent,
@@ -89,6 +90,7 @@ interface EventPayloadMap {
     [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
+    [Subjects.UserConfigUpdated]: UserConfigUpdatedEvent['data'];
     [Subjects.IntegrationCommand]: IntegrationCommandEvent['data'];
     [Subjects.IntegrationCommandResult]: IntegrationCommandResultEvent['data'];
     [Subjects.ProductStockCreated]: ProductStockCreatedEvent['data'];
@@ -221,6 +223,7 @@ export function getEventPriority(eventType: string): number {
         // Priority 1: Core (User) + Delete (silme EN ÖNCELİKLİ!)
         [Subjects.UserCreated]: 1,
         [Subjects.UserUpdated]: 1,
+        [Subjects.UserConfigUpdated]: 1,
         [Subjects.EntityDeleted]: 1, // Silme işlemi en öncelikli - önce sil, sonra yenisini oluştur
         
         // Priority 2: Primary Entity (Create/Update)
