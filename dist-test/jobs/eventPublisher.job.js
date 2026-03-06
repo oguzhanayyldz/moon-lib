@@ -13,6 +13,7 @@ const combinationCreated_publisher_1 = require("../events/publishers/combination
 const combinationUpdated_publisher_1 = require("../events/publishers/combinationUpdated.publisher");
 const userCreated_publisher_1 = require("../events/publishers/userCreated.publisher");
 const userUpdated_publisher_1 = require("../events/publishers/userUpdated.publisher");
+const userConfigUpdated_publisher_1 = require("../events/publishers/userConfigUpdated.publisher");
 const integrationCommand_publisher_1 = require("../events/publishers/integrationCommand.publisher");
 const productStockCreated_publisher_1 = require("../events/publishers/productStockCreated.publisher");
 const productStockUpdated_publisher_1 = require("../events/publishers/productStockUpdated.publisher");
@@ -69,6 +70,7 @@ const updateOrderCargoLabel_publisher_1 = require("../events/publishers/updateOr
 const orderWorkPackageInfoBulkUpdated_publisher_1 = require("../events/publishers/orderWorkPackageInfoBulkUpdated.publisher");
 const subscriptionUpdated_publisher_1 = require("../events/publishers/subscriptionUpdated.publisher");
 const subscriptionPaymentCompleted_publisher_1 = require("../events/publishers/subscriptionPaymentCompleted.publisher");
+const subscriptionPaymentFailed_publisher_1 = require("../events/publishers/subscriptionPaymentFailed.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
     ) {
@@ -440,6 +442,10 @@ class EventPublisherJob {
                 await new userUpdated_publisher_1.UserUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            case common_1.Subjects.UserConfigUpdated:
+                await new userConfigUpdated_publisher_1.UserConfigUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
             case common_1.Subjects.IntegrationCommand:
                 await new integrationCommand_publisher_1.IntegrationCommandPublisher(this.natsClient)
                     .publish(Object.assign({ requestId: event.id }, event.payload));
@@ -654,6 +660,10 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.SubscriptionPaymentCompleted:
                 await new subscriptionPaymentCompleted_publisher_1.SubscriptionPaymentCompletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.SubscriptionPaymentFailed:
+                await new subscriptionPaymentFailed_publisher_1.SubscriptionPaymentFailedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

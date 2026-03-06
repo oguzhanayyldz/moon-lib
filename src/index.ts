@@ -95,6 +95,7 @@ export * from './jobs/deadLetterProcessor.job';
 // Events
 export * from './events/publishers/userCreated.publisher';
 export * from './events/publishers/userUpdated.publisher';
+export * from './events/publishers/userConfigUpdated.publisher';
 export * from './events/publishers/productCreated.publisher';
 export * from './events/publishers/productUpdated.publisher';
 export * from './events/publishers/productIntegrationCreated.publisher';
@@ -154,6 +155,7 @@ export * from './events/publishers/updateOrderCargoLabel.publisher';
 export * from './events/publishers/orderWorkPackageInfoBulkUpdated.publisher';
 export * from './events/publishers/subscriptionUpdated.publisher';
 export * from './events/publishers/subscriptionPaymentCompleted.publisher';
+export * from './events/publishers/subscriptionPaymentFailed.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

@@ -25,6 +25,7 @@ export interface SubscriptionUpdatedEvent {
         status: "active" | "trial" | "past_due" | "cancelled" | "expired";
         currentPeriodStart?: Date;
         currentPeriodEnd: Date;
+        workPackagesEnabled?: boolean;
     };
 }
 //# sourceMappingURL=subscription-updated-event.d.ts.map

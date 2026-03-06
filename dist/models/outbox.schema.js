@@ -59,6 +59,7 @@ function getEventPriority(eventType) {
         // Priority 1: Core (User) + Delete (silme EN ÖNCELİKLİ!)
         [common_1.Subjects.UserCreated]: 1,
         [common_1.Subjects.UserUpdated]: 1,
+        [common_1.Subjects.UserConfigUpdated]: 1,
         [common_1.Subjects.EntityDeleted]: 1, // Silme işlemi en öncelikli - önce sil, sonra yenisini oluştur
         // Priority 2: Primary Entity (Create/Update)
         [common_1.Subjects.ProductCreated]: 2,
@@ -96,6 +97,7 @@ function getEventPriority(eventType) {
         // Priority 2: Subscription (ana entity)
         [common_1.Subjects.SubscriptionUpdated]: 2,
         [common_1.Subjects.SubscriptionPaymentCompleted]: 2,
+        [common_1.Subjects.SubscriptionPaymentFailed]: 2,
     };
     return (_a = PRIORITY_MAP[eventType]) !== null && _a !== void 0 ? _a : 3;
 }

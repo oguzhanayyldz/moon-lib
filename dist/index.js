@@ -96,6 +96,7 @@ __exportStar(require("./jobs/deadLetterProcessor.job"), exports);
 // Events
 __exportStar(require("./events/publishers/userCreated.publisher"), exports);
 __exportStar(require("./events/publishers/userUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/userConfigUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productIntegrationCreated.publisher"), exports);
@@ -155,6 +156,7 @@ __exportStar(require("./events/publishers/updateOrderCargoLabel.publisher"), exp
 __exportStar(require("./events/publishers/orderWorkPackageInfoBulkUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/subscriptionUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/subscriptionPaymentCompleted.publisher"), exports);
+__exportStar(require("./events/publishers/subscriptionPaymentFailed.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);

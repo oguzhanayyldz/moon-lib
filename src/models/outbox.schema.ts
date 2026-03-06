@@ -14,6 +14,7 @@ import {
     CombinationUpdatedEvent,
     UserCreatedEvent,
     UserUpdatedEvent,
+    UserConfigUpdatedEvent,
     IntegrationCommandEvent,
     ProductStockCreatedEvent,
     ProductStockUpdatedEvent,
@@ -67,7 +68,8 @@ import {
     UpdateOrderCargoLabelEvent,
     OrderWorkPackageInfoBulkUpdatedEvent,
     SubscriptionUpdatedEvent,
-    SubscriptionPaymentCompletedEvent
+    SubscriptionPaymentCompletedEvent,
+    SubscriptionPaymentFailedEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -88,6 +90,7 @@ interface EventPayloadMap {
     [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
+    [Subjects.UserConfigUpdated]: UserConfigUpdatedEvent['data'];
     [Subjects.IntegrationCommand]: IntegrationCommandEvent['data'];
     [Subjects.IntegrationCommandResult]: IntegrationCommandResultEvent['data'];
     [Subjects.ProductStockCreated]: ProductStockCreatedEvent['data'];
@@ -137,6 +140,7 @@ interface EventPayloadMap {
     [Subjects.OrderWorkPackageInfoBulkUpdated]: OrderWorkPackageInfoBulkUpdatedEvent['data'];
     [Subjects.SubscriptionUpdated]: SubscriptionUpdatedEvent['data'];
     [Subjects.SubscriptionPaymentCompleted]: SubscriptionPaymentCompletedEvent['data'];
+    [Subjects.SubscriptionPaymentFailed]: SubscriptionPaymentFailedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
@@ -219,6 +223,7 @@ export function getEventPriority(eventType: string): number {
         // Priority 1: Core (User) + Delete (silme EN ÖNCELİKLİ!)
         [Subjects.UserCreated]: 1,
         [Subjects.UserUpdated]: 1,
+        [Subjects.UserConfigUpdated]: 1,
         [Subjects.EntityDeleted]: 1, // Silme işlemi en öncelikli - önce sil, sonra yenisini oluştur
         
         // Priority 2: Primary Entity (Create/Update)
@@ -262,6 +267,7 @@ export function getEventPriority(eventType: string): number {
         // Priority 2: Subscription (ana entity)
         [Subjects.SubscriptionUpdated]: 2,
         [Subjects.SubscriptionPaymentCompleted]: 2,
+        [Subjects.SubscriptionPaymentFailed]: 2,
     };
     
     return PRIORITY_MAP[eventType] ?? 3;

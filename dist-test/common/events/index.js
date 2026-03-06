@@ -20,6 +20,7 @@ __exportStar(require("./event.interface"), exports);
 __exportStar(require("./subjects"), exports);
 __exportStar(require("./user-created-event"), exports);
 __exportStar(require("./user-updated-event"), exports);
+__exportStar(require("./user-config-updated-event"), exports);
 __exportStar(require("./product-created-event"), exports);
 __exportStar(require("./product-integration-created-event"), exports);
 __exportStar(require("./product-updated-event"), exports);
@@ -102,4 +103,5 @@ __exportStar(require("./order-workpackage-info-updated-event"), exports);
 // Subscription Events
 __exportStar(require("./subscription-updated-event"), exports);
 __exportStar(require("./subscription-payment-completed-event"), exports);
+__exportStar(require("./subscription-payment-failed-event"), exports);
 //# sourceMappingURL=index.js.map

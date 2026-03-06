@@ -4,6 +4,7 @@ export * from './event.interface';
 export * from './subjects';
 export * from './user-created-event';
 export * from './user-updated-event';
+export * from './user-config-updated-event';
 export * from './product-created-event';
 export * from './product-integration-created-event';
 export * from './product-updated-event';
@@ -84,4 +85,5 @@ export * from './update-order-cargo-label-event';
 export * from './order-workpackage-info-updated-event';
 export * from './subscription-updated-event';
 export * from './subscription-payment-completed-event';
+export * from './subscription-payment-failed-event';
 //# sourceMappingURL=index.d.ts.map

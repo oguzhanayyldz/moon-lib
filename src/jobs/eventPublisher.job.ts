@@ -12,6 +12,7 @@ import { CombinationCreatedPublisher } from '../events/publishers/combinationCre
 import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpdated.publisher';
 import { UserCreatedPublisher } from '../events/publishers/userCreated.publisher';
 import { UserUpdatedPublisher } from '../events/publishers/userUpdated.publisher';
+import { UserConfigUpdatedPublisher } from '../events/publishers/userConfigUpdated.publisher';
 import { IntegrationCommandPublisher } from '../events/publishers/integrationCommand.publisher';
 import { ProductStockCreatedPublisher } from '../events/publishers/productStockCreated.publisher';
 import { ProductStockUpdatedPublisher } from '../events/publishers/productStockUpdated.publisher';
@@ -68,6 +69,7 @@ import { UpdateOrderCargoLabelPublisher } from '../events/publishers/updateOrder
 import { OrderWorkPackageInfoBulkUpdatedPublisher } from '../events/publishers/orderWorkPackageInfoBulkUpdated.publisher';
 import { SubscriptionUpdatedPublisher } from '../events/publishers/subscriptionUpdated.publisher';
 import { SubscriptionPaymentCompletedPublisher } from '../events/publishers/subscriptionPaymentCompleted.publisher';
+import { SubscriptionPaymentFailedPublisher } from '../events/publishers/subscriptionPaymentFailed.publisher';
 
 
 export class EventPublisherJob {
@@ -521,6 +523,10 @@ export class EventPublisherJob {
                 await new UserUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            case Subjects.UserConfigUpdated:
+                await new UserConfigUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
             case Subjects.IntegrationCommand:
                 await new IntegrationCommandPublisher(this.natsClient)
                     .publish({ requestId: event.id, ...event.payload });
@@ -735,6 +741,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.SubscriptionPaymentCompleted:
                 await new SubscriptionPaymentCompletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.SubscriptionPaymentFailed:
+                await new SubscriptionPaymentFailedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

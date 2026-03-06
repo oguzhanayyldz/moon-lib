@@ -13,6 +13,7 @@ export declare enum Subjects {
     RelationProductLinkUpdated = "relation:product:link:updated",
     UserCreated = "user:created",
     UserUpdated = "user:updated",
+    UserConfigUpdated = "user:config:updated",
     StockCreated = "stock:created",
     StockUpdated = "stock:updated",
     OrderCreated = "order:created",
@@ -65,6 +66,7 @@ export declare enum Subjects {
     UpdateOrderCargoLabel = "update:order:cargo:label",
     OrderWorkPackageInfoBulkUpdated = "order:workpackage-info:bulk-updated",
     SubscriptionUpdated = "subscription:updated",
-    SubscriptionPaymentCompleted = "subscription:payment:completed"
+    SubscriptionPaymentCompleted = "subscription:payment:completed",
+    SubscriptionPaymentFailed = "subscription:payment:failed"
 }
 //# sourceMappingURL=subjects.d.ts.map
