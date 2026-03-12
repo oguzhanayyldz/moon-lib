@@ -12,9 +12,9 @@ export interface UserConfigUpdatedEvent {
         billingAddress?: {
             line1: string;
             line2?: string;
-            city: string;
-            district: string;
-            postalCode: string;
+            city?: string;
+            district?: string;
+            postalCode?: string;
             country: string;
         } | null;
         phone?: string | null;
