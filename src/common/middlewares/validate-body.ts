@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { Schema, checkSchema, validationResult } from 'express-validator';
 import { RequestValidationError } from '../errors/request-validation-error';
 
+const sanitizeFieldName = (field: string): string =>
+    field.replace(/[^a-zA-Z0-9_.\-\[\]]/g, '').slice(0, 64);
+
 export const validateBody = (schema: Schema) => {
     // checkSchema tarafından döndürülen validasyonları bir middleware içinde çalıştır
     const validations = checkSchema(schema);
@@ -28,21 +31,21 @@ export const validateBody = (schema: Schema) => {
             });
             
             // Tanımlanmayan alanları kontrol et
-            const extraFields = Object.keys(req.body).filter((field) => !desiredResult.find(x => x.key === field && (x.in === "body" || x.in === undefined)));
+            const extraFields = Object.keys(req.body).filter((field) => !desiredResult.find(x => x.key === field && (x.in === "body" || x.in === undefined))).map(sanitizeFieldName);
             if (extraFields.length > 0) {
-                let validationError: any = [{ msg: `Tanımlanmayan alanlar: ${extraFields.join(', ')}` }];
+                let validationError: any = [{ msg: `errors.validation.unknownFields::${extraFields.join(', ')}` }];
                 throw new RequestValidationError (validationError);
             }
 
-            const extraFieldsQuery = Object.keys(req.query).filter((field) => !desiredResult.find(x => x.key === field && x.in === "query"));
+            const extraFieldsQuery = Object.keys(req.query).filter((field) => !desiredResult.find(x => x.key === field && x.in === "query")).map(sanitizeFieldName);
             if (extraFieldsQuery.length > 0) {
-                let validationError: any = [{ msg: `Tanımlanmayan alanlar: ${extraFieldsQuery.join(', ')}` }];
+                let validationError: any = [{ msg: `errors.validation.unknownFields::${extraFieldsQuery.join(', ')}` }];
                 throw new RequestValidationError (validationError);
             }
 
-            const extraFieldsParams = Object.keys(req.params).filter((field) => !desiredResult.find(x => x.key === field && x.in === "params"));
+            const extraFieldsParams = Object.keys(req.params).filter((field) => !desiredResult.find(x => x.key === field && x.in === "params")).map(sanitizeFieldName);
             if (extraFieldsParams.length > 0) {
-                let validationError: any = [{ msg: `Tanımlanmayan alanlar: ${extraFieldsParams.join(', ')}` }];
+                let validationError: any = [{ msg: `errors.validation.unknownFields::${extraFieldsParams.join(', ')}` }];
                 throw new RequestValidationError (validationError);
             }
             // Her şey geçerliyse, sonraki middleware'e geç

@@ -4,12 +4,12 @@ import { ValidatorFuncParams } from "../interfaces/validator-func-params.interfa
 export const isObjectValidator = (value: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isObject: {
-            errorMessage: `${value} must be object`
+            errorMessage: `errors.validation.mustBeObject::${value}`
         },
         notEmpty: {
-            errorMessage: `${value} is not empty`
+            errorMessage: `errors.validation.notEmpty::${value}`
         },
-        errorMessage: `${value} object is required`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
@@ -31,12 +31,12 @@ export const isObjectValidator = (value: string, params?: ValidatorFuncParams): 
 export const isStringValidator = (value: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isString: {
-            errorMessage: `${value} must be string`
+            errorMessage: `errors.validation.mustBeString::${value}`
         },
         notEmpty: {
-            errorMessage: `${value} is not empty`
+            errorMessage: `errors.validation.notEmpty::${value}`
         },
-        errorMessage: `${value} must be provided`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
@@ -50,30 +50,30 @@ export const isStringValidator = (value: string, params?: ValidatorFuncParams): 
         if (params.in) {
             obj.in = params.in;
         }
-        if (params.minLength || params.minLength) {
+        if (params.minLength || params.maxLength) {
             if (params.minLength && params.maxLength) {
                 obj.isLength = {
                     options: { min: params.minLength, max: params.maxLength },
-                    errorMessage: `${value} must be ${params.minLength} between ${params.maxLength} characters`
+                    errorMessage: `errors.validation.length::${value}::${params.minLength}::${params.maxLength}`
                 };
             }
             else if (params.minLength) {
                 obj.isLength = {
                     options: { min: params.minLength },
-                    errorMessage: `${value} must be minimum ${params.minLength} characters`
+                    errorMessage: `errors.validation.minLength::${value}::${params.minLength}`
                 };
             }
             else if (params.maxLength) {
                 obj.isLength = {
                     options: { max: params.maxLength },
-                    errorMessage: `${value} must be maximum ${params.maxLength} characters`
+                    errorMessage: `errors.validation.maxLength::${value}::${params.maxLength}`
                 };
             }
         }
         if (params.isValidObject) {
             obj.custom = {
                 options: (input: any) => ObjectId.isValid(input),
-                errorMessage: `${value} must be a valid ObjectId`,
+                errorMessage: `errors.validation.mustBeId::${value}`,
             };
         }
     }
@@ -85,9 +85,9 @@ export const isInBodyValidator = (value: string, inArray: string[], params?: Val
     let obj: any = {
         isIn: {
             options: [inArray],
-            errorMessage: `Invalid ${value}. You can only send ( ${inArray.join(",")} )`,
+            errorMessage: `errors.validation.invalidValue::${value}::${inArray.join(",")}`,
         },
-        errorMessage: `${value} must be provided`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
@@ -106,9 +106,9 @@ export const isInBodyValidator = (value: string, inArray: string[], params?: Val
 export const isEmailValidator = (value: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isEmail: {
-            errorMessage: `${value} must be mail format`,
+            errorMessage: `errors.validation.email::${value}`,
         },
-        errorMessage: `${value} must be provided`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
@@ -120,7 +120,7 @@ export const isEmailValidator = (value: string, params?: ValidatorFuncParams): a
             obj.in = params.in;
         }
     }
-    
+
     return obj;
 };
 
@@ -128,12 +128,12 @@ export const isDateValidator = (value: string, params?: ValidatorFuncParams): an
     let obj: any = {
         isISO8601: {
             options: { format: "YYYY-MM-DD HH:mm:ss" },
-            errorMessage: `${value} must be date format`
+            errorMessage: `errors.validation.mustBeDate::${value}`
         },
         notEmpty: {
-            errorMessage: `${value} is not empty`
+            errorMessage: `errors.validation.notEmpty::${value}`
         },
-        errorMessage: `${value} must be provided`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
@@ -155,12 +155,12 @@ export const isDateValidator = (value: string, params?: ValidatorFuncParams): an
 export const isFloatValidator = (value: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isFloat: {
-            errorMessage: `${value} must be float value`
+            errorMessage: `errors.validation.mustBeFloat::${value}`
         },
         notEmpty: {
-            errorMessage: `${value} is not empty`
+            errorMessage: `errors.validation.notEmpty::${value}`
         },
-        errorMessage: `${value} must be provided`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
@@ -174,30 +174,30 @@ export const isFloatValidator = (value: string, params?: ValidatorFuncParams): a
         if (params.in) {
             obj.in = params.in;
         }
-        if (params.minLength || params.minLength) {
+        if (params.minLength || params.maxLength) {
             if (params.minLength && params.maxLength) {
                 obj.isFloat = {
                     options: { min: params.minLength, max: params.maxLength },
-                    errorMessage: `${value} must be ${params.minLength} between ${params.maxLength} float value`
+                    errorMessage: `errors.validation.range::${value}::${params.minLength}::${params.maxLength}`
                 };
             }
             else if (params.minLength) {
                 obj.isFloat = {
                     options: { min: params.minLength },
-                    errorMessage: `${value} must be minimum ${params.minLength} float value`
+                    errorMessage: `errors.validation.min::${value}::${params.minLength}`
                 };
             }
             else if (params.maxLength) {
                 obj.isFloat = {
                     options: { max: params.maxLength },
-                    errorMessage: `${value} must be maximum ${params.maxLength} float value`
+                    errorMessage: `errors.validation.max::${value}::${params.maxLength}`
                 };
             }
         }
         if (params.matches) {
             obj.matches = {
                 options: /^[0-9]{0,8}(\.[0-9]{1,3})?$/,
-                errorMessage: 'Invalid float value, maximum 8 digits before the decimal point and maximum 3 digits after',
+                errorMessage: `errors.validation.invalidFloatFormat::${value}`,
             };
         }
     }
@@ -208,12 +208,12 @@ export const isFloatValidator = (value: string, params?: ValidatorFuncParams): a
 export const isNumberValidator = (value: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isNumeric: {
-            errorMessage: `${value} must be number value`
+            errorMessage: `errors.validation.mustBeNumber::${value}`
         },
         notEmpty: {
-            errorMessage: `${value} is not empty`
+            errorMessage: `errors.validation.notEmpty::${value}`
         },
-        errorMessage: `${value} must be provided`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
@@ -227,30 +227,30 @@ export const isNumberValidator = (value: string, params?: ValidatorFuncParams): 
         if (params.in) {
             obj.in = params.in;
         }
-        if (params.minLength || params.minLength) {
+        if (params.minLength || params.maxLength) {
             if (params.minLength && params.maxLength) {
                 obj.isFloat = {
                     options: { min: params.minLength, max: params.maxLength },
-                    errorMessage: `${value} must be ${params.minLength} between ${params.maxLength} number value`
+                    errorMessage: `errors.validation.range::${value}::${params.minLength}::${params.maxLength}`
                 };
             }
             else if (params.minLength) {
                 obj.isFloat = {
                     options: { min: params.minLength },
-                    errorMessage: `${value} must be minimum ${params.minLength} number value`
+                    errorMessage: `errors.validation.min::${value}::${params.minLength}`
                 };
             }
             else if (params.maxLength) {
                 obj.isFloat = {
                     options: { max: params.maxLength },
-                    errorMessage: `${value} must be maximum ${params.maxLength} number value`
+                    errorMessage: `errors.validation.max::${value}::${params.maxLength}`
                 };
             }
         }
         if (params.matches) {
             obj.matches = {
                 options: /^[0-9]{0,8}(\.[0-9]{1,3})?$/,
-                errorMessage: 'Invalid float value, maximum 8 digits before the decimal point and maximum 3 digits after',
+                errorMessage: `errors.validation.invalidFloatFormat::${value}`,
             };
         }
     }
@@ -261,20 +261,20 @@ export const isNumberValidator = (value: string, params?: ValidatorFuncParams): 
 export const isArrayValidator = (attr: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isArray: {
-            errorMessage: `${attr} must be array`
+            errorMessage: `errors.validation.mustBeArray::${attr}`
         },
         notEmpty: {
-            errorMessage: `${attr} is not empty`
+            errorMessage: `errors.validation.notEmpty::${attr}`
         },
         custom: {
             options: (value: any, { req }: { req: any }) => {
                 if (Array.isArray(value) && value.length === 0) {
-                    throw new Error(`At least one ${value} must be provided`);
+                    throw new Error(`errors.validation.arrayMinOne::${attr}`);
                 }
                 return true;
             }
         },
-        errorMessage: `${attr} must be provided`
+        errorMessage: `errors.validation.required::${attr}`
     };
     if (params) {
         if (params.isOptional) {
@@ -295,11 +295,11 @@ export const isArrayValidator = (attr: string, params?: ValidatorFuncParams): an
             obj.custom = {
                 options: (value: any, { req }: { req: any }) => {
                     if (Array.isArray(value) && value.length === 0) {
-                        throw new Error(`At least one ${attr} must be provided`);
+                        throw new Error(`errors.validation.arrayMinOne::${attr}`);
                     }
                     for (var val of value) {
                         if (!ObjectId.isValid(val)) {
-                            throw new Error(`${attr} item is objectID`);
+                            throw new Error(`errors.validation.mustBeId::${attr}`);
                         }
                     }
                     return true;
@@ -313,12 +313,12 @@ export const isArrayValidator = (attr: string, params?: ValidatorFuncParams): an
 export const isBooleanValidator = (value: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isBoolean: {
-            errorMessage: `${value} must be boolean`
+            errorMessage: `errors.validation.mustBeBoolean::${value}`
         },
         notEmpty: {
-            errorMessage: `${value} is not empty`
+            errorMessage: `errors.validation.notEmpty::${value}`
         },
-        errorMessage: `${value} must be provided`
+        errorMessage: `errors.validation.required::${value}`
     };
 
     if (params) {
