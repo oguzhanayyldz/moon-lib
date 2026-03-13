@@ -1,5 +1,6 @@
 import { Subjects } from "./subjects";
 import { IntegrationLimits } from "../types/integration-limits";
+import { CronDefaults } from "../types/cron-defaults";
 export interface SubscriptionUpdatedEvent {
     subject: Subjects.SubscriptionUpdated;
     data: {
@@ -26,5 +27,7 @@ export interface SubscriptionUpdatedEvent {
         currentPeriodStart?: Date;
         currentPeriodEnd: Date;
         workPackagesEnabled?: boolean;
+        cronCustomizationEnabled?: boolean;
+        cronDefaults?: CronDefaults;
     };
 }
