@@ -6,6 +6,7 @@ import { generateRandomString, SortType, getRefDataId } from '../../common';
 import { EntityType, ServiceName } from '../../common/types';
 import { Subjects } from '../../common/events';
 import { logger } from '../../services/logger.service';
+import { EncryptionUtil } from '../../utils/encryption.util';
 
 // ✅ Global Map: Model isimlerine göre version tracking config saklama
 // Schema veya Model'e custom property eklemek çalışmadığı için global Map kullanıyoruz
@@ -85,6 +86,22 @@ export interface BaseSchemaOptions {
         parentField?: string;  // Child entity ise parent field adı (ör: 'product', 'package')
         parentEntityType?: EntityType;  // Parent entity tipi (ör: EntityType.Product)
     };
+
+    /**
+     * At-rest PII encryption: Bu alanlar MongoDB'de AES-256-GCM ile şifreli saklanır.
+     * pre-save'de encrypt, post-find'da decrypt otomatik yapılır (lean dahil).
+     *
+     * Örnek: encryptedFields: ['name', 'surname', 'email', 'identityNumber']
+     */
+    encryptedFields?: string[];
+
+    /**
+     * PII hash alanları: Bu alanların SHA-256 hash'leri otomatik oluşturulur (arama desteği).
+     * Encrypt'ten önce çalışır. Hash alan adı: `${field}Hash` (örn: email → emailHash)
+     *
+     * Örnek: hashFields: ['email', 'phone']
+     */
+    hashFields?: string[];
 }
 
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
@@ -152,6 +169,69 @@ export function createBaseSchema(
     baseSchema.plugin(updateIfCurrentPlugin);
     baseSchema.set('toJSON', { getters: true });
     baseSchema.set('toObject', { getters: true });
+
+    // At-rest PII encryption (encryptedFields option)
+    if (options.encryptedFields && options.encryptedFields.length > 0) {
+        const fields = options.encryptedFields;
+        const hashFieldsList = options.hashFields || [];
+
+        // Pre-save: hash (encrypt'ten ÖNCE) + encrypt PII fields
+        baseSchema.pre('save', function (next) {
+            if (!process.env.ENCRYPTION_KEY) return next();
+
+            // 1. Hash alanlarını oluştur (şifrelenmemiş değerden)
+            for (const field of hashFieldsList) {
+                const value = this.get(field);
+                if (typeof value === 'string' && value && !EncryptionUtil.isEncrypted(value)) {
+                    this.set(`${field}Hash`, EncryptionUtil.hashPII(value));
+                }
+            }
+
+            // 2. PII alanlarını şifrele
+            for (const field of fields) {
+                const value = this.get(field);
+                if (typeof value === 'string' && value && !EncryptionUtil.isEncrypted(value)) {
+                    this.set(field, EncryptionUtil.encrypt(value));
+                }
+            }
+            next();
+        });
+
+        // Post-find decrypt helper - hem Document hem lean plain object destekler
+        const decryptResult = (doc: unknown) => {
+            if (!doc || !process.env.ENCRYPTION_KEY) return;
+            const record = doc as Record<string, unknown>;
+            for (const field of fields) {
+                // Mongoose Document (.get/.set) veya plain object (direct access)
+                const hasGetSet = typeof (record as { get?: Function }).get === 'function';
+                const value = hasGetSet
+                    ? (record as { get: Function }).get(field)
+                    : record[field];
+                if (typeof value === 'string' && EncryptionUtil.isEncrypted(value)) {
+                    try {
+                        const decrypted = EncryptionUtil.decrypt(value);
+                        if (hasGetSet) {
+                            (record as { set: Function }).set(field, decrypted);
+                        } else {
+                            record[field] = decrypted;
+                        }
+                    } catch {
+                        // Backward compatibility: decrypt başarısız olursa orijinal değer korunur
+                    }
+                }
+            }
+        };
+
+        baseSchema.post('findOne', function (doc: unknown) {
+            decryptResult(doc);
+        });
+
+        baseSchema.post('find', function (docs: unknown[]) {
+            if (Array.isArray(docs)) {
+                docs.forEach(decryptResult);
+            }
+        });
+    }
 
     // Static methods
     baseSchema.statics = {

@@ -50,6 +50,7 @@ const uuid_1 = require("uuid");
 const common_1 = require("../../common");
 const events_1 = require("../../common/events");
 const logger_service_1 = require("../../services/logger.service");
+const encryption_util_1 = require("../../utils/encryption.util");
 // ✅ Global Map: Model isimlerine göre version tracking config saklama
 // Schema veya Model'e custom property eklemek çalışmadığı için global Map kullanıyoruz
 exports.VERSION_TRACKING_CONFIGS = new Map();
@@ -96,6 +97,66 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
     baseSchema.plugin(mongoose_update_if_current_1.updateIfCurrentPlugin);
     baseSchema.set('toJSON', { getters: true });
     baseSchema.set('toObject', { getters: true });
+    // At-rest PII encryption (encryptedFields option)
+    if (options.encryptedFields && options.encryptedFields.length > 0) {
+        const fields = options.encryptedFields;
+        const hashFieldsList = options.hashFields || [];
+        // Pre-save: hash (encrypt'ten ÖNCE) + encrypt PII fields
+        baseSchema.pre('save', function (next) {
+            if (!process.env.ENCRYPTION_KEY)
+                return next();
+            // 1. Hash alanlarını oluştur (şifrelenmemiş değerden)
+            for (const field of hashFieldsList) {
+                const value = this.get(field);
+                if (typeof value === 'string' && value && !encryption_util_1.EncryptionUtil.isEncrypted(value)) {
+                    this.set(`${field}Hash`, encryption_util_1.EncryptionUtil.hashPII(value));
+                }
+            }
+            // 2. PII alanlarını şifrele
+            for (const field of fields) {
+                const value = this.get(field);
+                if (typeof value === 'string' && value && !encryption_util_1.EncryptionUtil.isEncrypted(value)) {
+                    this.set(field, encryption_util_1.EncryptionUtil.encrypt(value));
+                }
+            }
+            next();
+        });
+        // Post-find decrypt helper - hem Document hem lean plain object destekler
+        const decryptResult = (doc) => {
+            if (!doc || !process.env.ENCRYPTION_KEY)
+                return;
+            const record = doc;
+            for (const field of fields) {
+                // Mongoose Document (.get/.set) veya plain object (direct access)
+                const hasGetSet = typeof record.get === 'function';
+                const value = hasGetSet
+                    ? record.get(field)
+                    : record[field];
+                if (typeof value === 'string' && encryption_util_1.EncryptionUtil.isEncrypted(value)) {
+                    try {
+                        const decrypted = encryption_util_1.EncryptionUtil.decrypt(value);
+                        if (hasGetSet) {
+                            record.set(field, decrypted);
+                        }
+                        else {
+                            record[field] = decrypted;
+                        }
+                    }
+                    catch (_a) {
+                        // Backward compatibility: decrypt başarısız olursa orijinal değer korunur
+                    }
+                }
+            }
+        };
+        baseSchema.post('findOne', function (doc) {
+            decryptResult(doc);
+        });
+        baseSchema.post('find', function (docs) {
+            if (Array.isArray(docs)) {
+                docs.forEach(decryptResult);
+            }
+        });
+    }
     // Static methods
     baseSchema.statics = {
         build: function (attrs) {

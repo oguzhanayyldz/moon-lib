@@ -70,6 +70,20 @@ export interface BaseSchemaOptions {
         parentField?: string;
         parentEntityType?: EntityType;
     };
+    /**
+     * At-rest PII encryption: Bu alanlar MongoDB'de AES-256-GCM ile şifreli saklanır.
+     * pre-save'de encrypt, post-find'da decrypt otomatik yapılır (lean dahil).
+     *
+     * Örnek: encryptedFields: ['name', 'surname', 'email', 'identityNumber']
+     */
+    encryptedFields?: string[];
+    /**
+     * PII hash alanları: Bu alanların SHA-256 hash'leri otomatik oluşturulur (arama desteği).
+     * Encrypt'ten önce çalışır. Hash alan adı: `${field}Hash` (örn: email → emailHash)
+     *
+     * Örnek: hashFields: ['email', 'phone']
+     */
+    hashFields?: string[];
 }
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {
     build(attrs: A): T;
