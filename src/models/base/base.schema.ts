@@ -85,6 +85,7 @@ export interface BaseSchemaOptions {
         parentField?: string;  // Child entity ise parent field adı (ör: 'product', 'package')
         parentEntityType?: EntityType;  // Parent entity tipi (ör: EntityType.Product)
     };
+
 }
 
 export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model<T> {

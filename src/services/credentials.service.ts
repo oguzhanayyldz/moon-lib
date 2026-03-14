@@ -19,6 +19,7 @@
 
 import { logger } from './logger.service';
 import { IntegrationType } from '../common/types/integration-type';
+import { EncryptionUtil } from '../utils/encryption.util';
 
 export interface ParsedShipmentSettings {
     enabled: boolean;
@@ -143,6 +144,20 @@ export class CredentialsService {
             ...baseObj,
             ...integrationObj
         };
+
+        // 2.5. Şifreli credential değerlerini otomatik decrypt et (at-rest encryption desteği)
+        if (process.env.ENCRYPTION_KEY) {
+            for (const key of Object.keys(merged)) {
+                const value = merged[key];
+                if (typeof value === 'string' && EncryptionUtil.isEncrypted(value)) {
+                    try {
+                        merged[key] = EncryptionUtil.decrypt(value);
+                    } catch {
+                        // Decrypt başarısız olursa orijinal değeri koru (backward compat)
+                    }
+                }
+            }
+        }
 
         logger.debug('CredentialsService.mergeAndParse - Merged credentials', {
             baseCount: Object.keys(baseObj).length,

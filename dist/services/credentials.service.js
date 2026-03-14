@@ -21,6 +21,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CredentialsService = void 0;
 const logger_service_1 = require("./logger.service");
 const integration_type_1 = require("../common/types/integration-type");
+const encryption_util_1 = require("../utils/encryption.util");
 class CredentialsService {
     /**
      * BASE ve Integration credentials'ı birleştirir ve parse eder
@@ -38,6 +39,20 @@ class CredentialsService {
         const integrationObj = this.toObject(integrationCredentials);
         // 2. Merge (BASE + Integration, integration override priority)
         const merged = Object.assign(Object.assign({}, baseObj), integrationObj);
+        // 2.5. Şifreli credential değerlerini otomatik decrypt et (at-rest encryption desteği)
+        if (process.env.ENCRYPTION_KEY) {
+            for (const key of Object.keys(merged)) {
+                const value = merged[key];
+                if (typeof value === 'string' && encryption_util_1.EncryptionUtil.isEncrypted(value)) {
+                    try {
+                        merged[key] = encryption_util_1.EncryptionUtil.decrypt(value);
+                    }
+                    catch (_a) {
+                        // Decrypt başarısız olursa orijinal değeri koru (backward compat)
+                    }
+                }
+            }
+        }
         logger_service_1.logger.debug('CredentialsService.mergeAndParse - Merged credentials', {
             baseCount: Object.keys(baseObj).length,
             integrationCount: Object.keys(integrationObj).length,
