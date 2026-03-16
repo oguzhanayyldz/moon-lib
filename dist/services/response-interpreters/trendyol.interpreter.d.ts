@@ -26,6 +26,9 @@ export declare class TrendyolResponseInterpreter extends BaseResponseInterpreter
     private interpretBrandList;
     /**
      * Kategori attribute'ları yorumla
+     * V1: { categoryAttributes: [...] }
+     * V2 attributes: { id, name, displayName, categoryAttributes: [...] }
+     * V2 attribute values: { content: [...], totalElements, totalPages }
      */
     private interpretCategoryAttributes;
     /**
