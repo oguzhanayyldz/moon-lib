@@ -9,7 +9,6 @@ const http_1 = __importDefault(require("http"));
 const https_1 = __importDefault(require("https"));
 const rate_limiter_flexible_1 = require("rate-limiter-flexible");
 const PQueue = require('p-queue').default;
-const api_client_types_1 = require("../common/types/api-client.types");
 const circuitBreaker_service_1 = require("./circuitBreaker.service");
 const logger_service_1 = require("./logger.service");
 class BaseApiClient {
@@ -379,7 +378,17 @@ class BaseApiClient {
                 url: requestConfig.url
             });
             await this.sleep(msBeforeNext);
-            throw new api_client_types_1.RateLimitExceededError(msBeforeNext);
+            // Bekledikten sonra tekrar consume et (pencere açılmış olmalı)
+            try {
+                const userId = this.config.userId || 'default';
+                await this.rateLimiter.consume(userId, 1);
+            }
+            catch (_a) {
+                // Hala limit aşılıyorsa, isteği yine de gönder — Trendyol tarafı 429 dönerse retry mekanizması devreye girer
+                logger_service_1.logger.warn('Rate limit still exceeded after wait, proceeding anyway', {
+                    url: requestConfig.url
+                });
+            }
         }
     }
     calculateRetryDelay(retryCount, retryConfig) {

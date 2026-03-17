@@ -502,7 +502,7 @@ export abstract class BaseApiClient implements IApiClient {
       await this.rateLimiter.consume(userId, 1);
     } catch (rateLimiterResponse: any) {
       const msBeforeNext = rateLimiterResponse.msBeforeNext || 5000;
-      
+
       logger.warn('Rate limit exceeded, waiting before retry', {
         userId: this.config.userId,
         waitTime: msBeforeNext,
@@ -510,7 +510,17 @@ export abstract class BaseApiClient implements IApiClient {
       });
 
       await this.sleep(msBeforeNext);
-      throw new RateLimitExceededError(msBeforeNext);
+
+      // Bekledikten sonra tekrar consume et (pencere açılmış olmalı)
+      try {
+        const userId = this.config.userId || 'default';
+        await this.rateLimiter.consume(userId, 1);
+      } catch {
+        // Hala limit aşılıyorsa, isteği yine de gönder — Trendyol tarafı 429 dönerse retry mekanizması devreye girer
+        logger.warn('Rate limit still exceeded after wait, proceeding anyway', {
+          url: requestConfig.url
+        });
+      }
     }
   }
 

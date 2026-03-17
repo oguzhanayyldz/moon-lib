@@ -145,9 +145,32 @@ export class TrendyolResponseInterpreter extends BaseResponseInterpreter {
 
     /**
      * Kategori attribute'ları yorumla
+     * V1: { categoryAttributes: [...] }
+     * V2 attributes: { id, name, displayName, categoryAttributes: [...] }
+     * V2 attribute values: { content: [...], totalElements, totalPages }
      */
     private interpretCategoryAttributes(response: any): InterpretedResponse {
-        const attributes = response?.categoryAttributes || response?.attributes || response || [];
+        // V2 attribute values endpoint: { content: [...], totalElements }
+        if (response?.content && Array.isArray(response.content)) {
+            const valueCount = response.content.length;
+            const totalElements = response.totalElements || valueCount;
+
+            return {
+                summary: `${totalElements} özellik değeri getirildi`,
+                success: true,
+                successCount: valueCount,
+                details: {
+                    valueCount,
+                    totalElements,
+                    totalPages: response.totalPages,
+                    page: response.page
+                },
+                parsedAt: new Date()
+            };
+        }
+
+        // V1/V2 category attributes: { categoryAttributes: [...] }
+        const attributes = response?.categoryAttributes || response?.attributes || [];
         const attributeCount = Array.isArray(attributes) ? attributes.length : 0;
 
         return {
@@ -156,7 +179,9 @@ export class TrendyolResponseInterpreter extends BaseResponseInterpreter {
             successCount: attributeCount,
             details: {
                 attributeCount,
-                requiredCount: attributes.filter((attr: any) => attr.required).length
+                requiredCount: Array.isArray(attributes)
+                    ? attributes.filter((attr: any) => attr.required).length
+                    : 0
             },
             parsedAt: new Date()
         };
