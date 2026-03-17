@@ -60,6 +60,7 @@ export interface ShipmentJobConfig {
     scheduleFrequency?: ShipmentScheduleFrequency;
     scheduleValue?: string;              // Dakika/saat sayısı veya HH:MM
     scheduledTime?: string;              // Hesaplanan cron expression
+    autoPrintLabel?: boolean;            // Kargo oluşturulduktan sonra otomatik etiket yazdır
 }
 
 /**
