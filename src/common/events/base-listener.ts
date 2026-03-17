@@ -1,6 +1,5 @@
 import { Message, Stan } from 'node-nats-streaming';
 import { Event } from './event.interface';
-import { EncryptionUtil } from '../../utils/encryption.util';
 
 export abstract class Listener<T extends Event> {
     abstract subject: T['subject'];
@@ -42,17 +41,6 @@ export abstract class Listener<T extends Event> {
         const parsed = typeof data === 'string'
             ? JSON.parse(data)
             : JSON.parse(data.toString('utf8'));
-
-        // Outbox payload encryption: şifreli payload'ı decrypt et
-        if (parsed && parsed._encrypted && typeof parsed._encrypted === 'string' && process.env.ENCRYPTION_KEY) {
-            try {
-                const decrypted = EncryptionUtil.decrypt(parsed._encrypted);
-                return JSON.parse(decrypted);
-            } catch {
-                // Decrypt başarısız olursa orijinal parsed veriyi dön (backward compat)
-                return parsed;
-            }
-        }
 
         return parsed;
     }

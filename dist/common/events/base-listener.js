@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Listener = void 0;
-const encryption_util_1 = require("../../utils/encryption.util");
 class Listener {
     constructor(client) {
         this.ackWait = 5 * 1000;
@@ -29,17 +28,6 @@ class Listener {
         const parsed = typeof data === 'string'
             ? JSON.parse(data)
             : JSON.parse(data.toString('utf8'));
-        // Outbox payload encryption: şifreli payload'ı decrypt et
-        if (parsed && parsed._encrypted && typeof parsed._encrypted === 'string' && process.env.ENCRYPTION_KEY) {
-            try {
-                const decrypted = encryption_util_1.EncryptionUtil.decrypt(parsed._encrypted);
-                return JSON.parse(decrypted);
-            }
-            catch (_a) {
-                // Decrypt başarısız olursa orijinal parsed veriyi dön (backward compat)
-                return parsed;
-            }
-        }
         return parsed;
     }
 }

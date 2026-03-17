@@ -9,7 +9,6 @@ exports.createOutboxModel = createOutboxModel;
 const mongoose_1 = __importDefault(require("mongoose"));
 const base_schema_1 = require("./base/base.schema");
 const logger_service_1 = require("../services/logger.service");
-const encryption_util_1 = require("../utils/encryption.util");
 const common_1 = require("../common");
 // Schema tanımı
 const outboxSchemaDefination = {
@@ -125,28 +124,14 @@ function extractUserIdFromPayload(payload) {
     // Bulunamazsa _system_ (en yüksek öncelikli)
     return '_system_';
 }
-// Pre-save hook: priority, userId hesapla + payload at-rest encryption
+// Pre-save hook: priority, userId hesapla
 outboxSchema.pre('save', function (next) {
     const doc = this;
     if (this.isNew) {
         // Priority'yi eventType'a göre hesapla (her zaman yeniden hesapla)
         doc.priority = getEventPriority(doc.eventType);
-        // userId'yi payload'dan çıkar (şifrelenmeden ÖNCE, her zaman yeniden hesapla)
+        // userId'yi payload'dan çıkar (her zaman yeniden hesapla)
         doc.userId = extractUserIdFromPayload(doc.payload);
-        // Payload at-rest encryption: Tüm event payload'ını şifrele
-        // EventPublisherJob NATS'e göndermeden önce decrypt eder
-        if (process.env.ENCRYPTION_KEY && doc.payload && typeof doc.payload === 'object') {
-            try {
-                const payloadStr = JSON.stringify(doc.payload);
-                doc.payload = { _encrypted: encryption_util_1.EncryptionUtil.encrypt(payloadStr) };
-            }
-            catch (err) {
-                logger_service_1.logger.warn('Outbox payload encryption failed, saving plaintext', {
-                    eventType: doc.eventType,
-                    error: err.message
-                });
-            }
-        }
         logger_service_1.logger.debug(`Outbox created: eventType=${doc.eventType}, priority=${doc.priority}, userId=${doc.userId}`);
     }
     next();
