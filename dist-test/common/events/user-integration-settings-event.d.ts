@@ -50,6 +50,7 @@ export interface ShipmentJobConfig {
     scheduleFrequency?: ShipmentScheduleFrequency;
     scheduleValue?: string;
     scheduledTime?: string;
+    autoPrintLabel?: boolean;
 }
 /**
  * JobStatistics - Job istatistikleri
