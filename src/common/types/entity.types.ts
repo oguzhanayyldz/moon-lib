@@ -37,6 +37,8 @@ export enum EntityType {
   SubscriptionPayment = 'subscription-payment',
   PaymentMethod = 'payment-method',
   UserConfig = 'user-config',
+  Coupon = 'coupon',
+  CouponRedemption = 'coupon-redemption',
 }
 
 /**
