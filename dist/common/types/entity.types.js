@@ -41,6 +41,8 @@ var EntityType;
     EntityType["SubscriptionPayment"] = "subscription-payment";
     EntityType["PaymentMethod"] = "payment-method";
     EntityType["UserConfig"] = "user-config";
+    EntityType["Coupon"] = "coupon";
+    EntityType["CouponRedemption"] = "coupon-redemption";
 })(EntityType || (exports.EntityType = EntityType = {}));
 /**
  * Service Names
