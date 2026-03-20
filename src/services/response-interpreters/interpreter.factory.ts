@@ -38,6 +38,7 @@ export class ResponseInterpreterFactory {
                 break;
 
             // Diğer platform'lar için ileride eklenebilir
+            case ResourceName.Ikas:
             case ResourceName.N11:
             case ResourceName.Amazon:
             case ResourceName.CicekSepeti:
