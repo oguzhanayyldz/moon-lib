@@ -44,6 +44,7 @@ export * from './services/response-interpreters/base.interpreter';
 export * from './services/response-interpreters/trendyol.interpreter';
 export * from './services/response-interpreters/shopify.interpreter';
 export * from './services/response-interpreters/hepsiburada.interpreter';
+export * from './services/response-interpreters/ikas.interpreter';
 export * from './services/response-interpreters/interpreter.factory';
 
 // Enums
