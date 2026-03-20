@@ -19,7 +19,8 @@ export {
     cdnSecurityLogger,
     shopifySecurityLogger,
     trendyolSecurityLogger,
-    hepsiburadaSecurityLogger
+    hepsiburadaSecurityLogger,
+    ikasSecurityLogger
 } from './SecurityLogger';
 
 export {

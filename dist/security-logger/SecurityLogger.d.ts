@@ -68,3 +68,4 @@ export declare const cdnSecurityLogger: SecurityLogger;
 export declare const shopifySecurityLogger: SecurityLogger;
 export declare const trendyolSecurityLogger: SecurityLogger;
 export declare const hepsiburadaSecurityLogger: SecurityLogger;
+export declare const ikasSecurityLogger: SecurityLogger;

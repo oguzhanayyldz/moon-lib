@@ -32,6 +32,7 @@ class ResponseInterpreterFactory {
                 interpreter = new hepsiburada_interpreter_1.HepsiburadaResponseInterpreter();
                 break;
             // Diğer platform'lar için ileride eklenebilir
+            case common_1.ResourceName.Ikas:
             case common_1.ResourceName.N11:
             case common_1.ResourceName.Amazon:
             case common_1.ResourceName.CicekSepeti:

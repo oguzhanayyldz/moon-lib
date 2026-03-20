@@ -13,4 +13,5 @@ var ResourceName;
     ResourceName["Parasut"] = "Parasut";
     ResourceName["Aras"] = "Aras";
     ResourceName["Yurtici"] = "Yurtici";
+    ResourceName["Ikas"] = "Ikas";
 })(ResourceName || (exports.ResourceName = ResourceName = {}));
