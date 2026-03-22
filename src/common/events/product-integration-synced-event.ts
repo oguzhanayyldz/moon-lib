@@ -15,6 +15,7 @@ export interface ProductSyncedData {
     listPrice?: number;
     price?: number;
     isFromOurSystem?: boolean;
+    variantId?: string; // Normal ürünlerde platform variant ID (ikas'ta her ürünün en az 1 variant'ı var)
 }
 
 /**

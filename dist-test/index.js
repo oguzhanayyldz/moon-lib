@@ -56,6 +56,7 @@ __exportStar(require("./services/response-interpreters/base.interpreter"), expor
 __exportStar(require("./services/response-interpreters/trendyol.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/shopify.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/hepsiburada.interpreter"), exports);
+__exportStar(require("./services/response-interpreters/ikas.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/interpreter.factory"), exports);
 // Enums
 __exportStar(require("./enums/operation-type.enum"), exports);
