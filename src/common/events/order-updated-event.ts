@@ -120,6 +120,7 @@ export interface OrderUpdated {
     creditTotal?: number;
     shippingTotal?: number;
     shippingTaxRate?: number;
+    shippingRefundAmount?: number;
     note?: string;
     date?: Date;
     dueDate?: Date;
