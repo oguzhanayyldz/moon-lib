@@ -1,3 +1,4 @@
+import { IntegrationType } from '../common/types/integration-type';
 /**
  * IntegrationRouter sınıfı
  *
@@ -11,6 +12,15 @@ export declare class IntegrationRouter {
      * {platform}: shopify, trendyol, n11, amazon vb.
      */
     private static readonly SUBJECT_TEMPLATE;
+    /**
+     * Platform → IntegrationType merkezi mapping
+     * Yeni entegrasyon eklendiğinde buraya eklenmeli
+     */
+    private static readonly PLATFORM_TYPE_MAP;
+    /**
+     * Platform adından IntegrationType'ı otomatik belirler
+     */
+    static getIntegrationType(platform: string): IntegrationType;
     /**
      * Belirli bir entegrasyon tipi ve platform için hedef NATS subject'ini oluşturur
      *

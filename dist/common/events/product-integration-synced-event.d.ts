@@ -14,6 +14,7 @@ export interface ProductSyncedData {
     listPrice?: number;
     price?: number;
     isFromOurSystem?: boolean;
+    variantId?: string;
 }
 /**
  * @description Entegrasyondan senkronize edilen ürün listesi olayı
