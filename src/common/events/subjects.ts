@@ -68,6 +68,9 @@ export enum Subjects {
     // Order WorkPackage Info Bulk Event (Inventory → Orders)
     OrderWorkPackageInfoBulkUpdated = "order:workpackage-info:bulk-updated",
 
+    // Price Processing
+    PriceProcessingCompleted = "price:processing:completed",
+
     // Subscription Events
     SubscriptionUpdated = "subscription:updated",
     SubscriptionPaymentCompleted = "subscription:payment:completed",

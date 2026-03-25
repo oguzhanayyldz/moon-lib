@@ -11,6 +11,8 @@ export interface ProductPriceIntegrationUpdatedEvent {
         integrationName?: ResourceName;
         updateConfiguration?: PriceUpdateSettings;
         timestamp?: Date;
+        partIndex?: number;
+        totalParts?: number;
     };
 }
 //# sourceMappingURL=product-price-integration-updated-event.d.ts.map

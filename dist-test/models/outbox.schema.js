@@ -98,6 +98,7 @@ function getEventPriority(eventType) {
         [common_1.Subjects.SubscriptionUpdated]: 2,
         [common_1.Subjects.SubscriptionPaymentCompleted]: 2,
         [common_1.Subjects.SubscriptionPaymentFailed]: 2,
+        [common_1.Subjects.PriceProcessingCompleted]: 1,
     };
     return (_a = PRIORITY_MAP[eventType]) !== null && _a !== void 0 ? _a : 3;
 }

@@ -70,7 +70,8 @@ import {
     OrderWorkPackageInfoBulkUpdatedEvent,
     SubscriptionUpdatedEvent,
     SubscriptionPaymentCompletedEvent,
-    SubscriptionPaymentFailedEvent
+    SubscriptionPaymentFailedEvent,
+    PriceProcessingCompletedEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -142,6 +143,7 @@ interface EventPayloadMap {
     [Subjects.SubscriptionUpdated]: SubscriptionUpdatedEvent['data'];
     [Subjects.SubscriptionPaymentCompleted]: SubscriptionPaymentCompletedEvent['data'];
     [Subjects.SubscriptionPaymentFailed]: SubscriptionPaymentFailedEvent['data'];
+    [Subjects.PriceProcessingCompleted]: PriceProcessingCompletedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
@@ -269,6 +271,7 @@ export function getEventPriority(eventType: string): number {
         [Subjects.SubscriptionUpdated]: 2,
         [Subjects.SubscriptionPaymentCompleted]: 2,
         [Subjects.SubscriptionPaymentFailed]: 2,
+        [Subjects.PriceProcessingCompleted]: 1,
     };
     
     return PRIORITY_MAP[eventType] ?? 3;

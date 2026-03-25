@@ -80,6 +80,7 @@ const orderWorkPackageInfoBulkUpdated_publisher_1 = require("../events/publisher
 const subscriptionUpdated_publisher_1 = require("../events/publishers/subscriptionUpdated.publisher");
 const subscriptionPaymentCompleted_publisher_1 = require("../events/publishers/subscriptionPaymentCompleted.publisher");
 const subscriptionPaymentFailed_publisher_1 = require("../events/publishers/subscriptionPaymentFailed.publisher");
+const priceProcessingCompleted_publisher_1 = require("../events/publishers/priceProcessingCompleted.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
     ) {
@@ -684,6 +685,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.SubscriptionPaymentFailed:
                     yield new subscriptionPaymentFailed_publisher_1.SubscriptionPaymentFailedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.PriceProcessingCompleted:
+                    yield new priceProcessingCompleted_publisher_1.PriceProcessingCompletedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 default:

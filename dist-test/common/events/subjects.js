@@ -70,6 +70,8 @@ var Subjects;
     Subjects["UpdateOrderCargoLabel"] = "update:order:cargo:label";
     // Order WorkPackage Info Bulk Event (Inventory → Orders)
     Subjects["OrderWorkPackageInfoBulkUpdated"] = "order:workpackage-info:bulk-updated";
+    // Price Processing
+    Subjects["PriceProcessingCompleted"] = "price:processing:completed";
     // Subscription Events
     Subjects["SubscriptionUpdated"] = "subscription:updated";
     Subjects["SubscriptionPaymentCompleted"] = "subscription:payment:completed";

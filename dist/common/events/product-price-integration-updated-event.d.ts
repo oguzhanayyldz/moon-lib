@@ -11,5 +11,7 @@ export interface ProductPriceIntegrationUpdatedEvent {
         integrationName?: ResourceName;
         updateConfiguration?: PriceUpdateSettings;
         timestamp?: Date;
+        partIndex?: number;
+        totalParts?: number;
     };
 }
