@@ -32,6 +32,11 @@ export interface ImportImagesFromUrlsCompletedEvent {
          */
         productIdMap?: Record<string, string>;
         /**
+         * URL -> CombinationId eşleştirme haritası
+         * Her URL'nin hangi varyanta ait olduğunu belirtir
+         */
+        combinationIdMap?: Record<string, string>;
+        /**
          * İşlem sonuçları
          */
         images: Array<{
@@ -75,6 +80,10 @@ export interface ImportImagesFromUrlsCompletedEvent {
              * Görsel ile ilişkili ürün ID'si
              */
             productId?: string;
+            /**
+             * Görsel ile ilişkili varyant (combination) ID'si
+             */
+            combinationId?: string;
             /**
              * Görsel zaten var olduğu için atlandı mı
              */
