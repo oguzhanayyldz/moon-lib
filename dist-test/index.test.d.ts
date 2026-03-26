@@ -334,6 +334,7 @@ export declare const logger: {
 export declare const OptimisticLockingUtil: {
     saveWithRetry: jest.Mock<any, any, any>;
     updateWithRetry: jest.Mock<any, any, any>;
+    updateMetadataWithRetry: jest.Mock<any, any, any>;
     retryWithOptimisticLocking: jest.Mock<any, any, any>;
     getSessionFromRequest: jest.Mock<any, any, any>;
     isInTransaction: jest.Mock<any, any, any>;
