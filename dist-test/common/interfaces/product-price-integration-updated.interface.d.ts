@@ -49,6 +49,7 @@ export interface AdvancedSettings {
     notifyChanges: boolean;
     logHistory: boolean;
     advancedTargetingMode: boolean;
+    autoSendToTargets: boolean;
 }
 export interface PriceUpdateSettings {
     enabled: boolean;

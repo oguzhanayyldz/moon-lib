@@ -12,5 +12,7 @@ export interface ProductPriceIntegrationUpdatedEvent {
         integrationName?: ResourceName;
         updateConfiguration?: PriceUpdateSettings;
         timestamp?: Date;
+        partIndex?: number;     // Part sırası (1-based) — part-based akış için
+        totalParts?: number;    // Toplam part sayısı — HER part'ta gönderilir (NATS sırasız)
     }
 }

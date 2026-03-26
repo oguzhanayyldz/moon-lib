@@ -65,6 +65,7 @@ export declare enum Subjects {
     CatalogMappingUpdated = "catalog:mapping:updated",
     UpdateOrderCargoLabel = "update:order:cargo:label",
     OrderWorkPackageInfoBulkUpdated = "order:workpackage-info:bulk-updated",
+    PriceProcessingCompleted = "price:processing:completed",
     SubscriptionUpdated = "subscription:updated",
     SubscriptionPaymentCompleted = "subscription:payment:completed",
     SubscriptionPaymentFailed = "subscription:payment:failed"

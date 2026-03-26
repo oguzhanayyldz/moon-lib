@@ -63,6 +63,7 @@ export interface AdvancedSettings {
     notifyChanges: boolean;      // Değişiklikleri bildir
     logHistory: boolean;         // Fiyat geçmişini kaydet
     advancedTargetingMode: boolean; // Gelişmiş hedefleme modu
+    autoSendToTargets: boolean;  // Hedef platformlara otomatik fiyat gönder (default: false)
 }
 
 // Ana ayarlar interface'i
