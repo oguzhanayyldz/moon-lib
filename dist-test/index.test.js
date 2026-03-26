@@ -689,6 +689,13 @@ exports.OptimisticLockingUtil = {
         }
         return result;
     }),
+    updateMetadataWithRetry: jest.fn().mockImplementation(async (model, id, updateData, options = {}) => {
+        const result = await model.findByIdAndUpdate(id, updateData, Object.assign({ new: true, omitUndefined: true }, options));
+        if (!result) {
+            throw new Error(`Document not found: ${id}`);
+        }
+        return result;
+    }),
     retryWithOptimisticLocking: jest.fn().mockImplementation(async (operation, maxRetries = 3, backoffMs = 100, operationName = 'operation') => {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -922,6 +929,13 @@ const setupTestEnvironment = () => {
             return await doc.save(session ? { session } : {});
         }
         return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
+    });
+    exports.OptimisticLockingUtil.updateMetadataWithRetry = jest.fn().mockImplementation(async (model, id, updateData, options = {}) => {
+        const result = await model.findByIdAndUpdate(id, updateData, Object.assign({ new: true, omitUndefined: true }, options));
+        if (!result) {
+            throw new Error(`Document not found: ${id}`);
+        }
+        return result;
     });
     exports.OptimisticLockingUtil.updateWithContext = jest.fn().mockImplementation(async (model, id, updateData, req, operationName, options = {}) => {
         const session = req === null || req === void 0 ? void 0 : req.dbSession;
