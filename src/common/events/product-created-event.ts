@@ -18,9 +18,10 @@ export interface ProductCreatedEventData {
 
 // Ürün görseli için basit ara yüz
 export interface ProductImageInfo {
-    url: string;      // Görsel URL'i
-    isMain?: boolean; // Ana görsel mi?
-    sort?: number;    // Sıralama
+    url: string;           // Görsel URL'i
+    isMain?: boolean;      // Ana görsel mi?
+    sort?: number;         // Sıralama
+    combinationId?: string; // Varyant (combination) bazlı görsel — null ise ana ürün görseli
 }
 
 // Kategori bilgisi için basit arayüz

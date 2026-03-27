@@ -43,6 +43,7 @@ export interface ProductIntegrationCombination {
     barcode: string;
     price?: number;
     attributes?: ProductIntegrationAttribute[];
+    images?: ProductIntegrationImage[];
 }
 
 export interface ProductIntegrationAttribute {

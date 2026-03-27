@@ -8,6 +8,7 @@ export interface ImportImagesFromUrlsEvent {
         urls: string[];
         productId?: string;
         productIdMap?: Record<string, string>;
+        combinationIdMap?: Record<string, string>; // URL -> CombinationId eşleştirmesi
         options?: {
             width?: number;
             height?: number;

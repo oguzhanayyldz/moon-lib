@@ -17,6 +17,7 @@ export interface ProductImageInfo {
     url: string;
     isMain?: boolean;
     sort?: number;
+    combinationId?: string;
 }
 export interface ProductCategoryInfo {
     id: string;
