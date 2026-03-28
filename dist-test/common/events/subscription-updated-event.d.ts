@@ -29,6 +29,7 @@ export interface SubscriptionUpdatedEvent {
         workPackagesEnabled?: boolean;
         cronCustomizationEnabled?: boolean;
         cronDefaults?: CronDefaults;
+        ownCdnEnabled?: boolean;
     };
 }
 //# sourceMappingURL=subscription-updated-event.d.ts.map
