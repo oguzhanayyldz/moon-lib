@@ -25,5 +25,6 @@ export interface SubscriptionUpdatedEvent {
         workPackagesEnabled?: boolean;
         cronCustomizationEnabled?: boolean;
         cronDefaults?: CronDefaults;
+        ownCdnEnabled?: boolean;
     };
 }
