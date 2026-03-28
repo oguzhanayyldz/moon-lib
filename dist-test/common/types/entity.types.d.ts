@@ -55,6 +55,9 @@ export declare enum ServiceName {
     Auth = "auth",
     Notification = "notification",
     Reporting = "reporting",
-    Subscription = "subscription"
+    Subscription = "subscription",
+    Cdn = "cdn",
+    Shopify = "shopify",
+    Trendyol = "trendyol"
 }
 //# sourceMappingURL=entity.types.d.ts.map

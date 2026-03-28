@@ -21,6 +21,8 @@ exports.PERMISSION_RESOURCES = {
     PRICING: 'pricing',
     INTEGRATIONS: 'integrations',
     CATALOGS: 'catalogs',
+    FULFILLMENT: 'fulfillment',
+    ANALYTICS: 'analytics',
     ALL: '*'
 };
 //# sourceMappingURL=permission.types.js.map

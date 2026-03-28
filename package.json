@@ -9,16 +9,23 @@
       "test": "./dist-test/index.test.js",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./common-client": {
+      "types": "./dist-client/common-client.d.ts",
+      "default": "./dist-client/common-client.js"
     }
   },
   "scripts": {
     "clean": "rm -rf ./dist && rm -f tsconfig.tsbuildinfo",
     "clean:test": "rm -rf ./dist-test && rm -f tsconfig.test.tsbuildinfo",
+    "clean:client": "rm -rf ./dist-client",
     "prebuild": "npm run clean",
     "prebuild:test": "npm run clean:test",
+    "prebuild:client": "npm run clean:client",
     "build": "tsc",
     "build:test": "tsc --project tsconfig.test.json",
-    "build:all": "npm run build && npm run build:test",
+    "build:client": "tsc --project tsconfig.client.json",
+    "build:all": "npm run build && npm run build:test && npm run build:client",
     "build:watch": "tsc --watch",
     "test": "jest --no-cache --runInBand",
     "test:watch": "jest --watch",
@@ -26,7 +33,8 @@
   },
   "files": [
     "dist",
-    "dist-test"
+    "dist-test",
+    "dist-client"
   ],
   "devDependencies": {
     "@types/jaeger-client": "^3.18.7",

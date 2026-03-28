@@ -32,6 +32,8 @@ export declare const PERMISSION_RESOURCES: {
     readonly PRICING: "pricing";
     readonly INTEGRATIONS: "integrations";
     readonly CATALOGS: "catalogs";
+    readonly FULFILLMENT: "fulfillment";
+    readonly ANALYTICS: "analytics";
     readonly ALL: "*";
 };
 export type PermissionAction = typeof PERMISSION_ACTIONS[keyof typeof PERMISSION_ACTIONS];

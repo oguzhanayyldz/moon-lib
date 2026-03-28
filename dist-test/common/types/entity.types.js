@@ -63,5 +63,8 @@ var ServiceName;
     ServiceName["Notification"] = "notification";
     ServiceName["Reporting"] = "reporting";
     ServiceName["Subscription"] = "subscription";
+    ServiceName["Cdn"] = "cdn";
+    ServiceName["Shopify"] = "shopify";
+    ServiceName["Trendyol"] = "trendyol";
 })(ServiceName || (exports.ServiceName = ServiceName = {}));
 //# sourceMappingURL=entity.types.js.map

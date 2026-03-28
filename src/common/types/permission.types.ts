@@ -36,6 +36,8 @@ export const PERMISSION_RESOURCES = {
     PRICING: 'pricing',
     INTEGRATIONS: 'integrations',
     CATALOGS: 'catalogs',
+    FULFILLMENT: 'fulfillment',
+    ANALYTICS: 'analytics',
     ALL: '*'
 } as const;
 

@@ -59,4 +59,7 @@ export enum ServiceName {
   Notification = 'notification',
   Reporting = 'reporting',
   Subscription = 'subscription',
+  Cdn = 'cdn',
+  Shopify = 'shopify',
+  Trendyol = 'trendyol',
 }
