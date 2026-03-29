@@ -51,6 +51,7 @@ export interface PriceSource {
     priority: number;        // Öncelik sırası
     priceType: PriceType;    // Fiyat tipi
     applyCurrency: boolean;  // Kur dönüşümü uygula
+    sourceCurrency?: CurrencyCode; // Kaynak entegrasyonun para birimi
     targets: PriceTargetIntegration[]; // Hedef entegrasyonlar (ResourceName)
     rules: SourceRules;      // Kaynak kuralları
 }
@@ -75,6 +76,7 @@ export interface PriceUpdateSettings {
     updateFrequency: UpdateFrequency;  // Güncelleme sıklığı
     updateTime: string;              // Güncelleme saati (HH:MM formatı)
     lastUpdate: string | null;       // Son güncelleme zamanı (ISO string)
+    targetCurrency?: CurrencyCode;   // Hedef para birimi (default: TRY)
     advanced: AdvancedSettings;      // Gelişmiş ayarlar
 }
 

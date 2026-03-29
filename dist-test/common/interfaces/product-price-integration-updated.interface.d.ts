@@ -1,3 +1,4 @@
+import { CurrencyCode } from "../types/currency-code";
 import { ResourceName } from "../types/resourceName";
 export interface ProductPriceIntegrationUpdated {
     productId?: string;
@@ -39,6 +40,7 @@ export interface PriceSource {
     priority: number;
     priceType: PriceType;
     applyCurrency: boolean;
+    sourceCurrency?: CurrencyCode;
     targets: PriceTargetIntegration[];
     rules: SourceRules;
 }
@@ -59,6 +61,7 @@ export interface PriceUpdateSettings {
     updateFrequency: UpdateFrequency;
     updateTime: string;
     lastUpdate: string | null;
+    targetCurrency?: CurrencyCode;
     advanced: AdvancedSettings;
 }
 export interface PriceTargetIntegration {
