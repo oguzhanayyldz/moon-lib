@@ -1,0 +1,45 @@
+{
+	"compilerOptions": {
+		"target": "es2016",
+		"module": "commonjs",
+		"declaration": true,
+		"outDir": "./dist-client",
+		"rootDir": "./src",
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"moduleResolution": "node",
+		"baseUrl": ".",
+		"paths": {
+			"*": ["src/*"]
+		},
+		"ignoreDeprecations": "5.0"
+	},
+	"include": [
+		"src/common-client.ts",
+		"src/common/types/**/*",
+		"src/common/constants/**/*",
+		"src/common/interfaces/validator-func-params.interface.ts",
+		"src/common/interfaces/integration-instance.interface.ts",
+		"src/common/interfaces/product-integration-created.interface.ts",
+		"src/common/interfaces/product-price-integration-updated.interface.ts",
+		"src/common/interfaces/product-stock-integration-updated.interface.ts",
+		"src/common/interfaces/product-image-integration-updated.interface.ts",
+		"src/common/interfaces/product-export.interface.ts",
+		"src/common/interfaces/invoice-export.interface.ts",
+		"src/common/interfaces/shipment-export.interface.ts",
+		"src/common/interfaces/order-integration-created.interface.ts",
+		"src/common/interfaces/order-integration-status-updated.interface.ts",
+		"src/common/interfaces/api-client.interface.ts",
+		"src/common/interfaces/external-location.interface.ts",
+		"src/common/events/types/**/*",
+		"src/common/events/subjects.ts"
+	],
+	"exclude": [
+		"**/*.test.ts",
+		"dist",
+		"dist-test",
+		"dist-client"
+	]
+}
