@@ -1,3 +1,3 @@
-// Proxy — webpack exports field resolve sorunu için
-// @xmoonx/moon-lib/common-client → dist-client/common-client.js
-module.exports = require('./dist-client/common-client');
+// Proxy — @xmoonx/moon-lib/common-client → dist/common-client.js
+// dist/ ana build'de her zaman oluşur (dist-client/ opsiyonel)
+module.exports = require('./dist/common-client');

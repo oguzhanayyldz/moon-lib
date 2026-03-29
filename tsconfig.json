@@ -23,7 +23,6 @@
 	"exclude": [
 		"**/*.test.ts",
 		"src/test/**/*",
-		"src/common-client.ts",
 		"dist",
 		"dist-client"
 	]
