@@ -11,8 +11,8 @@
       "default": "./dist/index.js"
     },
     "./common-client": {
-      "types": "./dist-client/common-client.d.ts",
-      "default": "./dist-client/common-client.js"
+      "types": "./dist/common-client.d.ts",
+      "default": "./dist/common-client.js"
     }
   },
   "scripts": {
