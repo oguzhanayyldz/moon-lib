@@ -34,7 +34,9 @@
   "files": [
     "dist",
     "dist-test",
-    "dist-client"
+    "dist-client",
+    "common-client.js",
+    "common-client.d.ts"
   ],
   "devDependencies": {
     "@types/jaeger-client": "^3.18.7",
