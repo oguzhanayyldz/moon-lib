@@ -159,6 +159,7 @@ __exportStar(require("./events/publishers/orderWorkPackageInfoBulkUpdated.publis
 __exportStar(require("./events/publishers/subscriptionUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/subscriptionPaymentCompleted.publisher"), exports);
 __exportStar(require("./events/publishers/subscriptionPaymentFailed.publisher"), exports);
+__exportStar(require("./events/publishers/subscriptionInvoiceCreated.publisher"), exports);
 __exportStar(require("./events/publishers/priceProcessingCompleted.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

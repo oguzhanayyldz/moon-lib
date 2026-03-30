@@ -68,6 +68,7 @@ export declare enum Subjects {
     PriceProcessingCompleted = "price:processing:completed",
     SubscriptionUpdated = "subscription:updated",
     SubscriptionPaymentCompleted = "subscription:payment:completed",
-    SubscriptionPaymentFailed = "subscription:payment:failed"
+    SubscriptionPaymentFailed = "subscription:payment:failed",
+    SubscriptionInvoiceCreated = "subscription:invoice:created"
 }
 //# sourceMappingURL=subjects.d.ts.map
