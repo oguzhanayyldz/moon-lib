@@ -104,5 +104,6 @@ __exportStar(require("./order-workpackage-info-updated-event"), exports);
 __exportStar(require("./subscription-updated-event"), exports);
 __exportStar(require("./subscription-payment-completed-event"), exports);
 __exportStar(require("./subscription-payment-failed-event"), exports);
+__exportStar(require("./subscription-invoice-created-event"), exports);
 // Price Processing Events
 __exportStar(require("./price-processing-completed-event"), exports);

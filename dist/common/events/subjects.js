@@ -76,4 +76,5 @@ var Subjects;
     Subjects["SubscriptionUpdated"] = "subscription:updated";
     Subjects["SubscriptionPaymentCompleted"] = "subscription:payment:completed";
     Subjects["SubscriptionPaymentFailed"] = "subscription:payment:failed";
+    Subjects["SubscriptionInvoiceCreated"] = "subscription:invoice:created";
 })(Subjects || (exports.Subjects = Subjects = {}));

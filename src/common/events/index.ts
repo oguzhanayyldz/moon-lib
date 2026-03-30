@@ -90,6 +90,7 @@ export * from './order-workpackage-info-updated-event';
 export * from './subscription-updated-event';
 export * from './subscription-payment-completed-event';
 export * from './subscription-payment-failed-event';
+export * from './subscription-invoice-created-event';
 
 // Price Processing Events
 export * from './price-processing-completed-event';
