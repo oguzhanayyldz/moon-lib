@@ -22,6 +22,16 @@ export declare enum ShipmentScheduleFrequency {
     WEEKLY = "weekly"
 }
 /**
+ * ShipmentSourceConditions - Kargo yönlendirme koşulları
+ * Koşullar opsiyoneldir, tanımlanmamış koşul = her zaman eşleşir
+ */
+export interface ShipmentSourceConditions {
+    cities?: string[];
+    excludeCities?: string[];
+    minOrderAmount?: number;
+    maxOrderAmount?: number;
+}
+/**
  * ShipmentSettingsSource - Platform ↔ Kargo eşleştirmesi
  */
 export interface ShipmentSettingsSource {
@@ -31,6 +41,8 @@ export interface ShipmentSettingsSource {
     cargoIntegrationId?: string;
     cargoName?: string;
     autoSendOnOrderCreated?: boolean;
+    priority?: number;
+    conditions?: ShipmentSourceConditions;
 }
 /**
  * SenderInfo - Gönderici bilgileri (panel etiketi için)
