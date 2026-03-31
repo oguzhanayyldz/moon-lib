@@ -30,6 +30,17 @@ export enum ShipmentScheduleFrequency {
 }
 
 /**
+ * ShipmentSourceConditions - Kargo yönlendirme koşulları
+ * Koşullar opsiyoneldir, tanımlanmamış koşul = her zaman eşleşir
+ */
+export interface ShipmentSourceConditions {
+    cities?: string[];              // Bu şehirlerde kullan
+    excludeCities?: string[];       // Bu şehirlerde KULLANMA
+    minOrderAmount?: number;        // Minimum sipariş tutarı (TL)
+    maxOrderAmount?: number;        // Maximum sipariş tutarı (TL)
+}
+
+/**
  * ShipmentSettingsSource - Platform ↔ Kargo eşleştirmesi
  */
 export interface ShipmentSettingsSource {
@@ -39,6 +50,8 @@ export interface ShipmentSettingsSource {
     cargoIntegrationId?: string;     // Hedef kargo integration ID (Aras, MNG, Yurtiçi)
     cargoName?: string;              // Kargo adı
     autoSendOnOrderCreated?: boolean; // Sipariş geldiğinde otomatik kargo gönder
+    priority?: number;               // Düşük = yüksek öncelik (1 en yüksek), undefined = en düşük
+    conditions?: ShipmentSourceConditions; // Yönlendirme koşulları (opsiyonel)
 }
 
 /**
