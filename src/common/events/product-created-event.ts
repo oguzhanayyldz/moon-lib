@@ -69,6 +69,10 @@ export interface ProductCreatedEventDataListItem {
     // Kategori bilgisi
     brand?: ProductBrandInfo;
     category?: ProductCategoryInfo;
+    // SEO metadata
+    metaTitle?: string;
+    metaDescription?: string;
+    keywords?: string[];
 }
 
 export interface ProductCreatedEventDataListItemCombination {

@@ -59,6 +59,9 @@ export interface ProductCreatedEventDataListItem {
     images?: ProductImageInfo[];
     brand?: ProductBrandInfo;
     category?: ProductCategoryInfo;
+    metaTitle?: string;
+    metaDescription?: string;
+    keywords?: string[];
 }
 export interface ProductCreatedEventDataListItemCombination {
     id: string;
