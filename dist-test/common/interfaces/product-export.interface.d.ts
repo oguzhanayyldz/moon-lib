@@ -39,6 +39,12 @@ export interface CommonProductExport {
             order?: number;
         }>;
     }>;
+    seo?: {
+        metaTitle?: string;
+        metaDescription?: string;
+        handle?: string;
+        keywords?: string[];
+    };
     metadata?: Record<string, any>;
 }
 /**

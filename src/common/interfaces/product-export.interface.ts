@@ -52,6 +52,14 @@ export interface CommonProductExport {
     }>;
   }>;
   
+  // SEO bilgileri
+  seo?: {
+    metaTitle?: string;
+    metaDescription?: string;
+    handle?: string;        // URL-friendly slug (Shopify handle)
+    keywords?: string[];
+  };
+
   // Platform spesifik ek alanlar
   metadata?: Record<string, any>;
 }
