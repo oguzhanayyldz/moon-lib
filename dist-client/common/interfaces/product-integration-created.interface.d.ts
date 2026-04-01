@@ -19,6 +19,11 @@ export interface ProductIntegrationCreated {
     brand?: ProductIntegrationBrand;
     images?: ProductIntegrationImage[];
     combinations?: ProductIntegrationCombination[];
+    seo?: {
+        metaTitle?: string;
+        metaDescription?: string;
+        keywords?: string[];
+    };
 }
 export interface ProductIntegrationCategory {
     name: string;
