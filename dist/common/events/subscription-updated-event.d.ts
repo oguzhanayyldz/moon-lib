@@ -16,6 +16,7 @@ export interface SubscriptionUpdatedEvent {
             productLimit: number;
             subUserLimit: number;
             warehouseLimit: number;
+            aiContentLimit?: number;
         };
         addons: Array<{
             type: string;
