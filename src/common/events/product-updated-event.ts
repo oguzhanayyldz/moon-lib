@@ -47,6 +47,10 @@ export interface ProductUpdatedEventDataListItem {
     images?: ProductImageInfo[];
     brand?: ProductBrandInfo;
     category?: ProductCategoryInfo;
+    // SEO metadata
+    metaTitle?: string;
+    metaDescription?: string;
+    keywords?: string[];
 }
 
 export interface ProductUpdatedEventDataListItemCombination {
