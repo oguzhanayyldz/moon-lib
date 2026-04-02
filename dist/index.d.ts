@@ -53,6 +53,7 @@ export * from './utils/batchOperationHelpers.util';
 export * from './utils/redisFailoverManager';
 export * from './utils/userContext.util';
 export * from './utils/encryption.util';
+export * from './utils/mongooseUpdate.util';
 export * from './database';
 export * from './middleware';
 export * from './jobs/eventPublisher.job';
