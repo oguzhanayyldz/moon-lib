@@ -6,6 +6,7 @@ export interface CategoryUpdatedEvent {
         user: string;
         categories: Array<{
             id: string;
+            version: number;
             name: string;
             parentCategory?: string;
             code?: string;

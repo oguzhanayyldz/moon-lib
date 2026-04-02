@@ -7,6 +7,7 @@ export interface BrandUpdatedEvent {
     user: string;
     brands: Array<{
       id: string;
+      version: number;
       name: string;
       code?: string;
       source?: ResourceName;
