@@ -24,6 +24,7 @@ export interface SubscriptionUpdatedEvent {
             quantity: number;
             integrationGroup?: string;
         }>;
+        version: number;
         status: "active" | "trial" | "past_due" | "cancelled" | "expired";
         currentPeriodStart?: Date;
         currentPeriodEnd: Date;

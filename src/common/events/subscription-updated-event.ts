@@ -20,6 +20,7 @@ export interface SubscriptionUpdatedEvent {
             aiContentLimit?: number;
         };
         addons: Array<{ type: string; value: number; quantity: number; integrationGroup?: string }>;
+        version: number;
         status: "active" | "trial" | "past_due" | "cancelled" | "expired";
         currentPeriodStart?: Date;
         currentPeriodEnd: Date;
