@@ -6,6 +6,7 @@ const trendyol_interpreter_1 = require("./trendyol.interpreter");
 const shopify_interpreter_1 = require("./shopify.interpreter");
 const hepsiburada_interpreter_1 = require("./hepsiburada.interpreter");
 const ikas_interpreter_1 = require("./ikas.interpreter");
+const n11_interpreter_1 = require("./n11.interpreter");
 const logger_service_1 = require("../logger.service");
 /**
  * Response Interpreter Factory
@@ -35,8 +36,10 @@ class ResponseInterpreterFactory {
             case common_1.ResourceName.Ikas:
                 interpreter = new ikas_interpreter_1.IkasResponseInterpreter();
                 break;
-            // Diğer platform'lar için ileride eklenebilir
             case common_1.ResourceName.N11:
+                interpreter = new n11_interpreter_1.N11ResponseInterpreter();
+                break;
+            // Diğer platform'lar için ileride eklenebilir
             case common_1.ResourceName.Amazon:
                 logger_service_1.logger.debug(`No interpreter implementation for ${integrationName} yet`);
                 return null;
