@@ -4,6 +4,7 @@ import { TrendyolResponseInterpreter } from './trendyol.interpreter';
 import { ShopifyResponseInterpreter } from './shopify.interpreter';
 import { HepsiburadaResponseInterpreter } from './hepsiburada.interpreter';
 import { IkasResponseInterpreter } from './ikas.interpreter';
+import { N11ResponseInterpreter } from './n11.interpreter';
 import { logger } from '../logger.service';
 
 /**
@@ -42,8 +43,11 @@ export class ResponseInterpreterFactory {
                 interpreter = new IkasResponseInterpreter();
                 break;
 
-            // Diğer platform'lar için ileride eklenebilir
             case ResourceName.N11:
+                interpreter = new N11ResponseInterpreter();
+                break;
+
+            // Diğer platform'lar için ileride eklenebilir
             case ResourceName.Amazon:
                 logger.debug(`No interpreter implementation for ${integrationName} yet`);
                 return null;
