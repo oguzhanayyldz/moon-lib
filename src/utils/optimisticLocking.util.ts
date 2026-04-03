@@ -197,12 +197,14 @@ export class OptimisticLockingUtil {
         // base.schema.ts içindeki VERSION_TRACKING_CONFIGS Map'inden config'i oku
         const { VERSION_TRACKING_CONFIGS } = await import('../models/base/base.schema');
 
-        // Model.modelName ile config'i bul - Order, Package, vs.
-        // Map key'i entityType ile eşleşmeli (EntityType.Order gibi)
+        // Model.modelName ile config'i bul - Order, PackageProductLink, vs.
+        // Map key'i entityType (kebab-case: 'package-product-link') ile kayıtlı
+        // Model.modelName PascalCase: 'PackageProductLink'
+        // Normalize ederek eşleştir: tire kaldır + lowercase
+        const normalize = (s: string) => s.toLowerCase().replace(/-/g, '');
         let config = null;
         for (const [key, value] of VERSION_TRACKING_CONFIGS.entries()) {
-            // entityType ile eşleş - 'order', 'package', vs.
-            if (key.toLowerCase() === Model.modelName.toLowerCase()) {
+            if (normalize(key) === normalize(Model.modelName)) {
                 config = value;
                 break;
             }
@@ -301,9 +303,10 @@ export class OptimisticLockingUtil {
     * @description
     * Version tracking hook'unu bypass eder çünkü:
     * - Metadata değişiklikleri anlamlı veri değişikliği değildir
-    * - Cross-service sync gerektirmez
-    * - Outbox entry oluşturmaya gerek yoktur
     * - Version increment gereksizdir
+    *
+    * NOT: updateFields içinde version set edilmişse (FOREIGN entity sync gibi),
+    * EntityVersionUpdated event publish eder — sync servisi haberdar olur.
     *
     * Retry mekanizması ile güvenli güncelleme sağlar:
     * - Exponential backoff stratejisi
@@ -320,7 +323,7 @@ export class OptimisticLockingUtil {
     ): Promise<T> {
         const docName = operationName || `${Model.modelName} ${id} metadata`;
 
-        return await this.retryWithOptimisticLocking(
+        const result = await this.retryWithOptimisticLocking(
             async () => {
                 const updateOptions = {
                     new: true,
@@ -345,8 +348,20 @@ export class OptimisticLockingUtil {
             100,
             `${docName} update${session ? ' (transactional)' : ''}`
         );
-        // ✅ Version tracking event publish YOK - metadata-only update
-        // Version increment YOK - post('save') ve post('findOneAndUpdate') hook'ları tetiklenmez
+
+        // Version set edilmişse EntityVersionUpdated event publish et (FOREIGN entity sync için)
+        // Version set edilmemişse skip et (metadata-only update: scheduler, stats vb.)
+        const targetVersion = updateFields?.$set?.version ?? updateFields?.version;
+        if (targetVersion !== undefined && result) {
+            try {
+                await this.publishVersionEventForUpdate(Model, result, targetVersion);
+            } catch (error) {
+                logger.error(`❌ Failed to publish version event after updateMetadataWithRetry:`, error);
+                // Event publish hatası işlemi engellemesin
+            }
+        }
+
+        return result;
     }
 
     /**
