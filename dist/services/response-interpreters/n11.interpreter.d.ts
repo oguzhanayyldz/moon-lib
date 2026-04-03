@@ -61,5 +61,35 @@ export declare class N11ResponseInterpreter extends BaseResponseInterpreter {
      * Response: { brands: [{ id, name }], totalElements }
      */
     private interpretBrandList;
+    /**
+     * İade listesi (SOAP ReturnService → ClaimReturnList)
+     * Response: { content: [...], totalCount, pageCount } (api-client wrapper)
+     */
+    private interpretClaimList;
+    /**
+     * İade onay/red (SOAP ReturnService → ClaimReturnApprove/Deny)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretClaimAction;
+    /**
+     * Kargo bilgisi gönderme (SOAP OrderService → MakeOrderItemShipment)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretShipmentAction;
+    /**
+     * Fatura linki gönderme (SOAP SellerInvoiceService → SaveLinkSellerInvoice)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretInvoiceAction;
+    /**
+     * Ürün silme (SOAP ProductService → DeleteProductBySellerCode)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretDeleteProduct;
+    /**
+     * Paket bölme (REST POST /rest/delivery/v1/splitCombinePackage)
+     * Response: { code: 200, message: "success" }
+     */
+    private interpretSplitPackage;
     private interpretGeneric;
 }

@@ -54,6 +54,28 @@ export class N11ResponseInterpreter extends BaseResponseInterpreter {
                 case OperationType.GET_BRANDS:
                     return this.interpretBrandList(response);
 
+                // ===== SOAP İşlemleri =====
+                case OperationType.FETCH_CLAIMS:
+                    return this.interpretClaimList(response);
+
+                case OperationType.ACCEPT_CLAIM:
+                    return this.interpretClaimAction(response, 'onay');
+
+                case OperationType.REJECT_CLAIM:
+                    return this.interpretClaimAction(response, 'red');
+
+                case OperationType.SEND_TRACKING:
+                    return this.interpretShipmentAction(response);
+
+                case OperationType.SEND_INVOICES:
+                    return this.interpretInvoiceAction(response);
+
+                case OperationType.DELETE_PRODUCTS:
+                    return this.interpretDeleteProduct(response);
+
+                case OperationType.SPLIT_PACKAGE:
+                    return this.interpretSplitPackage(response);
+
                 default:
                     return this.interpretGeneric(response, operationType);
             }
@@ -311,6 +333,118 @@ export class N11ResponseInterpreter extends BaseResponseInterpreter {
             success: true,
             successCount: brandCount,
             details: { brandCount, totalElements: response?.totalElements },
+            parsedAt: new Date()
+        };
+    }
+
+    // ===== SOAP RESPONSE INTERPRETERS =====
+
+    /**
+     * İade listesi (SOAP ReturnService → ClaimReturnList)
+     * Response: { content: [...], totalCount, pageCount } (api-client wrapper)
+     */
+    private interpretClaimList(response: any): InterpretedResponse {
+        const returns = response?.content || response?.returns || [];
+        const totalCount = response?.totalCount || returns.length;
+
+        return {
+            summary: `${totalCount} iade talebi getirildi`,
+            success: true,
+            successCount: returns.length,
+            details: {
+                totalCount,
+                pageCount: response?.pageCount,
+                statuses: returns.reduce((acc: Record<string, number>, r: any) => {
+                    const status = r.status || 'Unknown';
+                    acc[status] = (acc[status] || 0) + 1;
+                    return acc;
+                }, {})
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * İade onay/red (SOAP ReturnService → ClaimReturnApprove/Deny)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretClaimAction(response: any, action: string): InterpretedResponse {
+        const success = response?.success === true;
+
+        return {
+            summary: success ? `İade ${action}landı` : `İade ${action} başarısız: ${response?.message || ''}`,
+            success,
+            successCount: success ? 1 : 0,
+            failureCount: success ? 0 : 1,
+            details: { action, message: response?.message },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Kargo bilgisi gönderme (SOAP OrderService → MakeOrderItemShipment)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretShipmentAction(response: any): InterpretedResponse {
+        const success = response?.success === true;
+
+        return {
+            summary: success ? 'Kargo bilgisi gönderildi' : `Kargo gönderimi başarısız: ${response?.message || ''}`,
+            success,
+            successCount: success ? 1 : 0,
+            failureCount: success ? 0 : 1,
+            details: { message: response?.message },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Fatura linki gönderme (SOAP SellerInvoiceService → SaveLinkSellerInvoice)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretInvoiceAction(response: any): InterpretedResponse {
+        const success = response?.success === true;
+
+        return {
+            summary: success ? 'Fatura linki iletildi' : `Fatura linki gönderimi başarısız: ${response?.message || ''}`,
+            success,
+            successCount: success ? 1 : 0,
+            failureCount: success ? 0 : 1,
+            details: { message: response?.message },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Ürün silme (SOAP ProductService → DeleteProductBySellerCode)
+     * Response: { success: boolean, message: string }
+     */
+    private interpretDeleteProduct(response: any): InterpretedResponse {
+        const success = response?.success === true;
+
+        return {
+            summary: success ? 'Ürün silindi' : `Ürün silme başarısız: ${response?.message || ''}`,
+            success,
+            successCount: success ? 1 : 0,
+            failureCount: success ? 0 : 1,
+            details: { message: response?.message },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Paket bölme (REST POST /rest/delivery/v1/splitCombinePackage)
+     * Response: { code: 200, message: "success" }
+     */
+    private interpretSplitPackage(response: any): InterpretedResponse {
+        const success = response?.code === 200;
+
+        return {
+            summary: success ? 'Paket bölme başarılı' : `Paket bölme başarısız: ${response?.message || ''}`,
+            success,
+            successCount: success ? 1 : 0,
+            failureCount: success ? 0 : 1,
+            details: { code: response?.code, message: response?.message },
             parsedAt: new Date()
         };
     }
