@@ -121,9 +121,10 @@ export declare class OptimisticLockingUtil {
     * @description
     * Version tracking hook'unu bypass eder çünkü:
     * - Metadata değişiklikleri anlamlı veri değişikliği değildir
-    * - Cross-service sync gerektirmez
-    * - Outbox entry oluşturmaya gerek yoktur
     * - Version increment gereksizdir
+    *
+    * NOT: updateFields içinde version set edilmişse (FOREIGN entity sync gibi),
+    * EntityVersionUpdated event publish eder — sync servisi haberdar olur.
     *
     * Retry mekanizması ile güvenli güncelleme sağlar:
     * - Exponential backoff stratejisi

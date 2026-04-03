@@ -264,9 +264,10 @@ class OptimisticLockingUtil {
     * @description
     * Version tracking hook'unu bypass eder çünkü:
     * - Metadata değişiklikleri anlamlı veri değişikliği değildir
-    * - Cross-service sync gerektirmez
-    * - Outbox entry oluşturmaya gerek yoktur
     * - Version increment gereksizdir
+    *
+    * NOT: updateFields içinde version set edilmişse (FOREIGN entity sync gibi),
+    * EntityVersionUpdated event publish eder — sync servisi haberdar olur.
     *
     * Retry mekanizması ile güvenli güncelleme sağlar:
     * - Exponential backoff stratejisi
@@ -274,8 +275,9 @@ class OptimisticLockingUtil {
     * - Session/transaction desteği
     */
     static async updateMetadataWithRetry(Model, id, updateFields, options = {}, operationName, session) {
+        var _a, _b;
         const docName = operationName || `${Model.modelName} ${id} metadata`;
-        return await this.retryWithOptimisticLocking(async () => {
+        const result = await this.retryWithOptimisticLocking(async () => {
             const updateOptions = Object.assign(Object.assign({ new: true, omitUndefined: true }, options), (session ? { session } : {}));
             const updatedDoc = await Model.findByIdAndUpdate(id, updateFields, updateOptions);
             if (!updatedDoc) {
@@ -283,8 +285,19 @@ class OptimisticLockingUtil {
             }
             return updatedDoc;
         }, 5, 100, `${docName} update${session ? ' (transactional)' : ''}`);
-        // ✅ Version tracking event publish YOK - metadata-only update
-        // Version increment YOK - post('save') ve post('findOneAndUpdate') hook'ları tetiklenmez
+        // Version set edilmişse EntityVersionUpdated event publish et (FOREIGN entity sync için)
+        // Version set edilmemişse skip et (metadata-only update: scheduler, stats vb.)
+        const targetVersion = (_b = (_a = updateFields === null || updateFields === void 0 ? void 0 : updateFields.$set) === null || _a === void 0 ? void 0 : _a.version) !== null && _b !== void 0 ? _b : updateFields === null || updateFields === void 0 ? void 0 : updateFields.version;
+        if (targetVersion !== undefined && result) {
+            try {
+                await this.publishVersionEventForUpdate(Model, result, targetVersion);
+            }
+            catch (error) {
+                logger_service_1.logger.error(`❌ Failed to publish version event after updateMetadataWithRetry:`, error);
+                // Event publish hatası işlemi engellemesin
+            }
+        }
+        return result;
     }
     /**
     * Context-aware updateMetadataWithRetry: Request object'ten session algılama
