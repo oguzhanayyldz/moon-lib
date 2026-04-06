@@ -176,12 +176,14 @@ class OptimisticLockingUtil {
         // ✅ GLOBAL MAP: Config'i Map'ten al
         // base.schema.ts içindeki VERSION_TRACKING_CONFIGS Map'inden config'i oku
         const { VERSION_TRACKING_CONFIGS } = await Promise.resolve().then(() => __importStar(require('../models/base/base.schema')));
-        // Model.modelName ile config'i bul - Order, Package, vs.
-        // Map key'i entityType ile eşleşmeli (EntityType.Order gibi)
+        // Model.modelName ile config'i bul - Order, PackageProductLink, vs.
+        // Map key'i entityType (kebab-case: 'package-product-link') ile kayıtlı
+        // Model.modelName PascalCase: 'PackageProductLink'
+        // Normalize ederek eşleştir: tire kaldır + lowercase
+        const normalize = (s) => s.toLowerCase().replace(/-/g, '');
         let config = null;
         for (const [key, value] of VERSION_TRACKING_CONFIGS.entries()) {
-            // entityType ile eşleş - 'order', 'package', vs.
-            if (key.toLowerCase() === Model.modelName.toLowerCase()) {
+            if (normalize(key) === normalize(Model.modelName)) {
                 config = value;
                 break;
             }

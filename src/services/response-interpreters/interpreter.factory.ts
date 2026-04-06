@@ -5,6 +5,7 @@ import { ShopifyResponseInterpreter } from './shopify.interpreter';
 import { HepsiburadaResponseInterpreter } from './hepsiburada.interpreter';
 import { IkasResponseInterpreter } from './ikas.interpreter';
 import { N11ResponseInterpreter } from './n11.interpreter';
+import { IdeaSoftResponseInterpreter } from './ideasoft.interpreter';
 import { logger } from '../logger.service';
 
 /**
@@ -45,6 +46,10 @@ export class ResponseInterpreterFactory {
 
             case ResourceName.N11:
                 interpreter = new N11ResponseInterpreter();
+                break;
+
+            case ResourceName.IdeaSoft:
+                interpreter = new IdeaSoftResponseInterpreter();
                 break;
 
             // Diğer platform'lar için ileride eklenebilir

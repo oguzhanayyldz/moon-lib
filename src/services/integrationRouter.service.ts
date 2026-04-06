@@ -22,6 +22,7 @@ export class IntegrationRouter {
     private static readonly PLATFORM_TYPE_MAP: Record<string, IntegrationType> = {
         [ResourceName.Shopify]: IntegrationType.Ecommerce,
         [ResourceName.Ikas]: IntegrationType.Ecommerce,
+        [ResourceName.IdeaSoft]: IntegrationType.Ecommerce,
         [ResourceName.Trendyol]: IntegrationType.MarketPlace,
         [ResourceName.Hepsiburada]: IntegrationType.MarketPlace,
         [ResourceName.Amazon]: IntegrationType.MarketPlace,

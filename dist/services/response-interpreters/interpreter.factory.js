@@ -7,6 +7,7 @@ const shopify_interpreter_1 = require("./shopify.interpreter");
 const hepsiburada_interpreter_1 = require("./hepsiburada.interpreter");
 const ikas_interpreter_1 = require("./ikas.interpreter");
 const n11_interpreter_1 = require("./n11.interpreter");
+const ideasoft_interpreter_1 = require("./ideasoft.interpreter");
 const logger_service_1 = require("../logger.service");
 /**
  * Response Interpreter Factory
@@ -38,6 +39,9 @@ class ResponseInterpreterFactory {
                 break;
             case common_1.ResourceName.N11:
                 interpreter = new n11_interpreter_1.N11ResponseInterpreter();
+                break;
+            case common_1.ResourceName.IdeaSoft:
+                interpreter = new ideasoft_interpreter_1.IdeaSoftResponseInterpreter();
                 break;
             // Diğer platform'lar için ileride eklenebilir
             case common_1.ResourceName.Amazon:
