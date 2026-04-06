@@ -44,8 +44,24 @@ export class IdeaSoftResponseInterpreter extends BaseResponseInterpreter {
                 case OperationType.SYNC_STOCK:
                     return this.interpretStockUpdate(response);
 
+                case OperationType.UPDATE_PRICES:
+                case OperationType.FETCH_PRICES:
+                    return this.interpretPriceOperation(response, operationType);
+
+                case OperationType.GET_BRANDS:
+                    return this.interpretBrandList(response);
+
+                case OperationType.GET_CATEGORIES:
+                    return this.interpretCategoryList(response);
+
                 case OperationType.SEND_TRACKING:
+                case OperationType.DELIVER_ORDER:
                     return this.interpretShipmentUpdate(response);
+
+                case OperationType.FETCH_CLAIMS:
+                case OperationType.ACCEPT_CLAIM:
+                case OperationType.REJECT_CLAIM:
+                    return this.interpretRefundOperation(response, operationType);
 
                 default:
                     return this.interpretGeneric(response, operationType);
@@ -197,20 +213,121 @@ export class IdeaSoftResponseInterpreter extends BaseResponseInterpreter {
     }
 
     /**
+     * Fiyat işlemi yanıtını yorumla (GET /product_prices, PUT /product_prices/{id})
+     */
+    private interpretPriceOperation(response: any, operationType: OperationType): InterpretedResponse {
+        if (Array.isArray(response)) {
+            return {
+                summary: `${response.length} fiyat bilgisi getirildi`,
+                success: true,
+                successCount: response.length,
+                details: { count: response.length },
+                parsedAt: new Date()
+            };
+        }
+
+        const productId = response?.product?.id || response?.id;
+        return {
+            summary: `Fiyat ${operationType === OperationType.FETCH_PRICES ? 'getirildi' : 'güncellendi'}: ürün ${productId}`,
+            success: true,
+            successCount: 1,
+            details: {
+                productId,
+                price1: response?.price1,
+                discount: response?.discount
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Marka listesi yanıtını yorumla (GET /brands)
+     */
+    private interpretBrandList(response: any): InterpretedResponse {
+        const brands = Array.isArray(response) ? response : [response];
+        return {
+            summary: `${brands.length} marka getirildi`,
+            success: true,
+            successCount: brands.length,
+            details: {
+                brandCount: brands.length,
+                brands: brands.slice(0, 5).map((b: any) => ({ id: b.id, name: b.name }))
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * Kategori listesi yanıtını yorumla (GET /categories)
+     */
+    private interpretCategoryList(response: any): InterpretedResponse {
+        const categories = Array.isArray(response) ? response : [response];
+        return {
+            summary: `${categories.length} kategori getirildi`,
+            success: true,
+            successCount: categories.length,
+            details: {
+                categoryCount: categories.length,
+                categories: categories.slice(0, 5).map((c: any) => ({ id: c.id, name: c.name }))
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
      * Kargo/shipment güncelleme yanıtını yorumla
+     * IdeaSoft: Shipment CreateAction PUT, shippingTrackingCode field
      */
     private interpretShipmentUpdate(response: any): InterpretedResponse {
         const shipmentId = response?.id;
-        const trackingNumber = response?.trackingNumber;
+        const trackingCode = response?.shippingTrackingCode || response?.barcode;
 
         return {
-            summary: `Kargo bildirimi başarılı${trackingNumber ? `: ${trackingNumber}` : ''}`,
+            summary: `Kargo bildirimi başarılı${trackingCode ? `: ${trackingCode}` : ''}`,
             success: true,
             successCount: 1,
             details: {
                 shipmentId,
-                trackingNumber,
+                trackingCode,
+                shippingCompanyName: response?.shippingCompanyName,
                 status: response?.status
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * İade işlemi yanıtını yorumla (GET/POST /order_refund_requests)
+     */
+    private interpretRefundOperation(response: any, operationType: OperationType): InterpretedResponse {
+        if (Array.isArray(response)) {
+            return {
+                summary: `${response.length} iade talebi getirildi`,
+                success: true,
+                successCount: response.length,
+                details: {
+                    refundCount: response.length,
+                    statuses: response.slice(0, 10).map((r: any) => ({ id: r.id, status: r.status }))
+                },
+                parsedAt: new Date()
+            };
+        }
+
+        const refundId = response?.id;
+        const status = response?.status;
+        const actionLabel = operationType === OperationType.ACCEPT_CLAIM ? 'onaylandı'
+            : operationType === OperationType.REJECT_CLAIM ? 'reddedildi'
+            : 'işlendi';
+
+        return {
+            summary: `İade talebi ${actionLabel}: #${refundId}${status ? ` (${status})` : ''}`,
+            success: true,
+            successCount: 1,
+            details: {
+                refundId,
+                status,
+                fee: response?.fee,
+                shippingFee: response?.shippingFee
             },
             parsedAt: new Date()
         };

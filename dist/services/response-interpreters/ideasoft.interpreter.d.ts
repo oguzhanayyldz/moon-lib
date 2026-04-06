@@ -36,9 +36,26 @@ export declare class IdeaSoftResponseInterpreter extends BaseResponseInterpreter
      */
     private interpretStockUpdate;
     /**
+     * Fiyat işlemi yanıtını yorumla (GET /product_prices, PUT /product_prices/{id})
+     */
+    private interpretPriceOperation;
+    /**
+     * Marka listesi yanıtını yorumla (GET /brands)
+     */
+    private interpretBrandList;
+    /**
+     * Kategori listesi yanıtını yorumla (GET /categories)
+     */
+    private interpretCategoryList;
+    /**
      * Kargo/shipment güncelleme yanıtını yorumla
+     * IdeaSoft: Shipment CreateAction PUT, shippingTrackingCode field
      */
     private interpretShipmentUpdate;
+    /**
+     * İade işlemi yanıtını yorumla (GET/POST /order_refund_requests)
+     */
+    private interpretRefundOperation;
     /**
      * Genel yanıt yorumlama
      */
