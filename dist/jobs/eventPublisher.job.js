@@ -14,12 +14,7 @@ const common_1 = require("../common/");
 const outbox_schema_1 = require("../models/outbox.schema");
 const productCreated_publisher_1 = require("../events/publishers/productCreated.publisher");
 const productUpdated_publisher_1 = require("../events/publishers/productUpdated.publisher");
-const packageProductLinkCreated_publisher_1 = require("../events/publishers/packageProductLinkCreated.publisher");
-const packageProductLinkUpdated_publisher_1 = require("../events/publishers/packageProductLinkUpdated.publisher");
-const relationProductLinkCreated_publisher_1 = require("../events/publishers/relationProductLinkCreated.publisher");
-const relationProductLinkUpdated_publisher_1 = require("../events/publishers/relationProductLinkUpdated.publisher");
-const combinationCreated_publisher_1 = require("../events/publishers/combinationCreated.publisher");
-const combinationUpdated_publisher_1 = require("../events/publishers/combinationUpdated.publisher");
+// Combination/PPL/RPL publisher import'ları kaldırıldı (issue #507)
 const userCreated_publisher_1 = require("../events/publishers/userCreated.publisher");
 const userUpdated_publisher_1 = require("../events/publishers/userUpdated.publisher");
 const userConfigUpdated_publisher_1 = require("../events/publishers/userConfigUpdated.publisher");
@@ -61,7 +56,7 @@ const invoiceCreated_publisher_1 = require("../events/publishers/invoiceCreated.
 const invoiceUpdated_publisher_1 = require("../events/publishers/invoiceUpdated.publisher");
 const invoiceFormalized_publisher_1 = require("../events/publishers/invoiceFormalized.publisher");
 const invoiceFailed_publisher_1 = require("../events/publishers/invoiceFailed.publisher");
-const orderCargoUpdated_publisher_1 = require("../events/publishers/orderCargoUpdated.publisher");
+// OrderCargoUpdatedPublisher kaldırıldı (issue #507)
 const shipmentCreated_publisher_1 = require("../events/publishers/shipmentCreated.publisher");
 const shipmentUpdated_publisher_1 = require("../events/publishers/shipmentUpdated.publisher");
 const excelFileGenerated_publisher_1 = require("../events/publishers/excelFileGenerated.publisher");
@@ -432,33 +427,7 @@ class EventPublisherJob {
                     yield new productUpdated_publisher_1.ProductUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
-                // === DEPRECATED (issue #507) — Listener'ları kaldırıldı, bu publisher'lar artık gereksiz ===
-                // CombinationUpdated hala updateCombination route'undan outbox'a yazılıyor (inline edit)
-                // ama hiçbir servis dinlemiyor. Diğerleri için outbox oluşturan kod da kaldırıldı.
-                case common_1.Subjects.CombinationCreated:
-                    yield new combinationCreated_publisher_1.CombinationCreatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
-                case common_1.Subjects.CombinationUpdated:
-                    yield new combinationUpdated_publisher_1.CombinationUpdatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
-                case common_1.Subjects.PackageProductLinkCreated:
-                    yield new packageProductLinkCreated_publisher_1.PackageProductLinkCreatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
-                case common_1.Subjects.PackageProductLinkUpdated:
-                    yield new packageProductLinkUpdated_publisher_1.PackageProductLinkUpdatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
-                case common_1.Subjects.RelationProductLinkCreated:
-                    yield new relationProductLinkCreated_publisher_1.RelationProductLinkCreatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
-                case common_1.Subjects.RelationProductLinkUpdated:
-                    yield new relationProductLinkUpdated_publisher_1.RelationProductLinkUpdatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
+                // Combination/PPL/RPL case'leri tamamen kaldırıldı (issue #507)
                 case common_1.Subjects.UserCreated:
                     yield new userCreated_publisher_1.UserCreatedPublisher(this.natsClient)
                         .publish(event.payload);
@@ -615,11 +584,7 @@ class EventPublisherJob {
                     yield new invoiceFailed_publisher_1.InvoiceFailedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
-                // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
-                case common_1.Subjects.OrderCargoUpdated:
-                    yield new orderCargoUpdated_publisher_1.OrderCargoUpdatedPublisher(this.natsClient)
-                        .publish(event.payload);
-                    break;
+                // OrderCargoUpdated case tamamen kaldırıldı (issue #507)
                 case common_1.Subjects.ShipmentCreated:
                     yield new shipmentCreated_publisher_1.ShipmentCreatedPublisher(this.natsClient)
                         .publish(event.payload);

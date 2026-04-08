@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel } from "./base/base.schema";
-import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, PackageProductLinkCreatedEvent, PackageProductLinkUpdatedEvent, RelationProductLinkCreatedEvent, RelationProductLinkUpdatedEvent, CombinationCreatedEvent, CombinationUpdatedEvent, UserCreatedEvent, UserUpdatedEvent, UserConfigUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderCargoUpdatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductErpIdUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, IntegrationUpdatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, EntityVersionBulkUpdatedEvent, SyncRequestedEvent, InvoiceUpdatedEvent, InvoiceCreatedEvent, InvoiceFormalizedEvent, InvoiceFailedEvent, ShipmentCreatedEvent, ShipmentUpdatedEvent, ExcelFileGeneratedEvent, ExcelFileStoredEvent, CategoryCreatedEvent, CategoryUpdatedEvent, BrandCreatedEvent, BrandUpdatedEvent, CustomerUpdatedEvent, CustomerAddressUpdatedEvent, CatalogMappingUpdatedEvent, PlatformCategorySyncedEvent, PlatformBrandSyncedEvent, UpdateOrderCargoLabelEvent, OrderWorkPackageInfoBulkUpdatedEvent, SubscriptionUpdatedEvent, SubscriptionPaymentCompletedEvent, SubscriptionPaymentFailedEvent, PriceProcessingCompletedEvent } from "../common";
+import { Subjects, ProductCreatedEvent, ProductUpdatedEvent, ProductIntegrationCreatedEvent, UserCreatedEvent, UserUpdatedEvent, UserConfigUpdatedEvent, IntegrationCommandEvent, ProductStockCreatedEvent, ProductStockUpdatedEvent, StockCreatedEvent, StockUpdatedEvent, OrderCreatedEvent, OrderUpdatedEvent, EntityDeletedEvent, OrderStatusUpdatedEvent, IntegrationCommandResultEvent, ImportImagesFromUrlsEvent, ImportImagesFromUrlsCompletedEvent, DeleteProductImagesEvent, DeleteProductImagesCompletedEvent, ProductPriceIntegrationUpdatedEvent, ProductPriceUpdatedEvent, ProductErpIdUpdatedEvent, ProductStockIntegrationUpdatedEvent, CatalogMappingCreatedEvent, ProductImageIntegrationUpdatedEvent, ProductIntegrationSyncedEvent, OrderIntegrationCreatedEvent, IntegrationCreatedEvent, IntegrationUpdatedEvent, UserIntegrationSettingsEvent, OrderIntegrationStatusUpdatedEvent, ProductMatchedEvent, NotificationCreatedEvent, OrderProductStockUpdatedEvent, EntityVersionUpdatedEvent, EntityVersionBulkUpdatedEvent, SyncRequestedEvent, InvoiceUpdatedEvent, InvoiceCreatedEvent, InvoiceFormalizedEvent, InvoiceFailedEvent, ShipmentCreatedEvent, ShipmentUpdatedEvent, ExcelFileGeneratedEvent, ExcelFileStoredEvent, CategoryCreatedEvent, CategoryUpdatedEvent, BrandCreatedEvent, BrandUpdatedEvent, CustomerUpdatedEvent, CustomerAddressUpdatedEvent, CatalogMappingUpdatedEvent, PlatformCategorySyncedEvent, PlatformBrandSyncedEvent, UpdateOrderCargoLabelEvent, OrderWorkPackageInfoBulkUpdatedEvent, SubscriptionUpdatedEvent, SubscriptionPaymentCompletedEvent, SubscriptionPaymentFailedEvent, PriceProcessingCompletedEvent } from "../common";
 interface EventPayloadMap {
     [Subjects.ProductCreated]: ProductCreatedEvent['data'];
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
@@ -10,12 +10,6 @@ interface EventPayloadMap {
     [Subjects.ProductImageIntegrationUpdated]: ProductImageIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
     [Subjects.ProductErpIdUpdated]: ProductErpIdUpdatedEvent['data'];
-    [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
-    [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];
-    [Subjects.RelationProductLinkCreated]: RelationProductLinkCreatedEvent['data'];
-    [Subjects.RelationProductLinkUpdated]: RelationProductLinkUpdatedEvent['data'];
-    [Subjects.CombinationCreated]: CombinationCreatedEvent['data'];
-    [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
     [Subjects.UserConfigUpdated]: UserConfigUpdatedEvent['data'];
@@ -50,7 +44,6 @@ interface EventPayloadMap {
     [Subjects.InvoiceUpdated]: InvoiceUpdatedEvent['data'];
     [Subjects.InvoiceFormalized]: InvoiceFormalizedEvent['data'];
     [Subjects.InvoiceFailed]: InvoiceFailedEvent['data'];
-    [Subjects.OrderCargoUpdated]: OrderCargoUpdatedEvent['data'];
     [Subjects.ShipmentCreated]: ShipmentCreatedEvent['data'];
     [Subjects.ShipmentUpdated]: ShipmentUpdatedEvent['data'];
     [Subjects.ExcelFileGenerated]: ExcelFileGeneratedEvent['data'];

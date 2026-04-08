@@ -5,18 +5,6 @@ export declare enum Subjects {
     ProductIntegrationSynced = "product:integration:synced",
     ProductStockCreated = "product:stock:created",
     ProductStockUpdated = "product:stock:updated",
-    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
-    CombinationCreated = "combination:created",
-    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
-    CombinationUpdated = "combination:updated",
-    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
-    PackageProductLinkCreated = "package:product:link:created",
-    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
-    PackageProductLinkUpdated = "package:product:link:updated",
-    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
-    RelationProductLinkCreated = "relation:product:link:created",
-    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
-    RelationProductLinkUpdated = "relation:product:link:updated",
     UserCreated = "user:created",
     UserUpdated = "user:updated",
     UserConfigUpdated = "user:config:updated",
@@ -53,8 +41,6 @@ export declare enum Subjects {
     InvoiceUpdated = "invoice:updated",
     InvoiceFormalized = "invoice:formalized",
     InvoiceFailed = "invoice:failed",
-    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
-    OrderCargoUpdated = "order:cargo:updated",
     ShipmentCreated = "shipment:created",
     ShipmentUpdated = "shipment:updated",
     ExcelFileGenerated = "excel:file:generated",
@@ -65,11 +51,7 @@ export declare enum Subjects {
     CategoryUpdated = "category:updated",
     BrandCreated = "brand:created",
     BrandUpdated = "brand:updated",
-    /** @deprecated Publisher yok — hiçbir servis bu event'i publish etmiyor */
-    CustomerCreated = "customer:created",
     CustomerUpdated = "customer:updated",
-    /** @deprecated Publisher yok — hiçbir servis bu event'i publish etmiyor */
-    CustomerAddressCreated = "customer:address:created",
     CustomerAddressUpdated = "customer:address:updated",
     CatalogMappingUpdated = "catalog:mapping:updated",
     UpdateOrderCargoLabel = "update:order:cargo:label",

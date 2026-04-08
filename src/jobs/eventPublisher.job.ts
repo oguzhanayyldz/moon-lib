@@ -4,12 +4,7 @@ import { Subjects, ServiceName } from '../common/';
 import { createOutboxModel, OutboxModel } from '../models/outbox.schema';
 import { ProductCreatedPublisher } from '../events/publishers/productCreated.publisher';
 import { ProductUpdatedPublisher } from '../events/publishers/productUpdated.publisher';
-import { PackageProductLinkCreatedPublisher } from '../events/publishers/packageProductLinkCreated.publisher';
-import { PackageProductLinkUpdatedPublisher } from '../events/publishers/packageProductLinkUpdated.publisher';
-import { RelationProductLinkCreatedPublisher } from '../events/publishers/relationProductLinkCreated.publisher';
-import { RelationProductLinkUpdatedPublisher } from '../events/publishers/relationProductLinkUpdated.publisher';
-import { CombinationCreatedPublisher } from '../events/publishers/combinationCreated.publisher';
-import { CombinationUpdatedPublisher } from '../events/publishers/combinationUpdated.publisher';
+// Combination/PPL/RPL publisher import'ları kaldırıldı (issue #507)
 import { UserCreatedPublisher } from '../events/publishers/userCreated.publisher';
 import { UserUpdatedPublisher } from '../events/publishers/userUpdated.publisher';
 import { UserConfigUpdatedPublisher } from '../events/publishers/userConfigUpdated.publisher';
@@ -51,7 +46,7 @@ import { InvoiceCreatedPublisher } from '../events/publishers/invoiceCreated.pub
 import { InvoiceUpdatedPublisher } from '../events/publishers/invoiceUpdated.publisher';
 import { InvoiceFormalizedPublisher } from '../events/publishers/invoiceFormalized.publisher';
 import { InvoiceFailedPublisher } from '../events/publishers/invoiceFailed.publisher';
-import { OrderCargoUpdatedPublisher } from '../events/publishers/orderCargoUpdated.publisher';
+// OrderCargoUpdatedPublisher kaldırıldı (issue #507)
 import { ShipmentCreatedPublisher } from '../events/publishers/shipmentCreated.publisher';
 import { ShipmentUpdatedPublisher } from '../events/publishers/shipmentUpdated.publisher';
 import { ExcelFileGeneratedPublisher } from '../events/publishers/excelFileGenerated.publisher';
@@ -493,33 +488,7 @@ export class EventPublisherJob {
                 await new ProductUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
-            // === DEPRECATED (issue #507) — Listener'ları kaldırıldı, bu publisher'lar artık gereksiz ===
-            // CombinationUpdated hala updateCombination route'undan outbox'a yazılıyor (inline edit)
-            // ama hiçbir servis dinlemiyor. Diğerleri için outbox oluşturan kod da kaldırıldı.
-            case Subjects.CombinationCreated:
-                await new CombinationCreatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case Subjects.CombinationUpdated:
-                await new CombinationUpdatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case Subjects.PackageProductLinkCreated:
-                await new PackageProductLinkCreatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case Subjects.PackageProductLinkUpdated:
-                await new PackageProductLinkUpdatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case Subjects.RelationProductLinkCreated:
-                await new RelationProductLinkCreatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case Subjects.RelationProductLinkUpdated:
-                await new RelationProductLinkUpdatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
+            // Combination/PPL/RPL case'leri tamamen kaldırıldı (issue #507)
             case Subjects.UserCreated:
                 await new UserCreatedPublisher(this.natsClient)
                     .publish(event.payload);
@@ -676,11 +645,7 @@ export class EventPublisherJob {
                 await new InvoiceFailedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
-            // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
-            case Subjects.OrderCargoUpdated:
-                await new OrderCargoUpdatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
+            // OrderCargoUpdated case tamamen kaldırıldı (issue #507)
             case Subjects.ShipmentCreated:
                 await new ShipmentCreatedPublisher(this.natsClient)
                     .publish(event.payload);

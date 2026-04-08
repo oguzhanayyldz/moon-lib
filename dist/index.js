@@ -103,12 +103,7 @@ __exportStar(require("./events/publishers/productCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productIntegrationCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productIntegrationSynced.publisher"), exports);
-__exportStar(require("./events/publishers/combinationCreated.publisher"), exports);
-__exportStar(require("./events/publishers/combinationUpdated.publisher"), exports);
-__exportStar(require("./events/publishers/packageProductLinkCreated.publisher"), exports);
-__exportStar(require("./events/publishers/packageProductLinkUpdated.publisher"), exports);
-__exportStar(require("./events/publishers/relationProductLinkCreated.publisher"), exports);
-__exportStar(require("./events/publishers/relationProductLinkUpdated.publisher"), exports);
+// Combination/PPL/RPL publisher export'ları kaldırıldı (issue #507)
 __exportStar(require("./events/publishers/integrationCommand.publisher"), exports);
 __exportStar(require("./events/publishers/integrationCommandResult.publisher"), exports);
 __exportStar(require("./events/publishers/productStockCreated.publisher"), exports);

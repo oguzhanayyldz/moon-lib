@@ -11,12 +11,7 @@ export * from './product-updated-event';
 export * from './product-stock-created-event';
 export * from './product-stock-updated-event';
 export * from './product-price-integration-updated-event';
-export * from './combination-created-event';
-export * from './combination-updated-event';
-export * from './package-product-link-created-event';
-export * from './package-product-link-updated-event';
-export * from './relation-product-link-created-event';
-export * from './relation-product-link-updated-event';
+// Combination/PPL/RPL event export'ları kaldırıldı (issue #507)
 export * from './stock-created-event';
 export * from './stock-updated-event';
 export * from './order-created-event';
@@ -67,7 +62,7 @@ export * from './types/device-status';
 export * from './types/item-status';
 export * from './types/route-item-status';
 export * from './types/work-package-action-type';
-export * from './order-cargo-updated-event';
+// order-cargo-updated-event kaldırıldı (issue #507)
 export * from './shipment-created-event';
 export * from './shipment-updated-event';
 export * from './excel-file-generated-event';
