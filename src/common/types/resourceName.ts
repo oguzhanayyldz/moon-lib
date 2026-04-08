@@ -10,4 +10,5 @@ export enum ResourceName {
     Aras = "Aras",
     Yurtici = "Yurtici",
     Ikas = "Ikas",
+    IdeaSoft = "IdeaSoft",
 }
