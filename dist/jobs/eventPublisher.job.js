@@ -432,6 +432,9 @@ class EventPublisherJob {
                     yield new productUpdated_publisher_1.ProductUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
+                // === DEPRECATED (issue #507) — Listener'ları kaldırıldı, bu publisher'lar artık gereksiz ===
+                // CombinationUpdated hala updateCombination route'undan outbox'a yazılıyor (inline edit)
+                // ama hiçbir servis dinlemiyor. Diğerleri için outbox oluşturan kod da kaldırıldı.
                 case common_1.Subjects.CombinationCreated:
                     yield new combinationCreated_publisher_1.CombinationCreatedPublisher(this.natsClient)
                         .publish(event.payload);
@@ -612,6 +615,7 @@ class EventPublisherJob {
                     yield new invoiceFailed_publisher_1.InvoiceFailedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
+                // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
                 case common_1.Subjects.OrderCargoUpdated:
                     yield new orderCargoUpdated_publisher_1.OrderCargoUpdatedPublisher(this.natsClient)
                         .publish(event.payload);
@@ -684,10 +688,12 @@ class EventPublisherJob {
                     yield new subscriptionPaymentCompleted_publisher_1.SubscriptionPaymentCompletedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
+                // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
                 case common_1.Subjects.SubscriptionPaymentFailed:
                     yield new subscriptionPaymentFailed_publisher_1.SubscriptionPaymentFailedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
+                // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
                 case common_1.Subjects.SubscriptionInvoiceCreated:
                     yield new subscriptionInvoiceCreated_publisher_1.SubscriptionInvoiceCreatedPublisher(this.natsClient)
                         .publish(event.payload);

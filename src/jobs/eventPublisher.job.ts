@@ -493,6 +493,9 @@ export class EventPublisherJob {
                 await new ProductUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            // === DEPRECATED (issue #507) — Listener'ları kaldırıldı, bu publisher'lar artık gereksiz ===
+            // CombinationUpdated hala updateCombination route'undan outbox'a yazılıyor (inline edit)
+            // ama hiçbir servis dinlemiyor. Diğerleri için outbox oluşturan kod da kaldırıldı.
             case Subjects.CombinationCreated:
                 await new CombinationCreatedPublisher(this.natsClient)
                     .publish(event.payload);
@@ -673,6 +676,7 @@ export class EventPublisherJob {
                 await new InvoiceFailedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
             case Subjects.OrderCargoUpdated:
                 await new OrderCargoUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
@@ -745,10 +749,12 @@ export class EventPublisherJob {
                 await new SubscriptionPaymentCompletedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
             case Subjects.SubscriptionPaymentFailed:
                 await new SubscriptionPaymentFailedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
+            // DEPRECATED (issue #507) — Listener yok, outbox oluşturan kod kaldırıldı
             case Subjects.SubscriptionInvoiceCreated:
                 await new SubscriptionInvoiceCreatedPublisher(this.natsClient)
                     .publish(event.payload);

@@ -9,11 +9,20 @@ var Subjects;
     Subjects["ProductIntegrationSynced"] = "product:integration:synced";
     Subjects["ProductStockCreated"] = "product:stock:created";
     Subjects["ProductStockUpdated"] = "product:stock:updated";
+    // === DEPRECATED (issue #507) — Standalone route'lar dead, listener'lar kaldırıldı ===
+    // Bu event'ler artık hiçbir servis tarafından dinlenmiyor.
+    // Product create/update flow'u bu bilgileri ProductCreated/ProductUpdated payload'ına embed ediyor.
+    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
     Subjects["CombinationCreated"] = "combination:created";
+    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
     Subjects["CombinationUpdated"] = "combination:updated";
+    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
     Subjects["PackageProductLinkCreated"] = "package:product:link:created";
+    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
     Subjects["PackageProductLinkUpdated"] = "package:product:link:updated";
+    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
     Subjects["RelationProductLinkCreated"] = "relation:product:link:created";
+    /** @deprecated Listener yok — ProductCreated/ProductUpdated kullanılıyor */
     Subjects["RelationProductLinkUpdated"] = "relation:product:link:updated";
     Subjects["UserCreated"] = "user:created";
     Subjects["UserUpdated"] = "user:updated";
@@ -51,6 +60,7 @@ var Subjects;
     Subjects["InvoiceUpdated"] = "invoice:updated";
     Subjects["InvoiceFormalized"] = "invoice:formalized";
     Subjects["InvoiceFailed"] = "invoice:failed";
+    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     Subjects["OrderCargoUpdated"] = "order:cargo:updated";
     Subjects["ShipmentCreated"] = "shipment:created";
     Subjects["ShipmentUpdated"] = "shipment:updated";
@@ -62,8 +72,10 @@ var Subjects;
     Subjects["CategoryUpdated"] = "category:updated";
     Subjects["BrandCreated"] = "brand:created";
     Subjects["BrandUpdated"] = "brand:updated";
+    /** @deprecated Publisher yok — hiçbir servis bu event'i publish etmiyor */
     Subjects["CustomerCreated"] = "customer:created";
     Subjects["CustomerUpdated"] = "customer:updated";
+    /** @deprecated Publisher yok — hiçbir servis bu event'i publish etmiyor */
     Subjects["CustomerAddressCreated"] = "customer:address:created";
     Subjects["CustomerAddressUpdated"] = "customer:address:updated";
     Subjects["CatalogMappingUpdated"] = "catalog:mapping:updated";
@@ -75,7 +87,9 @@ var Subjects;
     // Subscription Events
     Subjects["SubscriptionUpdated"] = "subscription:updated";
     Subjects["SubscriptionPaymentCompleted"] = "subscription:payment:completed";
+    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     Subjects["SubscriptionPaymentFailed"] = "subscription:payment:failed";
+    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     Subjects["SubscriptionInvoiceCreated"] = "subscription:invoice:created";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map
