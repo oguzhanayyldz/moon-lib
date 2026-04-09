@@ -96,6 +96,34 @@ export interface BaseModel<T extends BaseDoc, A extends BaseAttrs> extends Model
     findByEvent(event: { id: string, version: number }): Promise<T | null>;
 }
 
+/**
+ * Lean query sonuçlarına `id` property ekler.
+ * Mongoose'un `id` virtual getter'ı lean objelerde çalışmadığı için,
+ * bu helper `_id` → `id` dönüşümünü uygular.
+ * Populate edilmiş alt dokümanları da recursive olarak işler.
+ */
+function addIdToLeanDoc(doc: Record<string, unknown>): void {
+    if (!doc || typeof doc !== 'object') return;
+
+    if (doc._id && doc.id === undefined) {
+        doc.id = doc._id.toString();
+    }
+
+    for (const key of Object.keys(doc)) {
+        if (key === '_id') continue;
+        const val = doc[key];
+        if (Array.isArray(val)) {
+            for (const item of val) {
+                if (item && typeof item === 'object' && (item as Record<string, unknown>)._id) {
+                    addIdToLeanDoc(item as Record<string, unknown>);
+                }
+            }
+        } else if (val && typeof val === 'object' && (val as Record<string, unknown>)._id) {
+            addIdToLeanDoc(val as Record<string, unknown>);
+        }
+    }
+}
+
 export function createBaseSchema(
     schemaDefinition: mongoose.SchemaDefinition = {},
     options: BaseSchemaOptions = {}
@@ -382,6 +410,21 @@ export function createBaseSchema(
             query.where({ deletionDate: { $exists: false }, deleted: { $exists: false } });
         }
         next();
+    });
+
+    // Lean post hooks: .lean() ile dönen plain objelere `id` property ekler
+    baseSchema.post('find', function (docs: Record<string, unknown>[]) {
+        if ((this as any).mongooseOptions().lean && Array.isArray(docs)) {
+            for (const doc of docs) { addIdToLeanDoc(doc); }
+        }
+    });
+
+    baseSchema.post('findOne', function (doc: Record<string, unknown> | null) {
+        if ((this as any).mongooseOptions().lean && doc) { addIdToLeanDoc(doc); }
+    });
+
+    baseSchema.post('findOneAndUpdate', function (doc: Record<string, unknown> | null) {
+        if ((this as any).mongooseOptions().lean && doc) { addIdToLeanDoc(doc); }
     });
 
     baseSchema.methods.destroy = async function(): Promise<EmitReturnConfig | undefined> {

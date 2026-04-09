@@ -53,6 +53,34 @@ const logger_service_1 = require("../../services/logger.service");
 // ✅ Global Map: Model isimlerine göre version tracking config saklama
 // Schema veya Model'e custom property eklemek çalışmadığı için global Map kullanıyoruz
 exports.VERSION_TRACKING_CONFIGS = new Map();
+/**
+ * Lean query sonuçlarına `id` property ekler.
+ * Mongoose'un `id` virtual getter'ı lean objelerde çalışmadığı için,
+ * bu helper `_id` → `id` dönüşümünü uygular.
+ * Populate edilmiş alt dokümanları da recursive olarak işler.
+ */
+function addIdToLeanDoc(doc) {
+    if (!doc || typeof doc !== 'object')
+        return;
+    if (doc._id && doc.id === undefined) {
+        doc.id = doc._id.toString();
+    }
+    for (const key of Object.keys(doc)) {
+        if (key === '_id')
+            continue;
+        const val = doc[key];
+        if (Array.isArray(val)) {
+            for (const item of val) {
+                if (item && typeof item === 'object' && item._id) {
+                    addIdToLeanDoc(item);
+                }
+            }
+        }
+        else if (val && typeof val === 'object' && val._id) {
+            addIdToLeanDoc(val);
+        }
+    }
+}
 function createBaseSchema(schemaDefinition = {}, options = {}) {
     const baseSchema = new mongoose_1.Schema(Object.assign({ uuid: { type: String }, creationDate: {
             type: Date,
@@ -301,6 +329,24 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
             query.where({ deletionDate: { $exists: false }, deleted: { $exists: false } });
         }
         next();
+    });
+    // Lean post hooks: .lean() ile dönen plain objelere `id` property ekler
+    baseSchema.post('find', function (docs) {
+        if (this.mongooseOptions().lean && Array.isArray(docs)) {
+            for (const doc of docs) {
+                addIdToLeanDoc(doc);
+            }
+        }
+    });
+    baseSchema.post('findOne', function (doc) {
+        if (this.mongooseOptions().lean && doc) {
+            addIdToLeanDoc(doc);
+        }
+    });
+    baseSchema.post('findOneAndUpdate', function (doc) {
+        if (this.mongooseOptions().lean && doc) {
+            addIdToLeanDoc(doc);
+        }
     });
     baseSchema.methods.destroy = function () {
         return __awaiter(this, void 0, void 0, function* () {
