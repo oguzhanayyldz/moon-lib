@@ -980,6 +980,7 @@ export const createOutboxMock = () => {
     (mockOutboxConstructor as any).findByIdAndDelete = jest.fn().mockResolvedValue(null);
     (mockOutboxConstructor as any).countDocuments = jest.fn().mockResolvedValue(0);
     (mockOutboxConstructor as any).aggregate = jest.fn().mockResolvedValue([]);
+    (mockOutboxConstructor as any).insertMany = jest.fn().mockResolvedValue([]);
 
     // Add build() method for services that use it (like Catalog Excel Service)
     (mockOutboxConstructor as any).build = jest.fn().mockImplementation((attrs: any) => ({
