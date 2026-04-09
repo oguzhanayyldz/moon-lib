@@ -129,9 +129,9 @@ class RedisWrapper {
         return false;
     }
 
-    async setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: any) {
+    async setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: Record<string, unknown>) {
         const key = `user:${userId}:order:${purchaseNumber}:${platformNumber}`;
-        await this.client.hSet(key, JSON.parse(JSON.stringify(orderData)));
+        await this.client.hSet(key, this.toHashFields(orderData));
     }
 
     async getOrder(userId: string, purchaseNumber: string, platformNumber: string) {
@@ -155,9 +155,9 @@ class RedisWrapper {
         }
     }
 
-    async setCredentials(userId: string, platform: string, credentials: any) {
+    async setCredentials(userId: string, platform: string, credentials: Record<string, unknown>) {
         const key = `user:${userId}:platform:${platform}:credentials`;
-        await this.client.hSet(key, JSON.parse(JSON.stringify(credentials)));
+        await this.client.hSet(key, this.toHashFields(credentials));
     }
 
     async getCredentials(userId: string, platform: string) {
@@ -196,6 +196,19 @@ class RedisWrapper {
         });
         
         return result === 'OK';
+    }
+
+    /**
+     * Objeyi Redis hash field'larına dönüştürür — double serialization olmadan.
+     * undefined/null değerleri atlar, nested objeleri JSON.stringify ile serialize eder.
+     */
+    private toHashFields(data: Record<string, unknown>): Record<string, string> {
+        const result: Record<string, string> = {};
+        for (const [key, value] of Object.entries(data)) {
+            if (value === undefined || value === null) continue;
+            result[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        }
+        return result;
     }
 
     // Uygulama kapanırken bağlantıyı kapat

@@ -10,7 +10,9 @@ class PerformanceMonitor extends events_1.EventEmitter {
     constructor(config) {
         super();
         this.metrics = new Map();
-        this.resourceUsageHistory = [];
+        this.resourceUsageBuffer = new Array(PerformanceMonitor.MAX_HISTORY).fill(null);
+        this.bufferIndex = 0;
+        this.bufferSize = 0;
         this.monitoringInterval = null;
         this.isMonitoring = false;
         this.config = config;
@@ -67,10 +69,11 @@ class PerformanceMonitor extends events_1.EventEmitter {
      */
     collectMetrics() {
         const resourceUsage = this.getCurrentResourceUsage();
-        this.resourceUsageHistory.push(resourceUsage);
-        // Keep only last 1000 entries
-        if (this.resourceUsageHistory.length > 1000) {
-            this.resourceUsageHistory.shift();
+        // Circular buffer — O(1) write, bellek sabit
+        this.resourceUsageBuffer[this.bufferIndex] = resourceUsage;
+        this.bufferIndex = (this.bufferIndex + 1) % PerformanceMonitor.MAX_HISTORY;
+        if (this.bufferSize < PerformanceMonitor.MAX_HISTORY) {
+            this.bufferSize++;
         }
         // Check thresholds and emit alerts
         this.checkThresholds(resourceUsage);
@@ -196,18 +199,37 @@ class PerformanceMonitor extends events_1.EventEmitter {
     /**
      * Get resource usage history
      */
-    getResourceUsageHistory(limit) {
-        if (limit) {
-            return this.resourceUsageHistory.slice(-limit);
+    /**
+     * Circular buffer'dan sıralı history döndürür
+     */
+    getOrderedHistory() {
+        if (this.bufferSize === 0)
+            return [];
+        const result = [];
+        const start = this.bufferSize < PerformanceMonitor.MAX_HISTORY
+            ? 0
+            : this.bufferIndex; // En eski entry'nin pozisyonu
+        for (let i = 0; i < this.bufferSize; i++) {
+            const idx = (start + i) % PerformanceMonitor.MAX_HISTORY;
+            const entry = this.resourceUsageBuffer[idx];
+            if (entry)
+                result.push(entry);
         }
-        return [...this.resourceUsageHistory];
+        return result;
+    }
+    getResourceUsageHistory(limit) {
+        const history = this.getOrderedHistory();
+        if (limit) {
+            return history.slice(-limit);
+        }
+        return history;
     }
     /**
      * Get resource usage trend
      */
     getResourceUsageTrend(metric, minutes = 5) {
         const cutoffTime = Date.now() - (minutes * 60 * 1000);
-        const recentUsage = this.resourceUsageHistory.filter(usage => usage.timestamp >= cutoffTime);
+        const recentUsage = this.getOrderedHistory().filter(usage => usage.timestamp >= cutoffTime);
         if (recentUsage.length < 2) {
             return {
                 trend: 'stable',
@@ -261,7 +283,9 @@ class PerformanceMonitor extends events_1.EventEmitter {
      */
     clearMetrics() {
         this.metrics.clear();
-        this.resourceUsageHistory = [];
+        this.resourceUsageBuffer = new Array(PerformanceMonitor.MAX_HISTORY).fill(null);
+        this.bufferIndex = 0;
+        this.bufferSize = 0;
         logger_service_1.logger.info('Performance metrics cleared');
     }
     /**
@@ -348,6 +372,8 @@ class PerformanceMonitor extends events_1.EventEmitter {
     }
 }
 exports.PerformanceMonitor = PerformanceMonitor;
+// Circular buffer — shift() O(n) yerine O(1) index overwrites
+PerformanceMonitor.MAX_HISTORY = 1000;
 /**
  * Performance timer utility for measuring execution time
  */

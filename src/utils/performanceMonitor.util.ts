@@ -12,7 +12,11 @@ import { logger } from '../services/logger.service';
 export class PerformanceMonitor extends EventEmitter {
   private static instance: PerformanceMonitor;
   private metrics: Map<string, any> = new Map();
-  private resourceUsageHistory: ResourceUsage[] = [];
+  // Circular buffer — shift() O(n) yerine O(1) index overwrites
+  private static readonly MAX_HISTORY = 1000;
+  private resourceUsageBuffer: (ResourceUsage | null)[] = new Array(PerformanceMonitor.MAX_HISTORY).fill(null);
+  private bufferIndex = 0;
+  private bufferSize = 0;
   private monitoringInterval: NodeJS.Timeout | null = null;
   private config: MonitoringConfig;
   private isMonitoring = false;
@@ -81,11 +85,11 @@ export class PerformanceMonitor extends EventEmitter {
    */
   private collectMetrics(): void {
     const resourceUsage = this.getCurrentResourceUsage();
-    this.resourceUsageHistory.push(resourceUsage);
-
-    // Keep only last 1000 entries
-    if (this.resourceUsageHistory.length > 1000) {
-      this.resourceUsageHistory.shift();
+    // Circular buffer — O(1) write, bellek sabit
+    this.resourceUsageBuffer[this.bufferIndex] = resourceUsage;
+    this.bufferIndex = (this.bufferIndex + 1) % PerformanceMonitor.MAX_HISTORY;
+    if (this.bufferSize < PerformanceMonitor.MAX_HISTORY) {
+      this.bufferSize++;
     }
 
     // Check thresholds and emit alerts
@@ -238,11 +242,29 @@ export class PerformanceMonitor extends EventEmitter {
   /**
    * Get resource usage history
    */
-  public getResourceUsageHistory(limit?: number): ResourceUsage[] {
-    if (limit) {
-      return this.resourceUsageHistory.slice(-limit);
+  /**
+   * Circular buffer'dan sıralı history döndürür
+   */
+  private getOrderedHistory(): ResourceUsage[] {
+    if (this.bufferSize === 0) return [];
+    const result: ResourceUsage[] = [];
+    const start = this.bufferSize < PerformanceMonitor.MAX_HISTORY
+      ? 0
+      : this.bufferIndex; // En eski entry'nin pozisyonu
+    for (let i = 0; i < this.bufferSize; i++) {
+      const idx = (start + i) % PerformanceMonitor.MAX_HISTORY;
+      const entry = this.resourceUsageBuffer[idx];
+      if (entry) result.push(entry);
     }
-    return [...this.resourceUsageHistory];
+    return result;
+  }
+
+  public getResourceUsageHistory(limit?: number): ResourceUsage[] {
+    const history = this.getOrderedHistory();
+    if (limit) {
+      return history.slice(-limit);
+    }
+    return history;
   }
 
   /**
@@ -254,7 +276,7 @@ export class PerformanceMonitor extends EventEmitter {
     values: number[];
   } {
     const cutoffTime = Date.now() - (minutes * 60 * 1000);
-    const recentUsage = this.resourceUsageHistory.filter(
+    const recentUsage = this.getOrderedHistory().filter(
       usage => usage.timestamp >= cutoffTime
     );
 
@@ -318,7 +340,9 @@ export class PerformanceMonitor extends EventEmitter {
    */
   public clearMetrics(): void {
     this.metrics.clear();
-    this.resourceUsageHistory = [];
+    this.resourceUsageBuffer = new Array(PerformanceMonitor.MAX_HISTORY).fill(null);
+    this.bufferIndex = 0;
+    this.bufferSize = 0;
     logger.info('Performance metrics cleared');
   }
 
