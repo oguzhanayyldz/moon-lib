@@ -5,12 +5,6 @@ export declare enum Subjects {
     ProductIntegrationSynced = "product:integration:synced",
     ProductStockCreated = "product:stock:created",
     ProductStockUpdated = "product:stock:updated",
-    CombinationCreated = "combination:created",
-    CombinationUpdated = "combination:updated",
-    PackageProductLinkCreated = "package:product:link:created",
-    PackageProductLinkUpdated = "package:product:link:updated",
-    RelationProductLinkCreated = "relation:product:link:created",
-    RelationProductLinkUpdated = "relation:product:link:updated",
     UserCreated = "user:created",
     UserUpdated = "user:updated",
     UserConfigUpdated = "user:config:updated",
@@ -47,7 +41,6 @@ export declare enum Subjects {
     InvoiceUpdated = "invoice:updated",
     InvoiceFormalized = "invoice:formalized",
     InvoiceFailed = "invoice:failed",
-    OrderCargoUpdated = "order:cargo:updated",
     ShipmentCreated = "shipment:created",
     ShipmentUpdated = "shipment:updated",
     ExcelFileGenerated = "excel:file:generated",
@@ -58,9 +51,7 @@ export declare enum Subjects {
     CategoryUpdated = "category:updated",
     BrandCreated = "brand:created",
     BrandUpdated = "brand:updated",
-    CustomerCreated = "customer:created",
     CustomerUpdated = "customer:updated",
-    CustomerAddressCreated = "customer:address:created",
     CustomerAddressUpdated = "customer:address:updated",
     CatalogMappingUpdated = "catalog:mapping:updated",
     UpdateOrderCargoLabel = "update:order:cargo:label",
@@ -68,6 +59,8 @@ export declare enum Subjects {
     PriceProcessingCompleted = "price:processing:completed",
     SubscriptionUpdated = "subscription:updated",
     SubscriptionPaymentCompleted = "subscription:payment:completed",
+    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     SubscriptionPaymentFailed = "subscription:payment:failed",
+    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     SubscriptionInvoiceCreated = "subscription:invoice:created"
 }

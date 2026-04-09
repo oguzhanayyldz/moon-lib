@@ -9,12 +9,8 @@ var Subjects;
     Subjects["ProductIntegrationSynced"] = "product:integration:synced";
     Subjects["ProductStockCreated"] = "product:stock:created";
     Subjects["ProductStockUpdated"] = "product:stock:updated";
-    Subjects["CombinationCreated"] = "combination:created";
-    Subjects["CombinationUpdated"] = "combination:updated";
-    Subjects["PackageProductLinkCreated"] = "package:product:link:created";
-    Subjects["PackageProductLinkUpdated"] = "package:product:link:updated";
-    Subjects["RelationProductLinkCreated"] = "relation:product:link:created";
-    Subjects["RelationProductLinkUpdated"] = "relation:product:link:updated";
+    // Combination/PPL/RPL event'leri tamamen kaldırıldı (issue #507)
+    // ProductCreated/ProductUpdated payload'ında embed ediliyor
     Subjects["UserCreated"] = "user:created";
     Subjects["UserUpdated"] = "user:updated";
     Subjects["UserConfigUpdated"] = "user:config:updated";
@@ -51,7 +47,7 @@ var Subjects;
     Subjects["InvoiceUpdated"] = "invoice:updated";
     Subjects["InvoiceFormalized"] = "invoice:formalized";
     Subjects["InvoiceFailed"] = "invoice:failed";
-    Subjects["OrderCargoUpdated"] = "order:cargo:updated";
+    // OrderCargoUpdated tamamen kaldırıldı (issue #507)
     Subjects["ShipmentCreated"] = "shipment:created";
     Subjects["ShipmentUpdated"] = "shipment:updated";
     Subjects["ExcelFileGenerated"] = "excel:file:generated";
@@ -62,9 +58,8 @@ var Subjects;
     Subjects["CategoryUpdated"] = "category:updated";
     Subjects["BrandCreated"] = "brand:created";
     Subjects["BrandUpdated"] = "brand:updated";
-    Subjects["CustomerCreated"] = "customer:created";
+    // CustomerCreated/CustomerAddressCreated tamamen kaldırıldı (issue #507) — publisher yok
     Subjects["CustomerUpdated"] = "customer:updated";
-    Subjects["CustomerAddressCreated"] = "customer:address:created";
     Subjects["CustomerAddressUpdated"] = "customer:address:updated";
     Subjects["CatalogMappingUpdated"] = "catalog:mapping:updated";
     Subjects["UpdateOrderCargoLabel"] = "update:order:cargo:label";
@@ -75,7 +70,9 @@ var Subjects;
     // Subscription Events
     Subjects["SubscriptionUpdated"] = "subscription:updated";
     Subjects["SubscriptionPaymentCompleted"] = "subscription:payment:completed";
+    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     Subjects["SubscriptionPaymentFailed"] = "subscription:payment:failed";
+    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     Subjects["SubscriptionInvoiceCreated"] = "subscription:invoice:created";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

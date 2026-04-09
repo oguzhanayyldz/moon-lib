@@ -27,12 +27,7 @@ __exportStar(require("./product-updated-event"), exports);
 __exportStar(require("./product-stock-created-event"), exports);
 __exportStar(require("./product-stock-updated-event"), exports);
 __exportStar(require("./product-price-integration-updated-event"), exports);
-__exportStar(require("./combination-created-event"), exports);
-__exportStar(require("./combination-updated-event"), exports);
-__exportStar(require("./package-product-link-created-event"), exports);
-__exportStar(require("./package-product-link-updated-event"), exports);
-__exportStar(require("./relation-product-link-created-event"), exports);
-__exportStar(require("./relation-product-link-updated-event"), exports);
+// Combination/PPL/RPL event export'ları kaldırıldı (issue #507)
 __exportStar(require("./stock-created-event"), exports);
 __exportStar(require("./stock-updated-event"), exports);
 __exportStar(require("./order-created-event"), exports);
@@ -83,7 +78,7 @@ __exportStar(require("./types/device-status"), exports);
 __exportStar(require("./types/item-status"), exports);
 __exportStar(require("./types/route-item-status"), exports);
 __exportStar(require("./types/work-package-action-type"), exports);
-__exportStar(require("./order-cargo-updated-event"), exports);
+// order-cargo-updated-event kaldırıldı (issue #507)
 __exportStar(require("./shipment-created-event"), exports);
 __exportStar(require("./shipment-updated-event"), exports);
 __exportStar(require("./excel-file-generated-event"), exports);

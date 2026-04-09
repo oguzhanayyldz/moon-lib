@@ -69,8 +69,7 @@ function getEventPriority(eventType) {
         [common_1.Subjects.IntegrationCreated]: 2,
         [common_1.Subjects.IntegrationUpdated]: 2,
         // Priority 3: Secondary Entity
-        [common_1.Subjects.CombinationCreated]: 3,
-        [common_1.Subjects.CombinationUpdated]: 3,
+        // CombinationCreated/Updated kaldırıldı (issue #507)
         [common_1.Subjects.StockCreated]: 3,
         [common_1.Subjects.StockUpdated]: 3,
         [common_1.Subjects.CategoryCreated]: 3,

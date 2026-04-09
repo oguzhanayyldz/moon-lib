@@ -7,12 +7,7 @@ import {
     ProductCreatedEvent,
     ProductUpdatedEvent,
     ProductIntegrationCreatedEvent,
-    PackageProductLinkCreatedEvent,
-    PackageProductLinkUpdatedEvent,
-    RelationProductLinkCreatedEvent,
-    RelationProductLinkUpdatedEvent,
-    CombinationCreatedEvent,
-    CombinationUpdatedEvent,
+    // Combination/PPL/RPL event import'ları kaldırıldı (issue #507)
     UserCreatedEvent,
     UserUpdatedEvent,
     UserConfigUpdatedEvent,
@@ -22,7 +17,7 @@ import {
     StockCreatedEvent,
     StockUpdatedEvent,
     OrderCreatedEvent,
-    OrderCargoUpdatedEvent,
+    // OrderCargoUpdatedEvent kaldırıldı (issue #507)
     OrderUpdatedEvent,
     EntityDeletedEvent,
     OrderStatusUpdatedEvent,
@@ -84,12 +79,7 @@ interface EventPayloadMap {
     [Subjects.ProductImageIntegrationUpdated]: ProductImageIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
     [Subjects.ProductErpIdUpdated]: ProductErpIdUpdatedEvent['data'];
-    [Subjects.PackageProductLinkCreated]: PackageProductLinkCreatedEvent['data'];
-    [Subjects.PackageProductLinkUpdated]: PackageProductLinkUpdatedEvent['data'];
-    [Subjects.RelationProductLinkCreated]: RelationProductLinkCreatedEvent['data'];
-    [Subjects.RelationProductLinkUpdated]: RelationProductLinkUpdatedEvent['data'];
-    [Subjects.CombinationCreated]: CombinationCreatedEvent['data'];
-    [Subjects.CombinationUpdated]: CombinationUpdatedEvent['data'];
+    // Combination/PPL/RPL outbox type'ları kaldırıldı (issue #507)
     [Subjects.UserCreated]: UserCreatedEvent['data'];
     [Subjects.UserUpdated]: UserUpdatedEvent['data'];
     [Subjects.UserConfigUpdated]: UserConfigUpdatedEvent['data'];
@@ -124,7 +114,7 @@ interface EventPayloadMap {
     [Subjects.InvoiceUpdated]: InvoiceUpdatedEvent['data'];
     [Subjects.InvoiceFormalized]: InvoiceFormalizedEvent['data'];
     [Subjects.InvoiceFailed]: InvoiceFailedEvent['data'];
-    [Subjects.OrderCargoUpdated]: OrderCargoUpdatedEvent['data'];
+    // OrderCargoUpdated kaldırıldı (issue #507)
     [Subjects.ShipmentCreated]: ShipmentCreatedEvent['data'];
     [Subjects.ShipmentUpdated]: ShipmentUpdatedEvent['data'];
     [Subjects.ExcelFileGenerated]: ExcelFileGeneratedEvent['data'];
@@ -239,8 +229,7 @@ export function getEventPriority(eventType: string): number {
 
         
         // Priority 3: Secondary Entity
-        [Subjects.CombinationCreated]: 3,
-        [Subjects.CombinationUpdated]: 3,
+        // CombinationCreated/Updated kaldırıldı (issue #507)
         [Subjects.StockCreated]: 3,
         [Subjects.StockUpdated]: 3,
         [Subjects.CategoryCreated]: 3,
