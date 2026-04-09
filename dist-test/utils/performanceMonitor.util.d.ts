@@ -6,7 +6,10 @@ import { BatchPerformanceMetrics, ResourceUsage, MonitoringConfig } from '../com
 export declare class PerformanceMonitor extends EventEmitter {
     private static instance;
     private metrics;
-    private resourceUsageHistory;
+    private static readonly MAX_HISTORY;
+    private resourceUsageBuffer;
+    private bufferIndex;
+    private bufferSize;
     private monitoringInterval;
     private config;
     private isMonitoring;
@@ -54,6 +57,10 @@ export declare class PerformanceMonitor extends EventEmitter {
     /**
      * Get resource usage history
      */
+    /**
+     * Circular buffer'dan sıralı history döndürür
+     */
+    private getOrderedHistory;
     getResourceUsageHistory(limit?: number): ResourceUsage[];
     /**
      * Get resource usage trend

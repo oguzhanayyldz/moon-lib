@@ -187,46 +187,30 @@ describe('RetryableListener', () => {
             });
         });
 
-        describe('when TTL is between 1-10 seconds (lock expiring soon)', () => {
-            it('should wait and retry lock acquisition', async () => {
-                const ttl = 5;
+        describe('when TTL is between 1-5 seconds (lock expiring soon)', () => {
+            it('should do a short wait and let NATS redeliver (no re-lock attempt)', async () => {
+                const ttl = 3;
                 (redisWrapper.client.ttl as jest.Mock).mockResolvedValue(ttl);
 
-                // First lock attempt fails, second succeeds
-                (redisWrapper.client.set as jest.Mock)
-                    .mockResolvedValueOnce(null)  // Initial fail
-                    .mockResolvedValueOnce('OK'); // Retry success
+                // Lock acquisition fails
+                (redisWrapper.client.set as jest.Mock).mockResolvedValue(null);
 
                 const startTime = Date.now();
                 await listener.onMessage(testData, mockMessage);
                 const elapsed = Date.now() - startTime;
 
-                // Should have waited approximately ttl + 2 seconds
-                // Using a range to account for test execution time
-                expect(elapsed).toBeGreaterThanOrEqual((ttl + 1) * 1000);
-
-                // Message should be acked after successful retry
-                expect(mockMessage.ack).toHaveBeenCalled();
-
-                // Event should have been processed
-                expect(listener.processEventCalls).toHaveLength(1);
-            }, 15000); // Increase timeout for this test
-
-            it('should NOT ack if retry also fails', async () => {
-                const ttl = 3;
-                (redisWrapper.client.ttl as jest.Mock).mockResolvedValue(ttl);
-
-                // Both attempts fail
-                (redisWrapper.client.set as jest.Mock).mockResolvedValue(null);
-
-                await listener.onMessage(testData, mockMessage);
+                // Short wait (max 3s + jitter), NOT the old (ttl + 2)s blocking wait
+                expect(elapsed).toBeLessThan(5000);
 
                 // Message should NOT be acked - NATS will redeliver
                 expect(mockMessage.ack).not.toHaveBeenCalled();
+
+                // Event should NOT have been processed (no re-lock attempt)
+                expect(listener.processEventCalls).toHaveLength(0);
             }, 10000);
         });
 
-        describe('when TTL is greater than 10 seconds (active processing)', () => {
+        describe('when TTL is greater than 5 seconds (active processing)', () => {
             it('should ack message (another instance is actively processing)', async () => {
                 (redisWrapper.client.ttl as jest.Mock).mockResolvedValue(25);
 

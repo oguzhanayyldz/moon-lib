@@ -6,13 +6,13 @@ declare class RedisWrapper {
     get client(): RedisClientType;
     connect(url: string, timeoutMs?: number): Promise<void>;
     deleteOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<boolean>;
-    setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: any): Promise<void>;
+    setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: Record<string, unknown>): Promise<void>;
     getOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<{
         [x: string]: string;
     } | null>;
     updateOrderStatus(userId: string, purchaseNumber: string, platformNumber: string, status: string): Promise<void>;
     deleteCredentials(userId: string, platform: string): Promise<void>;
-    setCredentials(userId: string, platform: string, credentials: any): Promise<void>;
+    setCredentials(userId: string, platform: string, credentials: Record<string, unknown>): Promise<void>;
     getCredentials(userId: string, platform: string): Promise<{
         [x: string]: string;
     } | null>;
@@ -22,6 +22,11 @@ declare class RedisWrapper {
         arguments: string[];
     }): Promise<any>;
     setNX(key: string, value: string, expireSeconds: number): Promise<boolean>;
+    /**
+     * Objeyi Redis hash field'larına dönüştürür — double serialization olmadan.
+     * undefined/null değerleri atlar, nested objeleri JSON.stringify ile serialize eder.
+     */
+    private toHashFields;
     disconnect(): Promise<void>;
     getConnectionStats(): {
         totalInstances: number;

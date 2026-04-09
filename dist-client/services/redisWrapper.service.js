@@ -132,7 +132,7 @@ class RedisWrapper {
     setOrder(userId, purchaseNumber, platformNumber, orderData) {
         return __awaiter(this, void 0, void 0, function* () {
             const key = `user:${userId}:order:${purchaseNumber}:${platformNumber}`;
-            yield this.client.hSet(key, JSON.parse(JSON.stringify(orderData)));
+            yield this.client.hSet(key, this.toHashFields(orderData));
         });
     }
     getOrder(userId, purchaseNumber, platformNumber) {
@@ -163,7 +163,7 @@ class RedisWrapper {
     setCredentials(userId, platform, credentials) {
         return __awaiter(this, void 0, void 0, function* () {
             const key = `user:${userId}:platform:${platform}:credentials`;
-            yield this.client.hSet(key, JSON.parse(JSON.stringify(credentials)));
+            yield this.client.hSet(key, this.toHashFields(credentials));
         });
     }
     getCredentials(userId, platform) {
@@ -206,6 +206,19 @@ class RedisWrapper {
             });
             return result === 'OK';
         });
+    }
+    /**
+     * Objeyi Redis hash field'larına dönüştürür — double serialization olmadan.
+     * undefined/null değerleri atlar, nested objeleri JSON.stringify ile serialize eder.
+     */
+    toHashFields(data) {
+        const result = {};
+        for (const [key, value] of Object.entries(data)) {
+            if (value === undefined || value === null)
+                continue;
+            result[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        }
+        return result;
     }
     // Uygulama kapanırken bağlantıyı kapat
     disconnect() {

@@ -15,6 +15,8 @@ export declare class EventPublisherJob {
     private readonly outboxModel;
     private readonly serviceOffset;
     private lastProcessedPriority;
+    private static readonly PRIORITY_MAP_TTL;
+    private static readonly PRIORITY_MAP_MAX_SIZE;
     constructor(natsClient: Stan, connection: mongoose.Connection, serviceName?: ServiceName);
     /**
      * Environment variable'dan servis adını çöz
@@ -32,11 +34,17 @@ export declare class EventPublisherJob {
     private getJitter;
     start(): Promise<void>;
     stop(): void;
+    /**
+     * TTL-based cleanup — eski veya aşırı büyümüş priority kayıtlarını temizle
+     */
+    private cleanupPriorityMap;
     private processEvents;
     /**
-     * Event batch'ini işle
+     * Event batch'ini işle — paralel, concurrency limit ile
      */
+    private static readonly CONCURRENCY_LIMIT;
     private processEventBatch;
+    private processOneEvent;
     /**
      * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
      * Bu metod ayrı bir interval ile çalışır (10 saniye) ve birikmiş version

@@ -141,54 +141,36 @@ class RetryableListener extends common_1.Listener {
                     }
                     catch (lockError) {
                         if ((_a = lockError.message) === null || _a === void 0 ? void 0 : _a.includes('Lock acquisition failed')) {
-                            // Lock alınamadı - TTL kontrol et ve akıllıca davran
+                            // Lock alınamadı — kısa jitter ile return, blocking sleep YAPMA
                             const lockKey = `lock:${this.subject}:${eventId}`;
-                            const lockValue = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
                             try {
                                 const ttl = yield redisWrapper_service_1.redisWrapper.client.ttl(lockKey);
                                 span.setTag('lock.conflict', true);
                                 span.setTag('lock.ttl', ttl);
                                 if (ttl === -2 || ttl === -1) {
-                                    // Key yok veya expire olmuş - muhtemelen race condition
-                                    // Kısa bekle ve NATS redeliver etsin
+                                    // Key yok veya expire olmuş - race condition, NATS redeliver etsin
                                     logger_service_1.logger.warn(`Lock key not found or expired (ttl: ${ttl}), NATS will redeliver: ${eventType}:${eventId}`);
                                     span.setTag('lock.orphan', true);
-                                    yield new Promise(resolve => setTimeout(resolve, 1000)); // 1s bekle
+                                    // Kısa jitter (50-250ms) — thread'i bloklamadan
+                                    yield new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 200));
                                     return; // msg.ack() YOK - NATS redeliver edecek
                                 }
-                                if (ttl > 0 && ttl <= 10) {
-                                    // Lock yakında expire olacak - bekle ve retry
-                                    const waitTime = ttl + 2; // TTL + 2s buffer
-                                    logger_service_1.logger.info(`Lock expiring soon (ttl: ${ttl}s), waiting ${waitTime}s: ${eventType}:${eventId}`);
-                                    span.setTag('lock.wait', waitTime);
-                                    yield new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-                                    // Tekrar lock almayı dene
-                                    const retryAcquired = yield this.tryAcquireLock(lockKey, lockValue, this.options.lockTimeoutSec);
-                                    if (retryAcquired) {
-                                        try {
-                                            yield this.processEvent(data);
-                                            yield this.retryManager.resetRetryCount(eventType, eventId);
-                                            span.setTag('lock.retry_success', true);
-                                            msg.ack();
-                                            return;
-                                        }
-                                        finally {
-                                            yield this.releaseLock(lockKey, lockValue);
-                                        }
-                                    }
-                                    // Hala alınamadı - NATS redeliver etsin
-                                    logger_service_1.logger.warn(`Lock still held after wait, NATS will redeliver: ${eventType}:${eventId}`);
-                                    return; // msg.ack() YOK
+                                if (ttl > 0 && ttl <= 5) {
+                                    // Lock yakında expire olacak — kısa bekle, ama uzun blocking yok
+                                    const jitteredWait = Math.min(ttl * 1000, 3000) + Math.random() * 500;
+                                    logger_service_1.logger.info(`Lock expiring soon (ttl: ${ttl}s), short wait ${Math.round(jitteredWait)}ms: ${eventType}:${eventId}`);
+                                    span.setTag('lock.short_wait', Math.round(jitteredWait));
+                                    yield new Promise(resolve => setTimeout(resolve, jitteredWait));
+                                    return; // NATS redeliver edecek — re-lock denemesi yapmıyoruz (deadlock riski)
                                 }
-                                // TTL > 10s - gerçekten başka bir instance işliyor
-                                // Güvenli şekilde ack et
+                                // TTL > 5s — başka instance aktif olarak işliyor, güvenle ack et
                                 logger_service_1.logger.info(`Another instance actively processing (ttl: ${ttl}s): ${eventType}:${eventId}`);
                                 span.setTag('lock.active_processing', true);
                                 msg.ack();
                                 return;
                             }
                             catch (ttlError) {
-                                // TTL kontrolü başarısız - güvenli tarafta kal, NATS redeliver etsin
+                                // TTL kontrolü başarısız — güvenli tarafta kal, NATS redeliver etsin
                                 logger_service_1.logger.error(`Failed to check lock TTL: ${eventType}:${eventId}`, ttlError);
                                 span.setTag('lock.ttl_error', true);
                                 return; // msg.ack() YOK
