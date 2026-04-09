@@ -427,6 +427,32 @@ export function createBaseSchema(
         if ((this as any).mongooseOptions().lean && doc) { addIdToLeanDoc(doc); }
     });
 
+    // Slow Query Detection — 100ms üzeri sorgular loglanır
+    const SLOW_QUERY_THRESHOLD_MS = parseInt(process.env.SLOW_QUERY_THRESHOLD_MS || '100', 10);
+
+    const queryTypes = ['find', 'findOne', 'countDocuments', 'distinct'] as const;
+    for (const queryType of queryTypes) {
+        baseSchema.pre(queryType, function (this: any) {
+            this._startTime = Date.now();
+        });
+
+        baseSchema.post(queryType, function (this: any) {
+            if (!this._startTime) return;
+            const duration = Date.now() - this._startTime;
+            if (duration > SLOW_QUERY_THRESHOLD_MS) {
+                const modelName = this.model?.modelName || 'Unknown';
+                const filter = JSON.stringify(this.getQuery?.() || {}).substring(0, 200);
+                logger.warn(`🐢 Slow query detected: ${modelName}.${queryType} — ${duration}ms`, {
+                    model: modelName,
+                    operation: queryType,
+                    duration,
+                    filter,
+                    service: process.env.SERVICE_NAME || 'unknown'
+                });
+            }
+        });
+    }
+
     baseSchema.methods.destroy = async function(): Promise<EmitReturnConfig | undefined> {
         try {
             const instance = this as BaseDoc;
