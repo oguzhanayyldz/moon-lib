@@ -129,7 +129,7 @@ class RedisWrapper {
         return false;
     }
 
-    async setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: Record<string, unknown>) {
+    async setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: object) {
         const key = `user:${userId}:order:${purchaseNumber}:${platformNumber}`;
         await this.client.hSet(key, this.toHashFields(orderData));
     }
@@ -155,7 +155,7 @@ class RedisWrapper {
         }
     }
 
-    async setCredentials(userId: string, platform: string, credentials: Record<string, unknown>) {
+    async setCredentials(userId: string, platform: string, credentials: object) {
         const key = `user:${userId}:platform:${platform}:credentials`;
         await this.client.hSet(key, this.toHashFields(credentials));
     }
@@ -202,7 +202,7 @@ class RedisWrapper {
      * Objeyi Redis hash field'larına dönüştürür — double serialization olmadan.
      * undefined/null değerleri atlar, nested objeleri JSON.stringify ile serialize eder.
      */
-    private toHashFields(data: Record<string, unknown>): Record<string, string> {
+    private toHashFields(data: object): Record<string, string> {
         const result: Record<string, string> = {};
         for (const [key, value] of Object.entries(data)) {
             if (value === undefined || value === null) continue;
