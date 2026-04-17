@@ -15,6 +15,7 @@ export * from './shelf-barcodes-list';
 export * from './device-barcodes-list';
 export * from './sort-type';
 export * from './stock-action-type';
+export * from './history-source';
 export * from './unit-type';
 export * from './user-role';
 export * from './api-client.types';
