@@ -66,7 +66,8 @@ import {
     SubscriptionUpdatedEvent,
     SubscriptionPaymentCompletedEvent,
     SubscriptionPaymentFailedEvent,
-    PriceProcessingCompletedEvent
+    PriceProcessingCompletedEvent,
+    IntegrationAuthFailureExceededEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -134,6 +135,7 @@ interface EventPayloadMap {
     [Subjects.SubscriptionPaymentCompleted]: SubscriptionPaymentCompletedEvent['data'];
     [Subjects.SubscriptionPaymentFailed]: SubscriptionPaymentFailedEvent['data'];
     [Subjects.PriceProcessingCompleted]: PriceProcessingCompletedEvent['data'];
+    [Subjects.IntegrationAuthFailureExceeded]: IntegrationAuthFailureExceededEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
@@ -261,6 +263,9 @@ export function getEventPriority(eventType: string): number {
         [Subjects.SubscriptionPaymentCompleted]: 2,
         [Subjects.SubscriptionPaymentFailed]: 2,
         [Subjects.PriceProcessingCompleted]: 1,
+
+        // Priority 2: Auth failure — integration deactivation kritik (issue #521)
+        [Subjects.IntegrationAuthFailureExceeded]: 2,
     };
     
     return PRIORITY_MAP[eventType] ?? 3;

@@ -52,6 +52,7 @@ import { CircuitBreaker } from './circuitBreaker.service';
 import { IntegrationRequestLogService } from './integrationRequestLog.service';
 import { logger } from './logger.service';
 import { ResourceName } from '../common';
+import { AuthFailureTracker } from '../utils/authFailureTracker.util';
 
 export abstract class BaseApiClient implements IApiClient {
   protected httpClient!: any;
@@ -298,6 +299,17 @@ export abstract class BaseApiClient implements IApiClient {
       // Update metrics
       this.updateMetrics(true, Date.now() - startTime);
 
+      // Auth failure counter'i sifirla (issue #521) — basarili bir cagri ardisikligi koparir
+      if (this.config.authFailureTracking) {
+        const { userId, integrationId } = this.config.authFailureTracking;
+        AuthFailureTracker.reset(userId, integrationId).catch((err) => {
+          logger.warn('BaseApiClient: AuthFailureTracker.reset failed', {
+            error: err.message,
+            integrationName: this.integrationName
+          });
+        });
+      }
+
       logger.debug('API request completed successfully', {
         method: finalConfig.method,
         url: finalConfig.url,
@@ -388,6 +400,26 @@ export abstract class BaseApiClient implements IApiClient {
 
       // Update metrics
       this.updateMetrics(false, duration);
+
+      // Auth failure tracking (issue #521) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez
+      const errorStatus = (error as AxiosError).response?.status;
+      if (
+        this.config.authFailureTracking &&
+        (errorStatus === 401 || errorStatus === 403)
+      ) {
+        const { userId, integrationId, integrationName, threshold } = this.config.authFailureTracking;
+        const errorMessage = (error as Error).message?.substring(0, 500);
+        AuthFailureTracker.increment(
+          { userId, integrationId, integrationName, threshold },
+          errorStatus as 401 | 403,
+          errorMessage
+        ).catch((err) => {
+          logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
+            error: err.message,
+            integrationName: this.integrationName
+          });
+        });
+      }
 
       // Handle custom error processing
       if (this.handleCustomError) {

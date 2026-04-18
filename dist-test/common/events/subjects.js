@@ -67,6 +67,8 @@ var Subjects;
     Subjects["OrderWorkPackageInfoBulkUpdated"] = "order:workpackage-info:bulk-updated";
     // Price Processing
     Subjects["PriceProcessingCompleted"] = "price:processing:completed";
+    // Integration Auth Failure (issue #521)
+    Subjects["IntegrationAuthFailureExceeded"] = "integration:auth-failure:exceeded";
     // Subscription Events
     Subjects["SubscriptionUpdated"] = "subscription:updated";
     Subjects["SubscriptionPaymentCompleted"] = "subscription:payment:completed";

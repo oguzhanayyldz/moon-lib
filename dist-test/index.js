@@ -88,6 +88,7 @@ __exportStar(require("./utils/batchOperationHelpers.util"), exports);
 __exportStar(require("./utils/redisFailoverManager"), exports);
 __exportStar(require("./utils/userContext.util"), exports);
 __exportStar(require("./utils/encryption.util"), exports);
+__exportStar(require("./utils/authFailureTracker.util"), exports);
 // Database - MongoDB Atlas Native Transactions
 __exportStar(require("./database"), exports);
 // Middleware - Transaction Middleware
@@ -156,6 +157,7 @@ __exportStar(require("./events/publishers/subscriptionPaymentCompleted.publisher
 __exportStar(require("./events/publishers/subscriptionPaymentFailed.publisher"), exports);
 __exportStar(require("./events/publishers/subscriptionInvoiceCreated.publisher"), exports);
 __exportStar(require("./events/publishers/priceProcessingCompleted.publisher"), exports);
+__exportStar(require("./events/publishers/integrationAuthFailureExceeded.publisher"), exports);
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set
 __exportStar(require("./common/errors"), exports);

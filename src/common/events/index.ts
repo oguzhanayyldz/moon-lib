@@ -89,3 +89,6 @@ export * from './subscription-invoice-created-event';
 
 // Price Processing Events
 export * from './price-processing-completed-event';
+
+// Integration Auth Failure (issue #521)
+export * from './integration-auth-failure-exceeded-event';

@@ -102,3 +102,5 @@ __exportStar(require("./subscription-payment-failed-event"), exports);
 __exportStar(require("./subscription-invoice-created-event"), exports);
 // Price Processing Events
 __exportStar(require("./price-processing-completed-event"), exports);
+// Integration Auth Failure (issue #521)
+__exportStar(require("./integration-auth-failure-exceeded-event"), exports);

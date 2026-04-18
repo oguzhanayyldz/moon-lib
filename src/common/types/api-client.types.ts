@@ -7,6 +7,18 @@ export interface BaseApiClientConfig {
   baseURL?: string;
   retries?: ApiRetryConfig;
   responseProcessing?: ResponseProcessingConfig;
+  authFailureTracking?: AuthFailureTrackingConfig;
+}
+
+/**
+ * 401/403 auth hatalarinin ardisik olarak sayilmasi icin config (issue #521).
+ * userId + integrationId kombinasyonuna gore Redis'te counter tutulur.
+ */
+export interface AuthFailureTrackingConfig {
+  userId: string;
+  integrationId: string;
+  integrationName: string;
+  threshold?: number; // Varsayilan: 5
 }
 
 export interface ResponseProcessingConfig {
