@@ -362,6 +362,13 @@ export declare const RetryableListener: {
         getEventId(data: any): string;
     };
 };
+export declare const AuthFailureTracker: {
+    initialize: jest.Mock<any, any, any>;
+    getKey: jest.Mock<string, [userId: string, integrationId: string], any>;
+    increment: jest.Mock<any, any, any>;
+    reset: jest.Mock<any, any, any>;
+    get: jest.Mock<any, any, any>;
+};
 export declare const createOutboxModel: jest.Mock<{
     build: jest.Mock<any, any, any>;
     create: jest.Mock<any, any, any>;

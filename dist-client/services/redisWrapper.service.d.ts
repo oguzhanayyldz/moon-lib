@@ -6,13 +6,13 @@ declare class RedisWrapper {
     get client(): RedisClientType;
     connect(url: string, timeoutMs?: number): Promise<void>;
     deleteOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<boolean>;
-    setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: Record<string, unknown>): Promise<void>;
+    setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: object): Promise<void>;
     getOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<{
         [x: string]: string;
     } | null>;
     updateOrderStatus(userId: string, purchaseNumber: string, platformNumber: string, status: string): Promise<void>;
     deleteCredentials(userId: string, platform: string): Promise<void>;
-    setCredentials(userId: string, platform: string, credentials: Record<string, unknown>): Promise<void>;
+    setCredentials(userId: string, platform: string, credentials: object): Promise<void>;
     getCredentials(userId: string, platform: string): Promise<{
         [x: string]: string;
     } | null>;

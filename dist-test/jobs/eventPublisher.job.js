@@ -68,6 +68,7 @@ const subscriptionPaymentCompleted_publisher_1 = require("../events/publishers/s
 const subscriptionPaymentFailed_publisher_1 = require("../events/publishers/subscriptionPaymentFailed.publisher");
 const subscriptionInvoiceCreated_publisher_1 = require("../events/publishers/subscriptionInvoiceCreated.publisher");
 const priceProcessingCompleted_publisher_1 = require("../events/publishers/priceProcessingCompleted.publisher");
+const integrationAuthFailureExceeded_publisher_1 = require("../events/publishers/integrationAuthFailureExceeded.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
     ) {
@@ -647,6 +648,10 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.PriceProcessingCompleted:
                 await new priceProcessingCompleted_publisher_1.PriceProcessingCompletedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.IntegrationAuthFailureExceeded:
+                await new integrationAuthFailureExceeded_publisher_1.IntegrationAuthFailureExceededPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

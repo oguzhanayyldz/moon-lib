@@ -936,6 +936,15 @@ export const RetryableListener = class MockRetryableListener {
     }
 }
 
+// AuthFailureTracker - Centralized mock (issue #521)
+export const AuthFailureTracker = {
+    initialize: jest.fn(),
+    getKey: jest.fn((userId: string, integrationId: string) => `integration:auth-failures:${userId}:${integrationId}`),
+    increment: jest.fn().mockResolvedValue(1),
+    reset: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn().mockResolvedValue(0),
+};
+
 // Model Creation Functions - Test-friendly versions
 export const createOutboxModel = jest.fn(() => ({
     build: jest.fn().mockReturnValue({

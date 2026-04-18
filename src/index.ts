@@ -83,6 +83,7 @@ export * from './utils/batchOperationHelpers.util';
 export * from './utils/redisFailoverManager';
 export * from './utils/userContext.util';
 export * from './utils/encryption.util';
+export * from './utils/authFailureTracker.util';
 
 // Database - MongoDB Atlas Native Transactions
 export * from './database';
@@ -155,6 +156,7 @@ export * from './events/publishers/subscriptionPaymentCompleted.publisher';
 export * from './events/publishers/subscriptionPaymentFailed.publisher';
 export * from './events/publishers/subscriptionInvoiceCreated.publisher';
 export * from './events/publishers/priceProcessingCompleted.publisher';
+export * from './events/publishers/integrationAuthFailureExceeded.publisher';
 
 // 🚀 Complete Common Utilities (replaces @xmoonx/common functionality)
 // Error Handling - Complete Set

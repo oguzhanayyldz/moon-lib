@@ -22,7 +22,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.resetUserContextMocks = exports.getParentUserId = exports.isSubUserMode = exports.getDataOwnerId = exports.getPerformerId = exports.createNormalUserPayload = exports.createSubUserPayload = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
+exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.AuthFailureTracker = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.resetUserContextMocks = exports.getParentUserId = exports.isSubUserMode = exports.getDataOwnerId = exports.getPerformerId = exports.createNormalUserPayload = exports.createSubUserPayload = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
 const index_1 = require("./index");
 // Global test cleanup registry
 let testTimers = new Set();
@@ -858,6 +858,14 @@ const RetryableListener = class MockRetryableListener {
     }
 };
 exports.RetryableListener = RetryableListener;
+// AuthFailureTracker - Centralized mock (issue #521)
+exports.AuthFailureTracker = {
+    initialize: jest.fn(),
+    getKey: jest.fn((userId, integrationId) => `integration:auth-failures:${userId}:${integrationId}`),
+    increment: jest.fn().mockResolvedValue(1),
+    reset: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn().mockResolvedValue(0),
+};
 // Model Creation Functions - Test-friendly versions
 exports.createOutboxModel = jest.fn(() => ({
     build: jest.fn().mockReturnValue({
