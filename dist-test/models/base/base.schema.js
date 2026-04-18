@@ -193,6 +193,26 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         this.updatedOn = new Date();
         next();
     });
+    // insertMany middleware'i: pre('save') hook'u insertMany'de BYPASS edilir, bu yuzden
+    // `uniqueCode: null` ile toplu insert collection'daki unique index'e takilir
+    // (E11000 duplicate key on uniqueCode: null). Bu middleware pre('save') ile aynen
+    // davranir: uuid yoksa atar, uniqueCode yoksa turetir, updatedOn'u her doc icin set eder.
+    baseSchema.pre('insertMany', function (next, docs) {
+        if (!Array.isArray(docs) || docs.length === 0) {
+            return next();
+        }
+        for (const doc of docs) {
+            if (!doc)
+                continue;
+            if (!doc.uuid)
+                doc.uuid = (0, uuid_1.v4)();
+            if (!doc.deleted && !doc.deletionDate && !doc.uniqueCode) {
+                doc.uniqueCode = "base-" + new Date().getTime().toString() + "-" + (0, common_1.generateRandomString)(6);
+            }
+            doc.updatedOn = new Date();
+        }
+        next();
+    });
     // 🆕 VERSION TRACKING POST-SAVE HOOK (OPTIONAL)
     if (options.enableVersionTracking && options.versionTrackingConfig) {
         // ✅ GLOBAL MAP: Config'i entityType key'i ile Map'e kaydet
@@ -331,6 +351,31 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
             addIdToLeanDoc(doc);
         }
     });
+    // Slow Query Detection — 100ms üzeri sorgular loglanır
+    const SLOW_QUERY_THRESHOLD_MS = parseInt(process.env.SLOW_QUERY_THRESHOLD_MS || '100', 10);
+    const queryTypes = ['find', 'findOne', 'countDocuments', 'distinct'];
+    for (const queryType of queryTypes) {
+        baseSchema.pre(queryType, function () {
+            this._startTime = Date.now();
+        });
+        baseSchema.post(queryType, function () {
+            var _a, _b;
+            if (!this._startTime)
+                return;
+            const duration = Date.now() - this._startTime;
+            if (duration > SLOW_QUERY_THRESHOLD_MS) {
+                const modelName = ((_a = this.model) === null || _a === void 0 ? void 0 : _a.modelName) || 'Unknown';
+                const filter = JSON.stringify(((_b = this.getQuery) === null || _b === void 0 ? void 0 : _b.call(this)) || {}).substring(0, 200);
+                logger_service_1.logger.warn(`🐢 Slow query detected: ${modelName}.${queryType} — ${duration}ms`, {
+                    model: modelName,
+                    operation: queryType,
+                    duration,
+                    filter,
+                    service: process.env.SERVICE_NAME || 'unknown'
+                });
+            }
+        });
+    }
     baseSchema.methods.destroy = async function () {
         try {
             const instance = this;
