@@ -66,6 +66,9 @@ export enum Subjects {
     // Price Processing
     PriceProcessingCompleted = "price:processing:completed",
 
+    // Integration Auth Failure (issue #521)
+    IntegrationAuthFailureExceeded = "integration:auth-failure:exceeded",
+
     // Subscription Events
     SubscriptionUpdated = "subscription:updated",
     SubscriptionPaymentCompleted = "subscription:payment:completed",

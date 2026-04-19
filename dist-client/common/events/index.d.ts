@@ -81,3 +81,4 @@ export * from './subscription-payment-completed-event';
 export * from './subscription-payment-failed-event';
 export * from './subscription-invoice-created-event';
 export * from './price-processing-completed-event';
+export * from './integration-auth-failure-exceeded-event';

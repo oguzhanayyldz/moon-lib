@@ -11,6 +11,7 @@ const rate_limiter_flexible_1 = require("rate-limiter-flexible");
 const PQueue = require('p-queue').default;
 const circuitBreaker_service_1 = require("./circuitBreaker.service");
 const logger_service_1 = require("./logger.service");
+const authFailureTracker_util_1 = require("../utils/authFailureTracker.util");
 class BaseApiClient {
     constructor(config, serviceName, integrationName, tracer, logService) {
         this.config = config;
@@ -141,7 +142,7 @@ class BaseApiClient {
     }
     // Core request method
     async makeRequest(requestConfig) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         const startTime = Date.now();
         let logId;
         // Merge default headers with request headers
@@ -190,6 +191,16 @@ class BaseApiClient {
             }
             // Update metrics
             this.updateMetrics(true, Date.now() - startTime);
+            // Auth failure counter'i sifirla (issue #521) — basarili bir cagri ardisikligi koparir
+            if (this.config.authFailureTracking) {
+                const { userId, integrationId } = this.config.authFailureTracking;
+                authFailureTracker_util_1.AuthFailureTracker.reset(userId, integrationId).catch((err) => {
+                    logger_service_1.logger.warn('BaseApiClient: AuthFailureTracker.reset failed', {
+                        error: err.message,
+                        integrationName: this.integrationName
+                    });
+                });
+            }
             logger_service_1.logger.debug('API request completed successfully', {
                 method: finalConfig.method,
                 url: finalConfig.url,
@@ -271,6 +282,19 @@ class BaseApiClient {
             }
             // Update metrics
             this.updateMetrics(false, duration);
+            // Auth failure tracking (issue #521) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez
+            const errorStatus = (_f = error.response) === null || _f === void 0 ? void 0 : _f.status;
+            if (this.config.authFailureTracking &&
+                (errorStatus === 401 || errorStatus === 403)) {
+                const { userId, integrationId, integrationName, threshold } = this.config.authFailureTracking;
+                const errorMessage = (_g = error.message) === null || _g === void 0 ? void 0 : _g.substring(0, 500);
+                authFailureTracker_util_1.AuthFailureTracker.increment({ userId, integrationId, integrationName, threshold }, errorStatus, errorMessage).catch((err) => {
+                    logger_service_1.logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
+                        error: err.message,
+                        integrationName: this.integrationName
+                    });
+                });
+            }
             // Handle custom error processing
             if (this.handleCustomError) {
                 try {
@@ -286,7 +310,7 @@ class BaseApiClient {
             logger_service_1.logger.error('API request failed', {
                 method: requestConfig.method,
                 url: requestConfig.url,
-                status: (_f = error.response) === null || _f === void 0 ? void 0 : _f.status,
+                status: (_h = error.response) === null || _h === void 0 ? void 0 : _h.status,
                 errorMessage: error.message,
                 duration,
                 integrationName: this.integrationName

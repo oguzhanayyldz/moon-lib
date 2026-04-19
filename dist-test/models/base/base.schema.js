@@ -193,6 +193,26 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         this.updatedOn = new Date();
         next();
     });
+    // insertMany middleware'i: pre('save') hook'u insertMany'de BYPASS edilir, bu yuzden
+    // `uniqueCode: null` ile toplu insert collection'daki unique index'e takilir
+    // (E11000 duplicate key on uniqueCode: null). Bu middleware pre('save') ile aynen
+    // davranir: uuid yoksa atar, uniqueCode yoksa turetir, updatedOn'u her doc icin set eder.
+    baseSchema.pre('insertMany', function (next, docs) {
+        if (!Array.isArray(docs) || docs.length === 0) {
+            return next();
+        }
+        for (const doc of docs) {
+            if (!doc)
+                continue;
+            if (!doc.uuid)
+                doc.uuid = (0, uuid_1.v4)();
+            if (!doc.deleted && !doc.deletionDate && !doc.uniqueCode) {
+                doc.uniqueCode = "base-" + new Date().getTime().toString() + "-" + (0, common_1.generateRandomString)(6);
+            }
+            doc.updatedOn = new Date();
+        }
+        next();
+    });
     // 🆕 VERSION TRACKING POST-SAVE HOOK (OPTIONAL)
     if (options.enableVersionTracking && options.versionTrackingConfig) {
         // ✅ GLOBAL MAP: Config'i entityType key'i ile Map'e kaydet
