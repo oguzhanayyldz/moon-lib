@@ -17,3 +17,4 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./core"), exports);
 __exportStar(require("./validator"), exports);
 __exportStar(require("./contentHash"), exports);
+__exportStar(require("./diff-utils"), exports);
