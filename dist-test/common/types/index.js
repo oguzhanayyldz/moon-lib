@@ -31,6 +31,7 @@ __exportStar(require("./shelf-barcodes-list"), exports);
 __exportStar(require("./device-barcodes-list"), exports);
 __exportStar(require("./sort-type"), exports);
 __exportStar(require("./stock-action-type"), exports);
+__exportStar(require("./history-source"), exports);
 __exportStar(require("./unit-type"), exports);
 __exportStar(require("./user-role"), exports);
 __exportStar(require("./api-client.types"), exports);
