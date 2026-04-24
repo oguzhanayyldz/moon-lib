@@ -9,6 +9,7 @@ export declare enum ResourceName {
     Parasut = "Parasut",
     Aras = "Aras",
     Yurtici = "Yurtici",
+    HepsiJet = "HepsiJet",
     Ikas = "Ikas",
     IdeaSoft = "IdeaSoft"
 }

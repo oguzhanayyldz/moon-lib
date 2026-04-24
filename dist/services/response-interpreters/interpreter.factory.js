@@ -8,6 +8,7 @@ const hepsiburada_interpreter_1 = require("./hepsiburada.interpreter");
 const ikas_interpreter_1 = require("./ikas.interpreter");
 const n11_interpreter_1 = require("./n11.interpreter");
 const ideasoft_interpreter_1 = require("./ideasoft.interpreter");
+const hepsijet_interpreter_1 = require("./hepsijet.interpreter");
 const logger_service_1 = require("../logger.service");
 /**
  * Response Interpreter Factory
@@ -42,6 +43,9 @@ class ResponseInterpreterFactory {
                 break;
             case common_1.ResourceName.IdeaSoft:
                 interpreter = new ideasoft_interpreter_1.IdeaSoftResponseInterpreter();
+                break;
+            case common_1.ResourceName.HepsiJet:
+                interpreter = new hepsijet_interpreter_1.HepsiJetResponseInterpreter();
                 break;
             // Diğer platform'lar için ileride eklenebilir
             case common_1.ResourceName.Amazon:
