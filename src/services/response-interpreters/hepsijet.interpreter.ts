@@ -143,7 +143,9 @@ export class HepsiJetResponseInterpreter extends BaseResponseInterpreter {
      * Tek bir kargo takip yanitini yorumla.
      */
     private interpretTrackingSingle(item: any): InterpretedResponse {
-        const deliveryStatus = mapHepsiJetStatusToDeliveryStatus(item?.status);
+        // Doc: response'ta `deliveryStatus` + `operationStatus` + `transactions[]`
+        const rawStatus = item?.deliveryStatus || item?.status;
+        const deliveryStatus = mapHepsiJetStatusToDeliveryStatus(rawStatus);
         const transactionCount = Array.isArray(item?.transactions) ? item.transactions.length : 0;
 
         return {
@@ -153,10 +155,11 @@ export class HepsiJetResponseInterpreter extends BaseResponseInterpreter {
             failureCount: 0,
             details: {
                 customerDeliveryNo: item.customerDeliveryNo,
-                rawStatus: item.status,
+                rawStatus,
+                operationStatus: item?.operationStatus,
                 deliveryStatus,
                 transactionCount,
-                lastStatusDate: item.statusDate || item.lastStatusDate
+                lastStatusDate: item?.lastTransaction || item?.deliveryDateCurrent || item?.statusDate
             },
             parsedAt: new Date()
         };
@@ -166,10 +169,12 @@ export class HepsiJetResponseInterpreter extends BaseResponseInterpreter {
      * Coklu kargo takip yanitini yorumla (native batch tracking).
      */
     private interpretTrackingBatch(items: any[]): InterpretedResponse {
-        const deliveredCount = items.filter(i => mapHepsiJetStatusToDeliveryStatus(i?.status) === 'delivered').length;
-        const inTransitCount = items.filter(i => mapHepsiJetStatusToDeliveryStatus(i?.status) === 'in_transit').length;
-        const pendingCount = items.filter(i => mapHepsiJetStatusToDeliveryStatus(i?.status) === 'pending').length;
-        const failedCount = items.filter(i => ['cancelled', 'returned', 'not_delivered'].includes(mapHepsiJetStatusToDeliveryStatus(i?.status))).length;
+        // Doc: response'ta `deliveryStatus` alani kullaniliyor. status da fallback olarak.
+        const getStatus = (i: any) => mapHepsiJetStatusToDeliveryStatus(i?.deliveryStatus || i?.status);
+        const deliveredCount = items.filter(i => getStatus(i) === 'delivered').length;
+        const inTransitCount = items.filter(i => getStatus(i) === 'in_transit').length;
+        const pendingCount = items.filter(i => getStatus(i) === 'pending').length;
+        const failedCount = items.filter(i => ['cancelled', 'returned', 'not_delivered'].includes(getStatus(i))).length;
 
         return {
             summary: `Toplu kargo takibi (${items.length} adet): ${deliveredCount} teslim, ${inTransitCount} yolda, ${pendingCount} beklemede${failedCount > 0 ? `, ${failedCount} basarisiz` : ''}`,
