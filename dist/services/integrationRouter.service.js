@@ -61,6 +61,7 @@ IntegrationRouter.PLATFORM_TYPE_MAP = {
     [resourceName_1.ResourceName.Shopify]: integration_type_1.IntegrationType.Ecommerce,
     [resourceName_1.ResourceName.Ikas]: integration_type_1.IntegrationType.Ecommerce,
     [resourceName_1.ResourceName.IdeaSoft]: integration_type_1.IntegrationType.Ecommerce,
+    [resourceName_1.ResourceName.TSoft]: integration_type_1.IntegrationType.Ecommerce,
     [resourceName_1.ResourceName.Trendyol]: integration_type_1.IntegrationType.MarketPlace,
     [resourceName_1.ResourceName.Hepsiburada]: integration_type_1.IntegrationType.MarketPlace,
     [resourceName_1.ResourceName.Amazon]: integration_type_1.IntegrationType.MarketPlace,

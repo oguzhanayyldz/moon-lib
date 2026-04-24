@@ -12,4 +12,5 @@ export enum ResourceName {
     HepsiJet = "HepsiJet",
     Ikas = "Ikas",
     IdeaSoft = "IdeaSoft",
+    TSoft = "TSoft",
 }
