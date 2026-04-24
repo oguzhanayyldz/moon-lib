@@ -51,6 +51,7 @@ export * from './services/response-interpreters/interpreter.factory';
 export * from './enums/operation-type.enum';
 export * from './common/enums/aras-status.enum';
 export * from './common/enums/yurtici-status.enum';
+export * from './common/enums/hepsijet-status.enum';
 
 // Constants
 export * from './common/constants/integration-commands';

@@ -31,6 +31,7 @@ export class IntegrationRouter {
         [ResourceName.Parasut]: IntegrationType.Erp,
         [ResourceName.Aras]: IntegrationType.Cargo,
         [ResourceName.Yurtici]: IntegrationType.Cargo,
+        [ResourceName.HepsiJet]: IntegrationType.Cargo,
     };
 
     /**

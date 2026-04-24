@@ -34,6 +34,7 @@ export * from './services/response-interpreters/interpreter.factory';
 export * from './enums/operation-type.enum';
 export * from './common/enums/aras-status.enum';
 export * from './common/enums/yurtici-status.enum';
+export * from './common/enums/hepsijet-status.enum';
 export * from './common/constants/integration-commands';
 export * from './common/constants/cargo-label-support.constants';
 export * from './security/SecurityValidator';
