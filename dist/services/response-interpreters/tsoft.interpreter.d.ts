@@ -38,6 +38,7 @@ export declare class TSoftResponseInterpreter extends BaseResponseInterpreter {
     /**
      * Sipariş update yanıtını yorumla.
      * T-Soft PUT /orders/order/{id} envelope: `{ data: TSoftOrder }`
+     * Order field'lari FLAT (docs L754-840: orderNumber, orderStatus, cargo*, customer*, payment*).
      */
     private interpretOrderOperation;
     /**

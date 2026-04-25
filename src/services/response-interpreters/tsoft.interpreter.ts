@@ -144,7 +144,7 @@ export class TSoftResponseInterpreter extends BaseResponseInterpreter {
     private interpretProductOperation(response: any, operationType: OperationType): InterpretedResponse {
         const product = response?.data ?? response;
         const productId = product?.id;
-        const productName = product?.name; // T-Soft docs L1153: product field 'name' only (no 'title')
+        const productName = product?.name; // T-Soft docs L1153: product field 'name' only
 
         return {
             summary: `Ürün ${operationType === OperationType.SEND_PRODUCTS ? 'oluşturuldu' : 'güncellendi'}: ${productName || productId}`,
@@ -153,10 +153,16 @@ export class TSoftResponseInterpreter extends BaseResponseInterpreter {
             details: {
                 productId,
                 productName,
-                wsProductCode: product?.wsProductCode, // Supplier Information (docs L1180)
-                barcode: product?.barcode,             // Basic Information (docs L1155)
-                priceSale: product?.priceSale,         // Price and Stock (docs L1165)
-                stock: product?.stock                  // Price and Stock (docs L1170)
+                wsProductCode: product?.wsProductCode,    // Supplier (docs L1188)
+                barcode: product?.barcode,                // Basic Information (docs L1155)
+                priceSale: product?.priceSale,            // Price and Stock (docs L1167)
+                priceDiscount: product?.priceDiscount,    // Price and Stock (docs L1168)
+                stock: product?.stock,                    // Price and Stock (docs L1170)
+                stock2: product?.stock2,                  // Multi-warehouse (docs L1171)
+                stock99: product?.stock99,                // Backup stock (docs L1172)
+                vat: product?.vat,                        // Price and Stock (docs L1169)
+                brandId: product?.brandId,                // Brand and Model (docs L1202)
+                visibility: product?.visibility           // Basic Information (docs L1156)
             },
             parsedAt: new Date()
         };
@@ -187,6 +193,7 @@ export class TSoftResponseInterpreter extends BaseResponseInterpreter {
     /**
      * Sipariş update yanıtını yorumla.
      * T-Soft PUT /orders/order/{id} envelope: `{ data: TSoftOrder }`
+     * Order field'lari FLAT (docs L754-840: orderNumber, orderStatus, cargo*, customer*, payment*).
      */
     private interpretOrderOperation(response: any): InterpretedResponse {
         const order = response?.data ?? response;
@@ -200,11 +207,21 @@ export class TSoftResponseInterpreter extends BaseResponseInterpreter {
             details: {
                 orderId,
                 orderNumber,
-                orderStatus: order?.orderStatus,
-                cargoCompanyId: order?.cargoCompanyId,
-                cargoCompanyName: order?.cargoCompanyName,
-                waybillNumber: order?.waybillNumber,
-                cargoNumber: order?.cargoNumber
+                orderStatus: order?.orderStatus,                  // docs L755
+                cargoCompanyId: order?.cargoCompanyId,            // docs L811
+                cargoCompanyName: order?.cargoCompanyName,        // docs L812
+                cargoNumber: order?.cargoNumber,                  // docs L813
+                waybillNumber: order?.waybillNumber,              // docs L817
+                shipmentDate: order?.shipmentDate,                // docs L819
+                deliveryDate: order?.deliveryDate,                // docs L818
+                // Customer FLAT (docs L789-796)
+                customerId: order?.customerId,
+                customerEmail: order?.customerEmail,
+                customerFirstName: order?.customerFirstName,
+                customerLastName: order?.customerLastName,
+                // Invoice (docs L823-830)
+                isInvoiced: order?.isInvoiced,
+                invoiceNumber: order?.invoiceNumber
             },
             parsedAt: new Date()
         };

@@ -136,7 +136,7 @@ class TSoftResponseInterpreter extends base_interpreter_1.BaseResponseInterprete
         var _a;
         const product = (_a = response === null || response === void 0 ? void 0 : response.data) !== null && _a !== void 0 ? _a : response;
         const productId = product === null || product === void 0 ? void 0 : product.id;
-        const productName = product === null || product === void 0 ? void 0 : product.name; // T-Soft docs L1153: product field 'name' only (no 'title')
+        const productName = product === null || product === void 0 ? void 0 : product.name; // T-Soft docs L1153: product field 'name' only
         return {
             summary: `Ürün ${operationType === operation_type_enum_1.OperationType.SEND_PRODUCTS ? 'oluşturuldu' : 'güncellendi'}: ${productName || productId}`,
             success: true,
@@ -144,10 +144,16 @@ class TSoftResponseInterpreter extends base_interpreter_1.BaseResponseInterprete
             details: {
                 productId,
                 productName,
-                wsProductCode: product === null || product === void 0 ? void 0 : product.wsProductCode, // Supplier Information (docs L1180)
+                wsProductCode: product === null || product === void 0 ? void 0 : product.wsProductCode, // Supplier (docs L1188)
                 barcode: product === null || product === void 0 ? void 0 : product.barcode, // Basic Information (docs L1155)
-                priceSale: product === null || product === void 0 ? void 0 : product.priceSale, // Price and Stock (docs L1165)
-                stock: product === null || product === void 0 ? void 0 : product.stock // Price and Stock (docs L1170)
+                priceSale: product === null || product === void 0 ? void 0 : product.priceSale, // Price and Stock (docs L1167)
+                priceDiscount: product === null || product === void 0 ? void 0 : product.priceDiscount, // Price and Stock (docs L1168)
+                stock: product === null || product === void 0 ? void 0 : product.stock, // Price and Stock (docs L1170)
+                stock2: product === null || product === void 0 ? void 0 : product.stock2, // Multi-warehouse (docs L1171)
+                stock99: product === null || product === void 0 ? void 0 : product.stock99, // Backup stock (docs L1172)
+                vat: product === null || product === void 0 ? void 0 : product.vat, // Price and Stock (docs L1169)
+                brandId: product === null || product === void 0 ? void 0 : product.brandId, // Brand and Model (docs L1202)
+                visibility: product === null || product === void 0 ? void 0 : product.visibility // Basic Information (docs L1156)
             },
             parsedAt: new Date()
         };
@@ -176,6 +182,7 @@ class TSoftResponseInterpreter extends base_interpreter_1.BaseResponseInterprete
     /**
      * Sipariş update yanıtını yorumla.
      * T-Soft PUT /orders/order/{id} envelope: `{ data: TSoftOrder }`
+     * Order field'lari FLAT (docs L754-840: orderNumber, orderStatus, cargo*, customer*, payment*).
      */
     interpretOrderOperation(response) {
         var _a;
@@ -189,11 +196,21 @@ class TSoftResponseInterpreter extends base_interpreter_1.BaseResponseInterprete
             details: {
                 orderId,
                 orderNumber,
-                orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus,
-                cargoCompanyId: order === null || order === void 0 ? void 0 : order.cargoCompanyId,
-                cargoCompanyName: order === null || order === void 0 ? void 0 : order.cargoCompanyName,
-                waybillNumber: order === null || order === void 0 ? void 0 : order.waybillNumber,
-                cargoNumber: order === null || order === void 0 ? void 0 : order.cargoNumber
+                orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus, // docs L755
+                cargoCompanyId: order === null || order === void 0 ? void 0 : order.cargoCompanyId, // docs L811
+                cargoCompanyName: order === null || order === void 0 ? void 0 : order.cargoCompanyName, // docs L812
+                cargoNumber: order === null || order === void 0 ? void 0 : order.cargoNumber, // docs L813
+                waybillNumber: order === null || order === void 0 ? void 0 : order.waybillNumber, // docs L817
+                shipmentDate: order === null || order === void 0 ? void 0 : order.shipmentDate, // docs L819
+                deliveryDate: order === null || order === void 0 ? void 0 : order.deliveryDate, // docs L818
+                // Customer FLAT (docs L789-796)
+                customerId: order === null || order === void 0 ? void 0 : order.customerId,
+                customerEmail: order === null || order === void 0 ? void 0 : order.customerEmail,
+                customerFirstName: order === null || order === void 0 ? void 0 : order.customerFirstName,
+                customerLastName: order === null || order === void 0 ? void 0 : order.customerLastName,
+                // Invoice (docs L823-830)
+                isInvoiced: order === null || order === void 0 ? void 0 : order.isInvoiced,
+                invoiceNumber: order === null || order === void 0 ? void 0 : order.invoiceNumber
             },
             parsedAt: new Date()
         };
