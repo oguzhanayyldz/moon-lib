@@ -11,6 +11,7 @@ export declare enum ResourceName {
     Yurtici = "Yurtici",
     HepsiJet = "HepsiJet",
     Ikas = "Ikas",
-    IdeaSoft = "IdeaSoft"
+    IdeaSoft = "IdeaSoft",
+    TSoft = "TSoft"
 }
 //# sourceMappingURL=resourceName.d.ts.map

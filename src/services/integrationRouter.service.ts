@@ -23,6 +23,7 @@ export class IntegrationRouter {
         [ResourceName.Shopify]: IntegrationType.Ecommerce,
         [ResourceName.Ikas]: IntegrationType.Ecommerce,
         [ResourceName.IdeaSoft]: IntegrationType.Ecommerce,
+        [ResourceName.TSoft]: IntegrationType.Ecommerce,
         [ResourceName.Trendyol]: IntegrationType.MarketPlace,
         [ResourceName.Hepsiburada]: IntegrationType.MarketPlace,
         [ResourceName.Amazon]: IntegrationType.MarketPlace,

@@ -20,7 +20,8 @@ export {
     shopifySecurityLogger,
     trendyolSecurityLogger,
     hepsiburadaSecurityLogger,
-    ikasSecurityLogger
+    ikasSecurityLogger,
+    tsoftSecurityLogger
 } from './SecurityLogger';
 
 export {

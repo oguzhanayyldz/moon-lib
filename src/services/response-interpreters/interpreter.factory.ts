@@ -7,6 +7,7 @@ import { IkasResponseInterpreter } from './ikas.interpreter';
 import { N11ResponseInterpreter } from './n11.interpreter';
 import { IdeaSoftResponseInterpreter } from './ideasoft.interpreter';
 import { HepsiJetResponseInterpreter } from './hepsijet.interpreter';
+import { TSoftResponseInterpreter } from './tsoft.interpreter';
 import { logger } from '../logger.service';
 
 /**
@@ -55,6 +56,10 @@ export class ResponseInterpreterFactory {
 
             case ResourceName.HepsiJet:
                 interpreter = new HepsiJetResponseInterpreter();
+                break;
+
+            case ResourceName.TSoft:
+                interpreter = new TSoftResponseInterpreter();
                 break;
 
             // Diğer platform'lar için ileride eklenebilir
