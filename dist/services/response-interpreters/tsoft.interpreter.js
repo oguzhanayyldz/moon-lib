@@ -133,10 +133,10 @@ class TSoftResponseInterpreter extends base_interpreter_1.BaseResponseInterprete
      * T-Soft single envelope: `{ data: TSoftProduct }`
      */
     interpretProductOperation(response, operationType) {
-        var _a, _b;
+        var _a;
         const product = (_a = response === null || response === void 0 ? void 0 : response.data) !== null && _a !== void 0 ? _a : response;
         const productId = product === null || product === void 0 ? void 0 : product.id;
-        const productName = (_b = product === null || product === void 0 ? void 0 : product.name) !== null && _b !== void 0 ? _b : product === null || product === void 0 ? void 0 : product.title;
+        const productName = product === null || product === void 0 ? void 0 : product.name; // T-Soft docs L1153: product field 'name' only (no 'title')
         return {
             summary: `Ürün ${operationType === operation_type_enum_1.OperationType.SEND_PRODUCTS ? 'oluşturuldu' : 'güncellendi'}: ${productName || productId}`,
             success: true,
@@ -144,11 +144,10 @@ class TSoftResponseInterpreter extends base_interpreter_1.BaseResponseInterprete
             details: {
                 productId,
                 productName,
-                wsProductCode: product === null || product === void 0 ? void 0 : product.wsProductCode,
-                barcode: product === null || product === void 0 ? void 0 : product.barcode,
-                stockCode: product === null || product === void 0 ? void 0 : product.stockCode,
-                priceSale: product === null || product === void 0 ? void 0 : product.priceSale,
-                stock: product === null || product === void 0 ? void 0 : product.stock
+                wsProductCode: product === null || product === void 0 ? void 0 : product.wsProductCode, // Supplier Information (docs L1180)
+                barcode: product === null || product === void 0 ? void 0 : product.barcode, // Basic Information (docs L1155)
+                priceSale: product === null || product === void 0 ? void 0 : product.priceSale, // Price and Stock (docs L1165)
+                stock: product === null || product === void 0 ? void 0 : product.stock // Price and Stock (docs L1170)
             },
             parsedAt: new Date()
         };
