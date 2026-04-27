@@ -736,7 +736,7 @@ export class IntegrationRequestLogService {
         if (typeof body !== 'object') return this.formatBodyForStorage(body);
 
         const sanitized = JSON.parse(JSON.stringify(body));
-        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret'];
+        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret', 'bearer'];
 
         this.recursiveSanitize(sanitized, sensitiveKeys);
 
@@ -759,7 +759,7 @@ export class IntegrationRequestLogService {
         if (typeof body !== 'object') return this.formatBodyForStorage(body);
 
         const sanitized = JSON.parse(JSON.stringify(body));
-        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret'];
+        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret', 'bearer'];
 
         this.recursiveSanitize(sanitized, sensitiveKeys);
 
@@ -795,8 +795,8 @@ export class IntegrationRequestLogService {
             sanitized = sanitized.replace(regex, `$1***REDACTED***$3`);
         });
 
-        // URL-encoded body'deki hassas bilgileri maskele (Amazon LWA)
-        const urlSensitiveKeys = ['client_secret', 'refresh_token', 'password', 'access_token', 'token', 'secret'];
+        // URL-encoded body'deki hassas bilgileri maskele (Amazon LWA, T-Soft rest1 `pass=`)
+        const urlSensitiveKeys = ['client_secret', 'refresh_token', 'password', 'access_token', 'token', 'secret', 'pass', 'bearer'];
         urlSensitiveKeys.forEach(key => {
             const regex = new RegExp(`(${key}=)([^&]*)`, 'gi');
             sanitized = sanitized.replace(regex, `$1***REDACTED***`);

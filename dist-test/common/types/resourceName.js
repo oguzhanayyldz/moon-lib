@@ -16,6 +16,6 @@ var ResourceName;
     ResourceName["HepsiJet"] = "HepsiJet";
     ResourceName["Ikas"] = "Ikas";
     ResourceName["IdeaSoft"] = "IdeaSoft";
-    ResourceName["TSoft"] = "TSoft";
+    ResourceName["TSoft"] = "T-Soft";
 })(ResourceName || (exports.ResourceName = ResourceName = {}));
 //# sourceMappingURL=resourceName.js.map

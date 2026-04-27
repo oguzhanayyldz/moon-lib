@@ -69,4 +69,5 @@ export declare const shopifySecurityLogger: SecurityLogger;
 export declare const trendyolSecurityLogger: SecurityLogger;
 export declare const hepsiburadaSecurityLogger: SecurityLogger;
 export declare const ikasSecurityLogger: SecurityLogger;
+export declare const tsoftSecurityLogger: SecurityLogger;
 //# sourceMappingURL=SecurityLogger.d.ts.map
