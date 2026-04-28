@@ -67,6 +67,7 @@ export interface ProductPriceUpdateRequest {
     userId: string;
     price?: number;
     listPrice?: number;
+    vat?: number;
     variants?: Array<{
         id: string;
         externalId: string;

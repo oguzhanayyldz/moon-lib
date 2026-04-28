@@ -101,10 +101,14 @@ export interface ProductPriceUpdateRequest {
   
   // Güncellenecek ana ürün fiyatı (varsa)
   price?: number;
-  
+
   // Güncellenecek liste fiyatı (varsa)
   listPrice?: number;
-  
+
+  // Vergi oranı (%). KDV-haric cevirim yapan platformlar (TSoft) icin kullanilir.
+  // Moon DB fiyatlari KDV DAHIL tutar; bu alanla platform tarafinda hariç-degerine cevirilebilir.
+  vat?: number;
+
   // Varyant fiyat güncellemeleri (varsa)
   variants?: Array<{
     // Varyant ID (Moon sistemindeki combination ID)
