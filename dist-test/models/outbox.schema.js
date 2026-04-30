@@ -38,6 +38,9 @@ const outboxSchemaDefination = {
     processedAt: {
         type: Date
     },
+    processingStartedAt: {
+        type: Date
+    },
     priority: {
         type: Number,
         min: 1,
@@ -142,6 +145,13 @@ outboxSchema.pre('save', function (next) {
 // _system_ users get processed first, then by priority within each user
 outboxSchema.index({ status: 1, environment: 1, userId: 1, priority: 1, creationDate: 1 });
 outboxSchema.index({ status: 1, environment: 1, retryCount: 1, creationDate: 1 });
+// Issue #553: Outbox slow query optimizasyonu için compound index'ler
+// Stuck processing detection (eventPublisher.job:458, deadLetterProcessor.job:91/210)
+outboxSchema.index({ status: 1, processingStartedAt: 1 });
+// Failed events count (eventPublisher.job:480)
+outboxSchema.index({ status: 1, retryCount: 1 });
+// Distinct userId coverage (eventPublisher.job:235)
+outboxSchema.index({ status: 1, environment: 1, retryCount: 1, userId: 1, eventType: 1 });
 function createOutboxModel(connection) {
     try {
         return connection.model('Outbox');

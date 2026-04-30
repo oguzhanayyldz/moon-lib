@@ -75,6 +75,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     error?: string;
     result?: any;
     processedAt?: Date;
+    processingStartedAt?: Date;
     priority?: number;
     userId?: string;
 }
@@ -88,6 +89,7 @@ export interface OutboxDoc extends BaseDoc {
     error?: string;
     result?: any;
     processedAt?: Date;
+    processingStartedAt?: Date;
     priority: number;
     userId: string;
 }
