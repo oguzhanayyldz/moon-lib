@@ -148,6 +148,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     error?: string;
     result?: any;
     processedAt?: Date;
+    processingStartedAt?: Date;
     priority?: number; // 1-5, 1 en yüksek öncelik
     userId?: string; // User-scoped priority için
 }
@@ -162,6 +163,7 @@ export interface OutboxDoc extends BaseDoc {
     error?: string;
     result?: any;
     processedAt?: Date;
+    processingStartedAt?: Date;
     priority: number; // 1-5, 1 en yüksek öncelik
     userId: string; // User-scoped priority için (_system_ fallback)
 }
@@ -194,6 +196,9 @@ const outboxSchemaDefination = {
         type: mongoose.Schema.Types.Mixed
     },
     processedAt: {
+        type: Date
+    },
+    processingStartedAt: {
         type: Date
     },
     priority: {
@@ -312,6 +317,14 @@ outboxSchema.pre('save', function(next) {
 // _system_ users get processed first, then by priority within each user
 outboxSchema.index({ status: 1, environment: 1, userId: 1, priority: 1, creationDate: 1 });
 outboxSchema.index({ status: 1, environment: 1, retryCount: 1, creationDate: 1 });
+
+// Issue #553: Outbox slow query optimizasyonu için compound index'ler
+// Stuck processing detection (eventPublisher.job:458, deadLetterProcessor.job:91/210)
+outboxSchema.index({ status: 1, processingStartedAt: 1 });
+// Failed events count (eventPublisher.job:480)
+outboxSchema.index({ status: 1, retryCount: 1 });
+// Distinct userId coverage (eventPublisher.job:235)
+outboxSchema.index({ status: 1, environment: 1, retryCount: 1, userId: 1, eventType: 1 });
 
 export function createOutboxModel(connection: mongoose.Connection) {
     try {
