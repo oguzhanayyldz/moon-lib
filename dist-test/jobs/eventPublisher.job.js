@@ -12,7 +12,6 @@ const userConfigUpdated_publisher_1 = require("../events/publishers/userConfigUp
 const integrationCommand_publisher_1 = require("../events/publishers/integrationCommand.publisher");
 const productStockCreated_publisher_1 = require("../events/publishers/productStockCreated.publisher");
 const productStockUpdated_publisher_1 = require("../events/publishers/productStockUpdated.publisher");
-const productStockBulkUpdated_publisher_1 = require("../events/publishers/productStockBulkUpdated.publisher");
 const stockCreated_publisher_1 = require("../events/publishers/stockCreated.publisher");
 const stockUpdated_publisher_1 = require("../events/publishers/stockUpdated.publisher");
 const orderCreated_publisher_1 = require("../events/publishers/orderCreated.publisher");
@@ -438,10 +437,6 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.ProductStockUpdated:
                 await new productStockUpdated_publisher_1.ProductStockUpdatedPublisher(this.natsClient)
-                    .publish(event.payload);
-                break;
-            case common_1.Subjects.ProductStockBulkUpdated:
-                await new productStockBulkUpdated_publisher_1.ProductStockBulkUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case common_1.Subjects.StockCreated:

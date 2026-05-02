@@ -258,6 +258,44 @@ const createRedisWrapper = () => {
                 return Promise.resolve(current + 1);
             }),
             expire: jest.fn((key, seconds) => Promise.resolve(1)),
+            // Set operations — issue #555 stockUpdateBatcher.job kuyruğu için
+            sAdd: jest.fn((key, member) => {
+                if (!mockStorage[key])
+                    mockStorage[key] = new Set();
+                if (!(mockStorage[key] instanceof Set))
+                    mockStorage[key] = new Set();
+                const members = Array.isArray(member) ? member : [member];
+                let added = 0;
+                for (const m of members) {
+                    if (!mockStorage[key].has(m)) {
+                        mockStorage[key].add(m);
+                        added++;
+                    }
+                }
+                return Promise.resolve(added);
+            }),
+            sMembers: jest.fn((key) => {
+                if (mockStorage[key] instanceof Set) {
+                    return Promise.resolve(Array.from(mockStorage[key]));
+                }
+                return Promise.resolve([]);
+            }),
+            sRem: jest.fn((key, member) => {
+                if (!(mockStorage[key] instanceof Set))
+                    return Promise.resolve(0);
+                const members = Array.isArray(member) ? member : [member];
+                let removed = 0;
+                for (const m of members) {
+                    if (mockStorage[key].delete(m))
+                        removed++;
+                }
+                return Promise.resolve(removed);
+            }),
+            sCard: jest.fn((key) => {
+                if (mockStorage[key] instanceof Set)
+                    return Promise.resolve(mockStorage[key].size);
+                return Promise.resolve(0);
+            }),
             scan: jest.fn((cursor, options) => {
                 // Mock return format expected by signoutAll.ts: { cursor, keys }
                 const mockKeys = Object.keys(mockStorage).filter(key => {

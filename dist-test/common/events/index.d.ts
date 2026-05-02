@@ -10,7 +10,6 @@ export * from './product-integration-created-event';
 export * from './product-updated-event';
 export * from './product-stock-created-event';
 export * from './product-stock-updated-event';
-export * from './product-stock-bulk-updated-event';
 export * from './product-price-integration-updated-event';
 export * from './stock-created-event';
 export * from './stock-updated-event';

@@ -84,6 +84,10 @@ export declare const createRedisWrapper: () => {
         del: jest.Mock<Promise<number>, [key: string | string[]], any>;
         incr: jest.Mock<Promise<number>, [key: string], any>;
         expire: jest.Mock<Promise<number>, [key: string, seconds: number], any>;
+        sAdd: jest.Mock<Promise<number>, [key: string, member: string | string[]], any>;
+        sMembers: jest.Mock<Promise<string[]>, [key: string], any>;
+        sRem: jest.Mock<Promise<number>, [key: string, member: string | string[]], any>;
+        sCard: jest.Mock<Promise<number>, [key: string], any>;
         scan: jest.Mock<Promise<{
             cursor: number;
             keys: string[];
@@ -119,6 +123,10 @@ export declare const redisWrapper: {
         del: jest.Mock<Promise<number>, [key: string | string[]], any>;
         incr: jest.Mock<Promise<number>, [key: string], any>;
         expire: jest.Mock<Promise<number>, [key: string, seconds: number], any>;
+        sAdd: jest.Mock<Promise<number>, [key: string, member: string | string[]], any>;
+        sMembers: jest.Mock<Promise<string[]>, [key: string], any>;
+        sRem: jest.Mock<Promise<number>, [key: string, member: string | string[]], any>;
+        sCard: jest.Mock<Promise<number>, [key: string], any>;
         scan: jest.Mock<Promise<{
             cursor: number;
             keys: string[];

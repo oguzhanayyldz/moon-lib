@@ -81,7 +81,6 @@ function getEventPriority(eventType) {
         [common_1.Subjects.BrandUpdated]: 3,
         [common_1.Subjects.ProductStockCreated]: 3,
         [common_1.Subjects.ProductStockUpdated]: 3,
-        [common_1.Subjects.ProductStockBulkUpdated]: 3,
         // Priority 4: Integration Data
         [common_1.Subjects.ProductPriceIntegrationUpdated]: 4,
         [common_1.Subjects.ProductStockIntegrationUpdated]: 4,

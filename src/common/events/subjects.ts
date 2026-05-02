@@ -5,7 +5,6 @@ export enum Subjects {
     ProductIntegrationSynced = "product:integration:synced",
     ProductStockCreated = "product:stock:created",
     ProductStockUpdated = "product:stock:updated",
-    ProductStockBulkUpdated = "product:stock:bulk-updated",
     // Combination/PPL/RPL event'leri tamamen kaldırıldı (issue #507)
     // ProductCreated/ProductUpdated payload'ında embed ediliyor
     UserCreated = "user:created",

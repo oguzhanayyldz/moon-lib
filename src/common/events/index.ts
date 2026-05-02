@@ -10,7 +10,6 @@ export * from './product-integration-created-event';
 export * from './product-updated-event';
 export * from './product-stock-created-event';
 export * from './product-stock-updated-event';
-export * from './product-stock-bulk-updated-event';
 export * from './product-price-integration-updated-event';
 // Combination/PPL/RPL event export'ları kaldırıldı (issue #507)
 export * from './stock-created-event';

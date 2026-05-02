@@ -112,7 +112,6 @@ __exportStar(require("./events/publishers/integrationCommand.publisher"), export
 __exportStar(require("./events/publishers/integrationCommandResult.publisher"), exports);
 __exportStar(require("./events/publishers/productStockCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockUpdated.publisher"), exports);
-__exportStar(require("./events/publishers/productStockBulkUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/stockCreated.publisher"), exports);
 __exportStar(require("./events/publishers/stockUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/orderCreated.publisher"), exports);

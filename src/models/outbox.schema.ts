@@ -14,7 +14,6 @@ import {
     IntegrationCommandEvent,
     ProductStockCreatedEvent,
     ProductStockUpdatedEvent,
-    ProductStockBulkUpdatedEvent,
     StockCreatedEvent,
     StockUpdatedEvent,
     OrderCreatedEvent,
@@ -89,7 +88,6 @@ interface EventPayloadMap {
     [Subjects.IntegrationCommandResult]: IntegrationCommandResultEvent['data'];
     [Subjects.ProductStockCreated]: ProductStockCreatedEvent['data'];
     [Subjects.ProductStockUpdated]: ProductStockUpdatedEvent['data'];
-    [Subjects.ProductStockBulkUpdated]: ProductStockBulkUpdatedEvent['data'];
     [Subjects.StockCreated]: StockCreatedEvent['data'];
     [Subjects.StockUpdated]: StockUpdatedEvent['data'];
     [Subjects.OrderCreated]: OrderCreatedEvent['data'];
@@ -247,7 +245,6 @@ export function getEventPriority(eventType: string): number {
         [Subjects.BrandUpdated]: 3,
         [Subjects.ProductStockCreated]: 3,
         [Subjects.ProductStockUpdated]: 3,
-        [Subjects.ProductStockBulkUpdated]: 3,
         
         // Priority 4: Integration Data
         [Subjects.ProductPriceIntegrationUpdated]: 4,

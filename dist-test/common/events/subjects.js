@@ -9,7 +9,6 @@ var Subjects;
     Subjects["ProductIntegrationSynced"] = "product:integration:synced";
     Subjects["ProductStockCreated"] = "product:stock:created";
     Subjects["ProductStockUpdated"] = "product:stock:updated";
-    Subjects["ProductStockBulkUpdated"] = "product:stock:bulk-updated";
     // Combination/PPL/RPL event'leri tamamen kaldırıldı (issue #507)
     // ProductCreated/ProductUpdated payload'ında embed ediliyor
     Subjects["UserCreated"] = "user:created";

@@ -26,7 +26,6 @@ __exportStar(require("./product-integration-created-event"), exports);
 __exportStar(require("./product-updated-event"), exports);
 __exportStar(require("./product-stock-created-event"), exports);
 __exportStar(require("./product-stock-updated-event"), exports);
-__exportStar(require("./product-stock-bulk-updated-event"), exports);
 __exportStar(require("./product-price-integration-updated-event"), exports);
 // Combination/PPL/RPL event export'ları kaldırıldı (issue #507)
 __exportStar(require("./stock-created-event"), exports);
