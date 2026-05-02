@@ -11,6 +11,7 @@ import { UserConfigUpdatedPublisher } from '../events/publishers/userConfigUpdat
 import { IntegrationCommandPublisher } from '../events/publishers/integrationCommand.publisher';
 import { ProductStockCreatedPublisher } from '../events/publishers/productStockCreated.publisher';
 import { ProductStockUpdatedPublisher } from '../events/publishers/productStockUpdated.publisher';
+import { ProductStockBulkUpdatedPublisher } from '../events/publishers/productStockBulkUpdated.publisher';
 import { StockCreatedPublisher } from '../events/publishers/stockCreated.publisher';
 import { StockUpdatedPublisher } from '../events/publishers/stockUpdated.publisher';
 import { OrderCreatedPublisher } from '../events/publishers/orderCreated.publisher';
@@ -528,6 +529,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.ProductStockUpdated:
                 await new ProductStockUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ProductStockBulkUpdated:
+                await new ProductStockBulkUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case Subjects.StockCreated:

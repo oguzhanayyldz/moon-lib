@@ -111,6 +111,7 @@ export * from './events/publishers/integrationCommand.publisher';
 export * from './events/publishers/integrationCommandResult.publisher';
 export * from './events/publishers/productStockCreated.publisher';
 export * from './events/publishers/productStockUpdated.publisher';
+export * from './events/publishers/productStockBulkUpdated.publisher';
 export * from './events/publishers/stockCreated.publisher';
 export * from './events/publishers/stockUpdated.publisher';
 export * from './events/publishers/orderCreated.publisher';

@@ -5,6 +5,7 @@ export declare enum Subjects {
     ProductIntegrationSynced = "product:integration:synced",
     ProductStockCreated = "product:stock:created",
     ProductStockUpdated = "product:stock:updated",
+    ProductStockBulkUpdated = "product:stock:bulk-updated",
     UserCreated = "user:created",
     UserUpdated = "user:updated",
     UserConfigUpdated = "user:config:updated",
