@@ -645,7 +645,14 @@ class IntegrationRequestLogService {
         return this.formatBodyForStorage(sanitized);
     }
     /**
-     * Nested objelerde hassas bilgileri temizler
+     * Nested objelerde hassas bilgileri temizler.
+     *
+     * **KRITIK:** String değerler de kontrol edilmeli — bazı entegrasyonlarda body
+     * `{body: "pass=...&token=..."}` gibi wrap'lı string olarak gelir. Bu durumda
+     * `body` key sensitive değil ama içindeki STRING URL-encoded form data ve
+     * hassas bilgi içeriyor. `sanitizeStringBody` ile string içi pattern temizlenir.
+     *
+     * Örnek log (önceki bug): `{body: "pass=Oguz.1996"}` — şifre AÇIK görünüyordu.
      */
     static recursiveSanitize(obj, sensitiveKeys) {
         if (typeof obj !== 'object' || obj === null)
@@ -653,6 +660,11 @@ class IntegrationRequestLogService {
         for (const key in obj) {
             if (sensitiveKeys.includes(key.toLowerCase())) {
                 obj[key] = '***REDACTED***';
+            }
+            else if (typeof obj[key] === 'string') {
+                // String değer — içinde URL-encoded form data veya XML olabilir,
+                // sensitive pattern (pass=, password=, token=, vb.) varsa maskele
+                obj[key] = this.sanitizeStringBody(obj[key]);
             }
             else if (typeof obj[key] === 'object') {
                 this.recursiveSanitize(obj[key], sensitiveKeys);

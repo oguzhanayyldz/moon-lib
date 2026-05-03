@@ -162,7 +162,14 @@ export declare class IntegrationRequestLogService {
      */
     private static sanitizeResponseBody;
     /**
-     * Nested objelerde hassas bilgileri temizler
+     * Nested objelerde hassas bilgileri temizler.
+     *
+     * **KRITIK:** String değerler de kontrol edilmeli — bazı entegrasyonlarda body
+     * `{body: "pass=...&token=..."}` gibi wrap'lı string olarak gelir. Bu durumda
+     * `body` key sensitive değil ama içindeki STRING URL-encoded form data ve
+     * hassas bilgi içeriyor. `sanitizeStringBody` ile string içi pattern temizlenir.
+     *
+     * Örnek log (önceki bug): `{body: "pass=Oguz.1996"}` — şifre AÇIK görünüyordu.
      */
     private static recursiveSanitize;
     /**
