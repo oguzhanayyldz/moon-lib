@@ -8,6 +8,7 @@ import { N11ResponseInterpreter } from './n11.interpreter';
 import { IdeaSoftResponseInterpreter } from './ideasoft.interpreter';
 import { HepsiJetResponseInterpreter } from './hepsijet.interpreter';
 import { TSoftResponseInterpreter } from './tsoft.interpreter';
+import { CicekSepetiResponseInterpreter } from './ciceksepeti.interpreter';
 import { logger } from '../logger.service';
 
 /**
@@ -60,6 +61,10 @@ export class ResponseInterpreterFactory {
 
             case ResourceName.TSoft:
                 interpreter = new TSoftResponseInterpreter();
+                break;
+
+            case ResourceName.CicekSepeti:
+                interpreter = new CicekSepetiResponseInterpreter();
                 break;
 
             // Diğer platform'lar için ileride eklenebilir

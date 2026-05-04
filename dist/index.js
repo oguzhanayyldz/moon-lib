@@ -59,6 +59,7 @@ __exportStar(require("./services/response-interpreters/hepsiburada.interpreter")
 __exportStar(require("./services/response-interpreters/ikas.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/hepsijet.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/tsoft.interpreter"), exports);
+__exportStar(require("./services/response-interpreters/ciceksepeti.interpreter"), exports);
 __exportStar(require("./services/response-interpreters/interpreter.factory"), exports);
 // Enums
 __exportStar(require("./enums/operation-type.enum"), exports);
