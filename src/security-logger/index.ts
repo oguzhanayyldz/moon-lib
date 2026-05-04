@@ -21,7 +21,8 @@ export {
     trendyolSecurityLogger,
     hepsiburadaSecurityLogger,
     ikasSecurityLogger,
-    tsoftSecurityLogger
+    tsoftSecurityLogger,
+    ciceksepetiSecurityLogger
 } from './SecurityLogger';
 
 export {
