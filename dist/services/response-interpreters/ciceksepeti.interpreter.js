@@ -44,6 +44,8 @@ class CicekSepetiResponseInterpreter extends base_interpreter_1.BaseResponseInte
                     return this.interpretCategoryList(response);
                 case operation_type_enum_1.OperationType.GET_CATEGORY_ATTRIBUTES:
                     return this.interpretCategoryAttributes(response);
+                case operation_type_enum_1.OperationType.READ:
+                    return this.interpretRead(response, operationType);
                 default:
                     return this.interpretGeneric(response, operationType);
             }
@@ -277,6 +279,63 @@ class CicekSepetiResponseInterpreter extends base_interpreter_1.BaseResponseInte
                 attributeCount: attributes.length,
                 requiredCount,
                 variantCount
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * READ operation — birden fazla endpoint kullanıyor (sellerquestions, actions vb.)
+     * Response yapısına göre discriminate edilir.
+     */
+    interpretRead(response, operationType) {
+        // /sellerquestions GET → { items: [...], hasNextPage: boolean }
+        if (Array.isArray(response === null || response === void 0 ? void 0 : response.items) && typeof (response === null || response === void 0 ? void 0 : response.hasNextPage) === 'boolean') {
+            return this.interpretQuestionList(response);
+        }
+        // /sellerquestions/actions GET → { actions: [...] } veya array
+        if (Array.isArray(response === null || response === void 0 ? void 0 : response.actions) || Array.isArray(response)) {
+            return this.interpretActionsList(response);
+        }
+        return this.interpretGeneric(response, operationType);
+    }
+    /**
+     * Soru listesi yanıtını yorumla
+     * Response: { items: [{id, product, question, answer, answered, ...}], hasNextPage: boolean }
+     * Kaynak: docs/integrations/ciceksepeti/pages/019-ürün-sorularını-çekme.md
+     */
+    interpretQuestionList(response) {
+        const items = Array.isArray(response === null || response === void 0 ? void 0 : response.items) ? response.items : [];
+        const answeredCount = items.filter((q) => q.answered === true).length;
+        const unansweredCount = items.filter((q) => q.answered === false).length;
+        const hasNextPage = (response === null || response === void 0 ? void 0 : response.hasNextPage) === true;
+        return {
+            summary: `${items.length} ürün sorusu getirildi (${answeredCount} cevaplanmış, ${unansweredCount} cevaplanmamış)${hasNextPage ? ' — sonraki sayfa var' : ''}`,
+            success: true,
+            successCount: items.length,
+            details: {
+                pageItemCount: items.length,
+                answeredCount,
+                unansweredCount,
+                hasNextPage
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * BranchAction listesi yanıtını yorumla
+     * Response: { actions: [{name, value, details: [...]}] } veya direkt array
+     * Kaynak: docs/integrations/ciceksepeti/pages/020-ürün-sorularını-cevaplama.md
+     */
+    interpretActionsList(response) {
+        const actions = Array.isArray(response === null || response === void 0 ? void 0 : response.actions)
+            ? response.actions
+            : (Array.isArray(response) ? response : []);
+        return {
+            summary: `${actions.length} branch action getirildi`,
+            success: true,
+            successCount: actions.length,
+            details: {
+                actionCount: actions.length
             },
             parsedAt: new Date()
         };

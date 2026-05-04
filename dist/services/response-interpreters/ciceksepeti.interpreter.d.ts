@@ -56,6 +56,23 @@ export declare class CicekSepetiResponseInterpreter extends BaseResponseInterpre
      */
     private interpretCategoryAttributes;
     /**
+     * READ operation — birden fazla endpoint kullanıyor (sellerquestions, actions vb.)
+     * Response yapısına göre discriminate edilir.
+     */
+    private interpretRead;
+    /**
+     * Soru listesi yanıtını yorumla
+     * Response: { items: [{id, product, question, answer, answered, ...}], hasNextPage: boolean }
+     * Kaynak: docs/integrations/ciceksepeti/pages/019-ürün-sorularını-çekme.md
+     */
+    private interpretQuestionList;
+    /**
+     * BranchAction listesi yanıtını yorumla
+     * Response: { actions: [{name, value, details: [...]}] } veya direkt array
+     * Kaynak: docs/integrations/ciceksepeti/pages/020-ürün-sorularını-cevaplama.md
+     */
+    private interpretActionsList;
+    /**
      * Genel yanıt yorumlama
      */
     private interpretGeneric;
