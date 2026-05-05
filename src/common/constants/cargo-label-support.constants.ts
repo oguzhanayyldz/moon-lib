@@ -60,6 +60,31 @@ export function hasTrendyolLabelSupport(cargoProviderCode: string | undefined | 
     return lowerCode.includes('tex') || lowerCode.includes('trendyol') || lowerCode.includes('aras');
 }
 
+// ===== ÇİÇEKSEPETİ KARGO DESTEĞİ =====
+
+/**
+ * Çiçeksepeti ortak etiket destekleyen kargo firmaları
+ * NOT: Çiçeksepeti dokümantasyonunda kesin liste belirtilmediğinden,
+ * şimdilik konservatif yaklaşımla tüm kargo firmaları destekleniyor kabul ediliyor.
+ * Kesin liste netleştiğinde (issue #557 sonrası) bu liste güncellenmeli.
+ */
+export const CICEKSEPETI_SUPPORTED_CARGOS: string[] = [];
+
+/**
+ * Çiçeksepeti kargo firmasının ortak etiket desteği var mı kontrol eder
+ * @param cargoProviderCode - Kargo firma kodu
+ * @returns true: Destekliyor, false: Desteklemiyor
+ *
+ * NOT: Şu anda Çiçeksepeti kargo destek listesi netleşmediği için
+ * konservatif olarak false döndürülmektedir. Liste netleştiğinde güncelleme gerekir.
+ */
+export function hasCicekSepetiLabelSupport(cargoProviderCode: string | undefined | null): boolean {
+    if (!cargoProviderCode) return false;
+    if (CICEKSEPETI_SUPPORTED_CARGOS.length === 0) return false;
+    const lowerCode = cargoProviderCode.toLowerCase();
+    return CICEKSEPETI_SUPPORTED_CARGOS.some(c => lowerCode.includes(c.toLowerCase()));
+}
+
 // ===== KULLANICI DOSTU HATA MESAJLARI =====
 
 /** Kargo barkod desteği olmadığında gösterilecek mesajlar */
@@ -72,6 +97,9 @@ export const CARGO_NO_LABEL_MESSAGES = {
 
     /** Trendyol - Desteklenmeyen kargo firması */
     trendyol_no_support: 'Bu kargo firması ortak etiket desteklemiyor. Sadece TEX ve Aras (trendyol öder) destekliyor.',
+
+    /** Çiçeksepeti - Desteklenmeyen kargo firması */
+    ciceksepeti_no_support: 'Bu kargo firması Çiçeksepeti ortak etiket desteği sunmuyor.',
 
     /** Genel mesaj */
     generic: 'Bu kargo firması platform üzerinden barkod desteği sunmuyor.'
@@ -91,6 +119,9 @@ export function getCargoNoLabelMessage(platform: string, isStoreAccount: boolean
     }
     if (platform.toLowerCase().includes('trendyol')) {
         return CARGO_NO_LABEL_MESSAGES.trendyol_no_support;
+    }
+    if (platform.toLowerCase().includes('ciceksepeti') || platform.toLowerCase().includes('çiçeksepeti')) {
+        return CARGO_NO_LABEL_MESSAGES.ciceksepeti_no_support;
     }
     return CARGO_NO_LABEL_MESSAGES.generic;
 }

@@ -47,6 +47,7 @@ export * from './services/response-interpreters/hepsiburada.interpreter';
 export * from './services/response-interpreters/ikas.interpreter';
 export * from './services/response-interpreters/hepsijet.interpreter';
 export * from './services/response-interpreters/tsoft.interpreter';
+export * from './services/response-interpreters/ciceksepeti.interpreter';
 export * from './services/response-interpreters/interpreter.factory';
 
 // Enums
