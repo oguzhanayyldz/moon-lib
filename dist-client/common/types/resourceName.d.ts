@@ -6,6 +6,7 @@ export declare enum ResourceName {
     CicekSepeti = "CicekSepeti",
     Amazon = "Amazon",
     Shopify = "Shopify",
+    WooCommerce = "WooCommerce",
     Parasut = "Parasut",
     Aras = "Aras",
     Yurtici = "Yurtici",

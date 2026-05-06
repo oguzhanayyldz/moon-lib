@@ -10,6 +10,7 @@ var ResourceName;
     ResourceName["CicekSepeti"] = "CicekSepeti";
     ResourceName["Amazon"] = "Amazon";
     ResourceName["Shopify"] = "Shopify";
+    ResourceName["WooCommerce"] = "WooCommerce";
     ResourceName["Parasut"] = "Parasut";
     ResourceName["Aras"] = "Aras";
     ResourceName["Yurtici"] = "Yurtici";

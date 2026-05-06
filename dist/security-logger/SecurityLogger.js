@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ciceksepetiSecurityLogger = exports.tsoftSecurityLogger = exports.ikasSecurityLogger = exports.hepsiburadaSecurityLogger = exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.cdnSecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.SecurityLogger = void 0;
+exports.woocommerceSecurityLogger = exports.ciceksepetiSecurityLogger = exports.tsoftSecurityLogger = exports.ikasSecurityLogger = exports.hepsiburadaSecurityLogger = exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.cdnSecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.SecurityLogger = void 0;
 exports.createSecurityLogger = createSecurityLogger;
 const SecurityEventTypes_1 = require("./SecurityEventTypes");
 /**
@@ -212,3 +212,4 @@ exports.hepsiburadaSecurityLogger = new SecurityLogger('hepsiburada');
 exports.ikasSecurityLogger = new SecurityLogger('ikas');
 exports.tsoftSecurityLogger = new SecurityLogger('tsoft');
 exports.ciceksepetiSecurityLogger = new SecurityLogger('ciceksepeti');
+exports.woocommerceSecurityLogger = new SecurityLogger('woocommerce');

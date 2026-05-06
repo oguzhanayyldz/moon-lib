@@ -22,7 +22,8 @@ export {
     hepsiburadaSecurityLogger,
     ikasSecurityLogger,
     tsoftSecurityLogger,
-    ciceksepetiSecurityLogger
+    ciceksepetiSecurityLogger,
+    woocommerceSecurityLogger
 } from './SecurityLogger';
 
 export {

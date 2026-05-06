@@ -37,6 +37,22 @@ export declare const TRENDYOL_SUPPORTED_CARGOS: string[];
  * @returns true: Destekliyor, false: Desteklemiyor
  */
 export declare function hasTrendyolLabelSupport(cargoProviderCode: string | undefined | null): boolean;
+/**
+ * Çiçeksepeti ortak etiket destekleyen kargo firmaları
+ * NOT: Çiçeksepeti dokümantasyonunda kesin liste belirtilmediğinden,
+ * şimdilik konservatif yaklaşımla tüm kargo firmaları destekleniyor kabul ediliyor.
+ * Kesin liste netleştiğinde (issue #557 sonrası) bu liste güncellenmeli.
+ */
+export declare const CICEKSEPETI_SUPPORTED_CARGOS: string[];
+/**
+ * Çiçeksepeti kargo firmasının ortak etiket desteği var mı kontrol eder
+ * @param cargoProviderCode - Kargo firma kodu
+ * @returns true: Destekliyor, false: Desteklemiyor
+ *
+ * NOT: Şu anda Çiçeksepeti kargo destek listesi netleşmediği için
+ * konservatif olarak false döndürülmektedir. Liste netleştiğinde güncelleme gerekir.
+ */
+export declare function hasCicekSepetiLabelSupport(cargoProviderCode: string | undefined | null): boolean;
 /** Kargo barkod desteği olmadığında gösterilecek mesajlar */
 export declare const CARGO_NO_LABEL_MESSAGES: {
     /** Hepsiburada - Desteklenmeyen kargo firması */
@@ -45,6 +61,8 @@ export declare const CARGO_NO_LABEL_MESSAGES: {
     hepsiburada_store_account: string;
     /** Trendyol - Desteklenmeyen kargo firması */
     trendyol_no_support: string;
+    /** Çiçeksepeti - Desteklenmeyen kargo firması */
+    ciceksepeti_no_support: string;
     /** Genel mesaj */
     generic: string;
 };

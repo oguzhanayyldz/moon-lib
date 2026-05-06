@@ -355,3 +355,4 @@ export const hepsiburadaSecurityLogger = new SecurityLogger('hepsiburada');
 export const ikasSecurityLogger = new SecurityLogger('ikas');
 export const tsoftSecurityLogger = new SecurityLogger('tsoft');
 export const ciceksepetiSecurityLogger = new SecurityLogger('ciceksepeti');
+export const woocommerceSecurityLogger = new SecurityLogger('woocommerce');
