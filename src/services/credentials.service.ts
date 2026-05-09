@@ -33,12 +33,12 @@ export interface ParsedShipmentSettings {
 }
 
 export interface ParsedOrderUpdateSettings {
-    enable: boolean;
+    enabled: boolean;
     sources: any[];
 }
 
 export interface ParsedPriceUpdateSettings {
-    enable: boolean;
+    enabled: boolean;
     sources: any[];
 }
 
@@ -283,7 +283,20 @@ export class CredentialsService {
     }
 
     /**
+     * Source eşleşmesi — yeni `integrationName` veya eski `name` field'ına bakar.
+     * UI migration sırasında her iki field da kullanımda olabilir.
+     */
+    private static matchesIntegration(source: any, integrationName: string): boolean {
+        return source?.integrationName === integrationName || source?.name === integrationName;
+    }
+
+    /**
      * Price update settings parse ve filter
+     *
+     * Top-level `enabled` master switch'i; bu integration için fetchPrices aktif olup
+     * olmadığı sources içerisindeki match olan kaynağın `enabled` field'ında. Parse
+     * sonrası `enabled` field'ı bu integration için doğru değeri verir, böylece her
+     * entegrasyon servisi tek bir field'a bakarak source-level karar verir.
      */
     private static parsePriceUpdateSettings(
         raw: string | any,
@@ -292,20 +305,24 @@ export class CredentialsService {
         const settings = this.safeJsonParse(raw);
 
         if (!settings || !settings.sources) {
-            return { enable: false, sources: [] };
+            return { enabled: false, sources: [] };
         }
 
-        const matchingSource = settings.sources.find((s: any) => s.name === integrationName);
+        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName));
 
         return {
             ...settings,
-            enable: matchingSource ? matchingSource.enable : false,
-            sources: settings.sources.filter((s: any) => s.name === integrationName)
+            enabled: matchingSource ? Boolean(matchingSource.enabled) : false,
+            sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName))
         };
     }
 
     /**
      * Stock update settings parse ve filter
+     *
+     * `enabled` field'ı bu integration'a ait source.enabled değeriyle override edilir.
+     * Issue #560: master `enabled: true` + WC source `enabled: false` durumunda updateStocks
+     * skip ediliyordu çünkü parse sonrası master flag aynen geçiyordu.
      */
     private static parseStockUpdateSettings(
         raw: string | any,
@@ -317,12 +334,12 @@ export class CredentialsService {
             return { enabled: false, sources: [] };
         }
 
-        const matchingSource = settings.sources.find((s: any) => s.name === integrationName);
+        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName));
 
         return {
             ...settings,
-            enable: matchingSource ? matchingSource.enable : false,
-            sources: settings.sources.filter((s: any) => s.name === integrationName)
+            enabled: matchingSource ? Boolean(matchingSource.enabled) : false,
+            sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName))
         };
     }
 
@@ -336,16 +353,16 @@ export class CredentialsService {
         const settings = this.safeJsonParse(raw);
 
         if (!settings || !settings.sources) {
-            return { settings: { enable: false, sources: [] }, syncAdvanced: undefined };
+            return { settings: { enabled: false, sources: [] }, syncAdvanced: undefined };
         }
 
-        const matchingSource = settings.sources.find((s: any) => s.name === integrationName);
+        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName));
 
         return {
             settings: {
                 ...settings,
-                enable: matchingSource ? matchingSource.enable : false,
-                sources: settings.sources.filter((s: any) => s.name === integrationName)
+                enabled: matchingSource ? Boolean(matchingSource.enabled) : false,
+                sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName))
             },
             syncAdvanced: matchingSource?.syncAdvanced
         };

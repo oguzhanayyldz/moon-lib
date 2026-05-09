@@ -28,11 +28,11 @@ export interface ParsedShipmentSettings {
     fallbackCargoName?: string;
 }
 export interface ParsedOrderUpdateSettings {
-    enable: boolean;
+    enabled: boolean;
     sources: any[];
 }
 export interface ParsedPriceUpdateSettings {
-    enable: boolean;
+    enabled: boolean;
     sources: any[];
 }
 export interface ParsedStockUpdateSettings {
@@ -115,11 +115,25 @@ export declare class CredentialsService {
      */
     static safeJsonParse(value: string | any): any;
     /**
+     * Source eşleşmesi — yeni `integrationName` veya eski `name` field'ına bakar.
+     * UI migration sırasında her iki field da kullanımda olabilir.
+     */
+    private static matchesIntegration;
+    /**
      * Price update settings parse ve filter
+     *
+     * Top-level `enabled` master switch'i; bu integration için fetchPrices aktif olup
+     * olmadığı sources içerisindeki match olan kaynağın `enabled` field'ında. Parse
+     * sonrası `enabled` field'ı bu integration için doğru değeri verir, böylece her
+     * entegrasyon servisi tek bir field'a bakarak source-level karar verir.
      */
     private static parsePriceUpdateSettings;
     /**
      * Stock update settings parse ve filter
+     *
+     * `enabled` field'ı bu integration'a ait source.enabled değeriyle override edilir.
+     * Issue #560: master `enabled: true` + WC source `enabled: false` durumunda updateStocks
+     * skip ediliyordu çünkü parse sonrası master flag aynen geçiyordu.
      */
     private static parseStockUpdateSettings;
     /**
