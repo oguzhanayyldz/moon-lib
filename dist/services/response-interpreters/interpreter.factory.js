@@ -11,6 +11,7 @@ const ideasoft_interpreter_1 = require("./ideasoft.interpreter");
 const hepsijet_interpreter_1 = require("./hepsijet.interpreter");
 const tsoft_interpreter_1 = require("./tsoft.interpreter");
 const ciceksepeti_interpreter_1 = require("./ciceksepeti.interpreter");
+const woocommerce_interpreter_1 = require("./woocommerce.interpreter");
 const logger_service_1 = require("../logger.service");
 /**
  * Response Interpreter Factory
@@ -54,6 +55,9 @@ class ResponseInterpreterFactory {
                 break;
             case common_1.ResourceName.CicekSepeti:
                 interpreter = new ciceksepeti_interpreter_1.CicekSepetiResponseInterpreter();
+                break;
+            case common_1.ResourceName.WooCommerce:
+                interpreter = new woocommerce_interpreter_1.WooCommerceResponseInterpreter();
                 break;
             // Diğer platform'lar için ileride eklenebilir
             case common_1.ResourceName.Amazon:

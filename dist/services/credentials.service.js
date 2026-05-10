@@ -146,26 +146,42 @@ class CredentialsService {
         }
     }
     /**
+     * Source eşleşmesi — yeni `integrationName` veya eski `name` field'ına bakar.
+     * UI migration sırasında her iki field da kullanımda olabilir.
+     */
+    static matchesIntegration(source, integrationName) {
+        return (source === null || source === void 0 ? void 0 : source.integrationName) === integrationName || (source === null || source === void 0 ? void 0 : source.name) === integrationName;
+    }
+    /**
      * Price update settings parse ve filter
+     *
+     * Top-level `enabled` master switch'i; bu integration için fetchPrices aktif olup
+     * olmadığı sources içerisindeki match olan kaynağın `enabled` field'ında. Parse
+     * sonrası `enabled` field'ı bu integration için doğru değeri verir, böylece her
+     * entegrasyon servisi tek bir field'a bakarak source-level karar verir.
      */
     static parsePriceUpdateSettings(raw, integrationName) {
         const settings = this.safeJsonParse(raw);
         if (!settings || !settings.sources) {
-            return { enable: false, sources: [] };
+            return { enabled: false, sources: [] };
         }
-        const matchingSource = settings.sources.find((s) => s.name === integrationName);
-        return Object.assign(Object.assign({}, settings), { enable: matchingSource ? matchingSource.enable : false, sources: settings.sources.filter((s) => s.name === integrationName) });
+        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName));
+        return Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName)) });
     }
     /**
      * Stock update settings parse ve filter
+     *
+     * `enabled` field'ı bu integration'a ait source.enabled değeriyle override edilir.
+     * Issue #560: master `enabled: true` + WC source `enabled: false` durumunda updateStocks
+     * skip ediliyordu çünkü parse sonrası master flag aynen geçiyordu.
      */
     static parseStockUpdateSettings(raw, integrationName) {
         const settings = this.safeJsonParse(raw);
         if (!settings || !settings.sources) {
             return { enabled: false, sources: [] };
         }
-        const matchingSource = settings.sources.find((s) => s.name === integrationName);
-        return Object.assign(Object.assign({}, settings), { enable: matchingSource ? matchingSource.enable : false, sources: settings.sources.filter((s) => s.name === integrationName) });
+        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName));
+        return Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName)) });
     }
     /**
      * Order update settings parse ve filter
@@ -173,11 +189,11 @@ class CredentialsService {
     static parseOrderUpdateSettings(raw, integrationName) {
         const settings = this.safeJsonParse(raw);
         if (!settings || !settings.sources) {
-            return { settings: { enable: false, sources: [] }, syncAdvanced: undefined };
+            return { settings: { enabled: false, sources: [] }, syncAdvanced: undefined };
         }
-        const matchingSource = settings.sources.find((s) => s.name === integrationName);
+        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName));
         return {
-            settings: Object.assign(Object.assign({}, settings), { enable: matchingSource ? matchingSource.enable : false, sources: settings.sources.filter((s) => s.name === integrationName) }),
+            settings: Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName)) }),
             syncAdvanced: matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.syncAdvanced
         };
     }

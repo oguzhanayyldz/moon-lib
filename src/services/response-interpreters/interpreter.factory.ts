@@ -9,6 +9,7 @@ import { IdeaSoftResponseInterpreter } from './ideasoft.interpreter';
 import { HepsiJetResponseInterpreter } from './hepsijet.interpreter';
 import { TSoftResponseInterpreter } from './tsoft.interpreter';
 import { CicekSepetiResponseInterpreter } from './ciceksepeti.interpreter';
+import { WooCommerceResponseInterpreter } from './woocommerce.interpreter';
 import { logger } from '../logger.service';
 
 /**
@@ -65,6 +66,10 @@ export class ResponseInterpreterFactory {
 
             case ResourceName.CicekSepeti:
                 interpreter = new CicekSepetiResponseInterpreter();
+                break;
+
+            case ResourceName.WooCommerce:
+                interpreter = new WooCommerceResponseInterpreter();
                 break;
 
             // Diğer platform'lar için ileride eklenebilir

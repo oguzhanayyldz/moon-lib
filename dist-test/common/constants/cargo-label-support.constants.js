@@ -15,10 +15,11 @@
  * - Diğer kargo firmaları ortak etiket API'sini desteklemiyor
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CARGO_NO_LABEL_MESSAGES = exports.TRENDYOL_SUPPORTED_CARGOS = exports.HEPSIBURADA_STORE_ACCOUNT_ID = exports.HEPSIBURADA_SUPPORTED_CARGOS = void 0;
+exports.CARGO_NO_LABEL_MESSAGES = exports.CICEKSEPETI_SUPPORTED_CARGOS = exports.TRENDYOL_SUPPORTED_CARGOS = exports.HEPSIBURADA_STORE_ACCOUNT_ID = exports.HEPSIBURADA_SUPPORTED_CARGOS = void 0;
 exports.hasHepsiburadaLabelSupport = hasHepsiburadaLabelSupport;
 exports.isHepsiburadaStoreAccount = isHepsiburadaStoreAccount;
 exports.hasTrendyolLabelSupport = hasTrendyolLabelSupport;
+exports.hasCicekSepetiLabelSupport = hasCicekSepetiLabelSupport;
 exports.getCargoNoLabelMessage = getCargoNoLabelMessage;
 // ===== HEPSIBURADA KARGO DESTEĞİ =====
 /** Hepsiburada ortak barkod destekleyen kargo firmaları */
@@ -61,6 +62,30 @@ function hasTrendyolLabelSupport(cargoProviderCode) {
     const lowerCode = cargoProviderCode.toLowerCase();
     return lowerCode.includes('tex') || lowerCode.includes('trendyol') || lowerCode.includes('aras');
 }
+// ===== ÇİÇEKSEPETİ KARGO DESTEĞİ =====
+/**
+ * Çiçeksepeti ortak etiket destekleyen kargo firmaları
+ * NOT: Çiçeksepeti dokümantasyonunda kesin liste belirtilmediğinden,
+ * şimdilik konservatif yaklaşımla tüm kargo firmaları destekleniyor kabul ediliyor.
+ * Kesin liste netleştiğinde (issue #557 sonrası) bu liste güncellenmeli.
+ */
+exports.CICEKSEPETI_SUPPORTED_CARGOS = [];
+/**
+ * Çiçeksepeti kargo firmasının ortak etiket desteği var mı kontrol eder
+ * @param cargoProviderCode - Kargo firma kodu
+ * @returns true: Destekliyor, false: Desteklemiyor
+ *
+ * NOT: Şu anda Çiçeksepeti kargo destek listesi netleşmediği için
+ * konservatif olarak false döndürülmektedir. Liste netleştiğinde güncelleme gerekir.
+ */
+function hasCicekSepetiLabelSupport(cargoProviderCode) {
+    if (!cargoProviderCode)
+        return false;
+    if (exports.CICEKSEPETI_SUPPORTED_CARGOS.length === 0)
+        return false;
+    const lowerCode = cargoProviderCode.toLowerCase();
+    return exports.CICEKSEPETI_SUPPORTED_CARGOS.some(c => lowerCode.includes(c.toLowerCase()));
+}
 // ===== KULLANICI DOSTU HATA MESAJLARI =====
 /** Kargo barkod desteği olmadığında gösterilecek mesajlar */
 exports.CARGO_NO_LABEL_MESSAGES = {
@@ -70,6 +95,8 @@ exports.CARGO_NO_LABEL_MESSAGES = {
     hepsiburada_store_account: 'Mağaza Hesabı siparişlerinde platform etiketi kullanılamaz.',
     /** Trendyol - Desteklenmeyen kargo firması */
     trendyol_no_support: 'Bu kargo firması ortak etiket desteklemiyor. Sadece TEX ve Aras (trendyol öder) destekliyor.',
+    /** Çiçeksepeti - Desteklenmeyen kargo firması */
+    ciceksepeti_no_support: 'Bu kargo firması Çiçeksepeti ortak etiket desteği sunmuyor.',
     /** Genel mesaj */
     generic: 'Bu kargo firması platform üzerinden barkod desteği sunmuyor.'
 };
@@ -87,6 +114,9 @@ function getCargoNoLabelMessage(platform, isStoreAccount = false) {
     }
     if (platform.toLowerCase().includes('trendyol')) {
         return exports.CARGO_NO_LABEL_MESSAGES.trendyol_no_support;
+    }
+    if (platform.toLowerCase().includes('ciceksepeti') || platform.toLowerCase().includes('çiçeksepeti')) {
+        return exports.CARGO_NO_LABEL_MESSAGES.ciceksepeti_no_support;
     }
     return exports.CARGO_NO_LABEL_MESSAGES.generic;
 }
