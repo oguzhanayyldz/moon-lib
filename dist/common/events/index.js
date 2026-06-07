@@ -104,3 +104,5 @@ __exportStar(require("./subscription-invoice-created-event"), exports);
 __exportStar(require("./price-processing-completed-event"), exports);
 // Integration Auth Failure (issue #521)
 __exportStar(require("./integration-auth-failure-exceeded-event"), exports);
+// Stock Update Confirmation (issue #567)
+__exportStar(require("./stock-update-confirmed-event"), exports);

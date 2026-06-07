@@ -112,6 +112,7 @@ __exportStar(require("./events/publishers/productIntegrationSynced.publisher"), 
 // Combination/PPL/RPL publisher export'ları kaldırıldı (issue #507)
 __exportStar(require("./events/publishers/integrationCommand.publisher"), exports);
 __exportStar(require("./events/publishers/integrationCommandResult.publisher"), exports);
+__exportStar(require("./events/publishers/stockUpdateConfirmed.publisher"), exports);
 __exportStar(require("./events/publishers/productStockCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/stockCreated.publisher"), exports);

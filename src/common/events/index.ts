@@ -92,3 +92,6 @@ export * from './price-processing-completed-event';
 
 // Integration Auth Failure (issue #521)
 export * from './integration-auth-failure-exceeded-event';
+
+// Stock Update Confirmation (issue #567)
+export * from './stock-update-confirmed-event';

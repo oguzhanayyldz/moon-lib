@@ -72,6 +72,7 @@ export * from './events/publishers/productIntegrationCreated.publisher';
 export * from './events/publishers/productIntegrationSynced.publisher';
 export * from './events/publishers/integrationCommand.publisher';
 export * from './events/publishers/integrationCommandResult.publisher';
+export * from './events/publishers/stockUpdateConfirmed.publisher';
 export * from './events/publishers/productStockCreated.publisher';
 export * from './events/publishers/productStockUpdated.publisher';
 export * from './events/publishers/stockCreated.publisher';

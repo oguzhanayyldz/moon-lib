@@ -76,5 +76,8 @@ var Subjects;
     Subjects["SubscriptionPaymentFailed"] = "subscription:payment:failed";
     /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     Subjects["SubscriptionInvoiceCreated"] = "subscription:invoice:created";
+    // Stock Update Confirmation (issue #567)
+    // Entegrasyon → catalog: stok platforma GERÇEKTEN yazıldı teyidi (async batch/sync sonucu)
+    Subjects["StockUpdateConfirmed"] = "stock:update:confirmed";
 })(Subjects || (exports.Subjects = Subjects = {}));
 //# sourceMappingURL=subjects.js.map

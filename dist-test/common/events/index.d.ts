@@ -82,4 +82,5 @@ export * from './subscription-payment-failed-event';
 export * from './subscription-invoice-created-event';
 export * from './price-processing-completed-event';
 export * from './integration-auth-failure-exceeded-event';
+export * from './stock-update-confirmed-event';
 //# sourceMappingURL=index.d.ts.map

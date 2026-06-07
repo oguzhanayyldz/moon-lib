@@ -63,6 +63,7 @@ export declare enum Subjects {
     /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     SubscriptionPaymentFailed = "subscription:payment:failed",
     /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
-    SubscriptionInvoiceCreated = "subscription:invoice:created"
+    SubscriptionInvoiceCreated = "subscription:invoice:created",
+    StockUpdateConfirmed = "stock:update:confirmed"
 }
 //# sourceMappingURL=subjects.d.ts.map

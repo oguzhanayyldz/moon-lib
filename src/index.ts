@@ -111,6 +111,7 @@ export * from './events/publishers/productIntegrationSynced.publisher';
 // Combination/PPL/RPL publisher export'ları kaldırıldı (issue #507)
 export * from './events/publishers/integrationCommand.publisher';
 export * from './events/publishers/integrationCommandResult.publisher';
+export * from './events/publishers/stockUpdateConfirmed.publisher';
 export * from './events/publishers/productStockCreated.publisher';
 export * from './events/publishers/productStockUpdated.publisher';
 export * from './events/publishers/stockCreated.publisher';

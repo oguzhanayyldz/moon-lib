@@ -68,6 +68,7 @@ import { SubscriptionPaymentFailedPublisher } from '../events/publishers/subscri
 import { SubscriptionInvoiceCreatedPublisher } from '../events/publishers/subscriptionInvoiceCreated.publisher';
 import { PriceProcessingCompletedPublisher } from '../events/publishers/priceProcessingCompleted.publisher';
 import { IntegrationAuthFailureExceededPublisher } from '../events/publishers/integrationAuthFailureExceeded.publisher';
+import { StockUpdateConfirmedPublisher } from '../events/publishers/stockUpdateConfirmed.publisher';
 
 
 export class EventPublisherJob {
@@ -743,6 +744,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.IntegrationAuthFailureExceeded:
                 await new IntegrationAuthFailureExceededPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.StockUpdateConfirmed:
+                await new StockUpdateConfirmedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:
