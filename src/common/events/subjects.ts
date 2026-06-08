@@ -76,4 +76,8 @@ export enum Subjects {
     SubscriptionPaymentFailed = "subscription:payment:failed",
     /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
     SubscriptionInvoiceCreated = "subscription:invoice:created",
+
+    // Stock Update Confirmation (issue #567)
+    // Entegrasyon → catalog: stok platforma GERÇEKTEN yazıldı teyidi (async batch/sync sonucu)
+    StockUpdateConfirmed = "stock:update:confirmed",
 }
