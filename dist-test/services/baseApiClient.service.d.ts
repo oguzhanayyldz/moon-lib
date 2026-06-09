@@ -14,11 +14,20 @@ import { BaseApiClientConfig, ApiRequestMetrics } from '../common/types/api-clie
 import { CircuitBreaker } from './circuitBreaker.service';
 import { IntegrationRequestLogService } from './integrationRequestLog.service';
 import { ResourceName } from '../common';
+import { CircuitBreakerMetrics } from '../common/types/api-client.types';
+import { OperationType } from '../enums/operation-type.enum';
 export declare abstract class BaseApiClient implements IApiClient {
     protected httpClient: any;
     protected rateLimiter: RateLimiterMemory;
     protected queue: any;
-    protected circuitBreaker: CircuitBreaker;
+    /**
+     * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
+     * her operasyon turu (operationType) icin ayri breaker. Bir operasyon ust uste hata
+     * verirse SADECE o operasyonun devresi acilir; diger operasyonlar etkilenmez.
+     */
+    protected circuitBreakers: Map<string, CircuitBreaker>;
+    private circuitBreakerConfig;
+    private circuitBreakerServiceName;
     protected logService?: IntegrationRequestLogService;
     protected tracer: any;
     protected config: BaseApiClientConfig;
@@ -56,11 +65,32 @@ export declare abstract class BaseApiClient implements IApiClient {
     private setupRateLimiter;
     private setupQueue;
     private setupCircuitBreaker;
+    /**
+     * Issue #566: Verilen operasyon turu icin CircuitBreaker'i dondurur, yoksa olusturur (lazy).
+     * Her operasyonun kendi devre durumu (CLOSED/OPEN/HALF_OPEN) izole sekilde takip edilir.
+     */
+    private getCircuitBreaker;
     private setupTracing;
     private setupInterceptors;
     getMetrics(): ApiRequestMetrics;
-    getCircuitBreakerMetrics(): import("../common").CircuitBreakerMetrics;
-    resetCircuitBreaker(): void;
+    /**
+     * Issue #566: Devre kesme metrikleri.
+     *  - operationType verilirse: o operasyonun breaker metrikleri.
+     *  - verilmezse: tum operasyon breaker'larinin AGGREGATE metrikleri (geriye uyumlu).
+     *    State, herhangi biri OPEN ise OPEN; degilse herhangi biri HALF_OPEN ise HALF_OPEN; aksi halde CLOSED.
+     */
+    getCircuitBreakerMetrics(operationType?: OperationType | string): CircuitBreakerMetrics;
+    /**
+     * Issue #566: Operasyon bazinda devre kesme metrikleri (tum operasyonlar tek tek).
+     */
+    getCircuitBreakerMetricsByOperation(): Record<string, CircuitBreakerMetrics>;
+    /**
+     * Issue #566: Devre kesme sifirlama.
+     *  - operationType verilirse: yalnizca o operasyonun breaker'i.
+     *  - verilmezse: tum operasyon breaker'lari (geriye uyumlu).
+     */
+    resetCircuitBreaker(operationType?: OperationType | string): void;
+    private static defaultClosedMetrics;
 }
 export {};
 //# sourceMappingURL=baseApiClient.service.d.ts.map

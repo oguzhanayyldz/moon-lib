@@ -896,10 +896,11 @@ const RetryableListener = class MockRetryableListener {
     }
 };
 exports.RetryableListener = RetryableListener;
-// AuthFailureTracker - Centralized mock (issue #521)
+// AuthFailureTracker - Centralized mock (issue #521, operation-aware #566)
 exports.AuthFailureTracker = {
     initialize: jest.fn(),
-    getKey: jest.fn((userId, integrationId) => `integration:auth-failures:${userId}:${integrationId}`),
+    getKey: jest.fn((userId, integrationId, operationType) => `integration:auth-failures:${userId}:${integrationId}:${operationType || 'OTHER'}`),
+    getFailedOpsKey: jest.fn((userId, integrationId) => `integration:auth-failed-ops:${userId}:${integrationId}`),
     increment: jest.fn().mockResolvedValue(1),
     reset: jest.fn().mockResolvedValue(undefined),
     get: jest.fn().mockResolvedValue(0),

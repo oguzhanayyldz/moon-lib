@@ -20,9 +20,17 @@ const rate_limiter_flexible_1 = require("rate-limiter-flexible");
 const PQueue = require('p-queue').default;
 const circuitBreaker_service_1 = require("./circuitBreaker.service");
 const logger_service_1 = require("./logger.service");
+const api_client_types_1 = require("../common/types/api-client.types");
+const operation_type_enum_1 = require("../enums/operation-type.enum");
 const authFailureTracker_util_1 = require("../utils/authFailureTracker.util");
 class BaseApiClient {
     constructor(config, serviceName, integrationName, tracer, logService) {
+        /**
+         * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
+         * her operasyon turu (operationType) icin ayri breaker. Bir operasyon ust uste hata
+         * verirse SADECE o operasyonun devresi acilir; diger operasyonlar etkilenmez.
+         */
+        this.circuitBreakers = new Map();
         this.config = config;
         this.integrationName = integrationName;
         this.logService = logService;
@@ -162,14 +170,17 @@ class BaseApiClient {
     // Core request method
     makeRequest(requestConfig) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f, _g, _h;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
             const startTime = Date.now();
             let logId;
             // Merge default headers with request headers
             const finalConfig = Object.assign(Object.assign({}, requestConfig), { headers: Object.assign(Object.assign({}, this.getDefaultHeaders()), requestConfig.headers) });
+            // Issue #566: Operasyon turu — devre kesme + auth tracking operasyon bazinda yapilir.
+            // try/catch'in disinda tanimlanir ki hata yolunda da erisilebilsin.
+            const operationType = (_a = finalConfig.operationType) !== null && _a !== void 0 ? _a : operation_type_enum_1.OperationType.OTHER;
             // Enhanced request logging
             logger_service_1.logger.debug('Making API request', {
-                method: (_a = finalConfig.method) === null || _a === void 0 ? void 0 : _a.toUpperCase(),
+                method: (_b = finalConfig.method) === null || _b === void 0 ? void 0 : _b.toUpperCase(),
                 url: finalConfig.url,
                 hasRateLimit: !finalConfig.skipRateLimit,
                 hasCircuitBreaker: !finalConfig.skipCircuitBreaker,
@@ -182,9 +193,10 @@ class BaseApiClient {
                     yield this.checkRateLimit(finalConfig);
                 }
                 // Add request to queue and execute with circuit breaker
+                // Issue #566: Devre kesme operasyon bazinda — yalnizca ilgili operasyonun breaker'i kullanilir.
                 const response = yield this.queue.add(() => __awaiter(this, void 0, void 0, function* () {
                     if (!finalConfig.skipCircuitBreaker) {
-                        return this.circuitBreaker.execute(() => this.executeRequest(finalConfig));
+                        return this.getCircuitBreaker(operationType).execute(() => this.executeRequest(finalConfig));
                     }
                     else {
                         return this.executeRequest(finalConfig);
@@ -211,10 +223,11 @@ class BaseApiClient {
                 }
                 // Update metrics
                 this.updateMetrics(true, Date.now() - startTime);
-                // Auth failure counter'i sifirla (issue #521) — basarili bir cagri ardisikligi koparir
+                // Auth failure counter'i sifirla (issue #521, #566) — basarili bir cagri YALNIZCA
+                // kendi operasyonunun ardisikligini koparir (operation-aware reset).
                 if (this.config.authFailureTracking) {
                     const { userId, integrationId } = this.config.authFailureTracking;
-                    authFailureTracker_util_1.AuthFailureTracker.reset(userId, integrationId).catch((err) => {
+                    authFailureTracker_util_1.AuthFailureTracker.reset(userId, integrationId, operationType).catch((err) => {
                         logger_service_1.logger.warn('BaseApiClient: AuthFailureTracker.reset failed', {
                             error: err.message,
                             integrationName: this.integrationName
@@ -239,8 +252,8 @@ class BaseApiClient {
                             logId = yield this.logRequest(requestConfig);
                         }
                         // Enhanced error parsing - child classes (like ShopifyApiClient) may return structured error objects
-                        let responseStatus = ((_b = error.response) === null || _b === void 0 ? void 0 : _b.status) || 500; // Default to 500 instead of 0
-                        let responseBody = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.data) || error.message;
+                        let responseStatus = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.status) || 500; // Default to 500 instead of 0
+                        let responseBody = ((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || error.message;
                         // Try to parse enhanced error objects (JSON-stringified errors from child classes)
                         if (error.message && !(error.response)) {
                             try {
@@ -271,7 +284,7 @@ class BaseApiClient {
                         // Rate limit metadata ekle (429 hatası için)
                         let metadata;
                         if (responseStatus === 429) {
-                            const headers = ((_d = error.response) === null || _d === void 0 ? void 0 : _d.headers) || {};
+                            const headers = ((_e = error.response) === null || _e === void 0 ? void 0 : _e.headers) || {};
                             metadata = {
                                 rateLimitExceeded: true,
                                 limit: headers['x-ratelimit-limit'],
@@ -287,7 +300,7 @@ class BaseApiClient {
                         }
                         yield this.logResponse(logId, {
                             responseStatus,
-                            responseHeaders: (_e = error.response) === null || _e === void 0 ? void 0 : _e.headers,
+                            responseHeaders: (_f = error.response) === null || _f === void 0 ? void 0 : _f.headers,
                             responseBody,
                             duration,
                             metadata
@@ -302,13 +315,14 @@ class BaseApiClient {
                 }
                 // Update metrics
                 this.updateMetrics(false, duration);
-                // Auth failure tracking (issue #521) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez
-                const errorStatus = (_f = error.response) === null || _f === void 0 ? void 0 : _f.status;
+                // Auth failure tracking (issue #521, #566) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez.
+                // Sayim operasyon bazinda yapilir: tek bozuk operasyon tum entegrasyonu pasife cekmez.
+                const errorStatus = (_g = error.response) === null || _g === void 0 ? void 0 : _g.status;
                 if (this.config.authFailureTracking &&
                     (errorStatus === 401 || errorStatus === 403)) {
-                    const { userId, integrationId, integrationName, threshold } = this.config.authFailureTracking;
-                    const errorMessage = (_g = error.message) === null || _g === void 0 ? void 0 : _g.substring(0, 500);
-                    authFailureTracker_util_1.AuthFailureTracker.increment({ userId, integrationId, integrationName, threshold }, errorStatus, errorMessage).catch((err) => {
+                    const { userId, integrationId, integrationName, threshold, deactivationOperationThreshold } = this.config.authFailureTracking;
+                    const errorMessage = (_h = error.message) === null || _h === void 0 ? void 0 : _h.substring(0, 500);
+                    authFailureTracker_util_1.AuthFailureTracker.increment({ userId, integrationId, integrationName, threshold, deactivationOperationThreshold }, errorStatus, errorMessage, operationType).catch((err) => {
                         logger_service_1.logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
                             error: err.message,
                             integrationName: this.integrationName
@@ -330,7 +344,7 @@ class BaseApiClient {
                 logger_service_1.logger.error('API request failed', {
                     method: requestConfig.method,
                     url: requestConfig.url,
-                    status: (_h = error.response) === null || _h === void 0 ? void 0 : _h.status,
+                    status: (_j = error.response) === null || _j === void 0 ? void 0 : _j.status,
                     errorMessage: error.message,
                     duration,
                     integrationName: this.integrationName
@@ -570,7 +584,23 @@ class BaseApiClient {
         });
     }
     setupCircuitBreaker(config, serviceName) {
-        this.circuitBreaker = new circuitBreaker_service_1.CircuitBreaker(config, serviceName);
+        // Issue #566: Per-operation breaker'lar lazy olusturulur; config + serviceName saklanir.
+        this.circuitBreakerConfig = config;
+        this.circuitBreakerServiceName = serviceName;
+        this.circuitBreakers = new Map();
+    }
+    /**
+     * Issue #566: Verilen operasyon turu icin CircuitBreaker'i dondurur, yoksa olusturur (lazy).
+     * Her operasyonun kendi devre durumu (CLOSED/OPEN/HALF_OPEN) izole sekilde takip edilir.
+     */
+    getCircuitBreaker(operationType) {
+        const key = String(operationType || operation_type_enum_1.OperationType.OTHER);
+        let breaker = this.circuitBreakers.get(key);
+        if (!breaker) {
+            breaker = new circuitBreaker_service_1.CircuitBreaker(this.circuitBreakerConfig, `${this.circuitBreakerServiceName}:${key}`);
+            this.circuitBreakers.set(key, breaker);
+        }
+        return breaker;
     }
     // setupLogging method artık gerekli değil - constructor'da inject ediliyor
     setupTracing(tracer) {
@@ -622,11 +652,71 @@ class BaseApiClient {
     getMetrics() {
         return Object.assign({}, this.metrics);
     }
-    getCircuitBreakerMetrics() {
-        return this.circuitBreaker.getMetrics();
+    /**
+     * Issue #566: Devre kesme metrikleri.
+     *  - operationType verilirse: o operasyonun breaker metrikleri.
+     *  - verilmezse: tum operasyon breaker'larinin AGGREGATE metrikleri (geriye uyumlu).
+     *    State, herhangi biri OPEN ise OPEN; degilse herhangi biri HALF_OPEN ise HALF_OPEN; aksi halde CLOSED.
+     */
+    getCircuitBreakerMetrics(operationType) {
+        if (operationType) {
+            const breaker = this.circuitBreakers.get(String(operationType));
+            return breaker ? breaker.getMetrics() : BaseApiClient.defaultClosedMetrics();
+        }
+        const all = Array.from(this.circuitBreakers.values()).map((cb) => cb.getMetrics());
+        if (all.length === 0) {
+            return BaseApiClient.defaultClosedMetrics();
+        }
+        const state = all.some((m) => m.state === api_client_types_1.CircuitBreakerState.OPEN)
+            ? api_client_types_1.CircuitBreakerState.OPEN
+            : all.some((m) => m.state === api_client_types_1.CircuitBreakerState.HALF_OPEN)
+                ? api_client_types_1.CircuitBreakerState.HALF_OPEN
+                : api_client_types_1.CircuitBreakerState.CLOSED;
+        return {
+            state,
+            failures: all.reduce((sum, m) => sum + m.failures, 0),
+            successes: all.reduce((sum, m) => sum + m.successes, 0),
+            timeouts: all.reduce((sum, m) => sum + m.timeouts, 0),
+            fallbackCalls: all.reduce((sum, m) => sum + m.fallbackCalls, 0),
+            lastFailureTime: all.reduce((max, m) => (m.lastFailureTime && (!max || m.lastFailureTime > max) ? m.lastFailureTime : max), undefined),
+            lastSuccessTime: all.reduce((max, m) => (m.lastSuccessTime && (!max || m.lastSuccessTime > max) ? m.lastSuccessTime : max), undefined)
+        };
     }
-    resetCircuitBreaker() {
-        this.circuitBreaker.reset();
+    /**
+     * Issue #566: Operasyon bazinda devre kesme metrikleri (tum operasyonlar tek tek).
+     */
+    getCircuitBreakerMetricsByOperation() {
+        const result = {};
+        for (const [operationType, breaker] of this.circuitBreakers.entries()) {
+            result[operationType] = breaker.getMetrics();
+        }
+        return result;
+    }
+    /**
+     * Issue #566: Devre kesme sifirlama.
+     *  - operationType verilirse: yalnizca o operasyonun breaker'i.
+     *  - verilmezse: tum operasyon breaker'lari (geriye uyumlu).
+     */
+    resetCircuitBreaker(operationType) {
+        var _a;
+        if (operationType) {
+            (_a = this.circuitBreakers.get(String(operationType))) === null || _a === void 0 ? void 0 : _a.reset();
+            return;
+        }
+        for (const breaker of this.circuitBreakers.values()) {
+            breaker.reset();
+        }
+    }
+    static defaultClosedMetrics() {
+        return {
+            state: api_client_types_1.CircuitBreakerState.CLOSED,
+            failures: 0,
+            successes: 0,
+            timeouts: 0,
+            fallbackCalls: 0,
+            lastFailureTime: undefined,
+            lastSuccessTime: undefined
+        };
     }
 }
 exports.BaseApiClient = BaseApiClient;

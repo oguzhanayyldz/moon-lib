@@ -3,24 +3,40 @@ import { redisWrapper } from '../services/redisWrapper.service';
 import { logger } from '../services/logger.service';
 import { createOutboxModel } from '../models/outbox.schema';
 import { Subjects } from '../common/events/subjects';
+import { OperationType } from '../enums/operation-type.enum';
 import { OptimisticLockingUtil } from './optimisticLocking.util';
 
 export interface AuthFailureTrackerContext {
     userId: string;
     integrationId: string;
     integrationName: string;
+    /** Tek operasyonun auth-failure esigi. Varsayilan: 5 */
     threshold?: number;
+    /**
+     * Akilli pasiflestirme esigi (issue #566): Entegrasyonu pasife cekmek icin
+     * KAC FARKLI operasyon turunun kendi auth esigini asmasi gerektigi. Varsayilan: 2
+     */
+    deactivationOperationThreshold?: number;
 }
 
 /**
- * Entegrasyon API client'larinda ardisik 401/403 auth hatalarini takip eder.
- * Threshold asildiginda IntegrationAuthFailureExceededEvent publish edilir (Outbox).
- * Basarili bir cagri sayaci sifirlar.
+ * Entegrasyon API client'larinda ardisik 401/403 auth hatalarini OPERASYON BAZINDA takip eder
+ * (issue #521 + operation-aware #566).
  *
- * Redis key: integration:auth-failures:{userId}:{integrationId} (TTL 24 saat)
+ * Tek bir bozuk operasyon (orn. FETCH_INVOICES) artik tum entegrasyonu pasife cekmez:
+ *  - Her operasyon turunun kendi sayaci vardir; esik asilinca o operasyon "fail eden operasyonlar"
+ *    SET'ine eklenir ve ilgili operasyonun devresi (CircuitBreaker) acilir.
+ *  - Entegrasyon SADECE birden fazla farkli operasyon turu (>= deactivationOperationThreshold)
+ *    kendi esigini astiginda — yani gercek bir credential-geneli sorun varsa — pasife cekilir.
+ *  - Basarili bir cagri yalnizca KENDI operasyonunun sayacini sifirlar.
+ *
+ * Redis key'leri (TTL 24 saat):
+ *  - Operasyon sayaci: integration:auth-failures:{userId}:{integrationId}:{operationType}
+ *  - Fail eden operasyonlar SET'i: integration:auth-failed-ops:{userId}:{integrationId}
  */
 export class AuthFailureTracker {
     private static readonly DEFAULT_THRESHOLD = 5;
+    private static readonly DEFAULT_DEACTIVATION_OP_THRESHOLD = 2;
     private static readonly TTL_SECONDS = 86400; // 24 saat
     private static connection?: mongoose.Connection;
 
@@ -32,80 +48,206 @@ export class AuthFailureTracker {
         AuthFailureTracker.connection = connection;
     }
 
-    static getKey(userId: string, integrationId: string): string {
-        return `integration:auth-failures:${userId}:${integrationId}`;
+    /**
+     * Operasyon bazli sayac key'i. operationType verilmezse OTHER bucket'ina dusler (geriye uyumlu).
+     */
+    static getKey(userId: string, integrationId: string, operationType?: OperationType | string): string {
+        const op = operationType || OperationType.OTHER;
+        return `integration:auth-failures:${userId}:${integrationId}:${op}`;
     }
 
     /**
-     * 401/403 aldiginda counter'i artir, threshold asilirsa event publish et.
-     * @returns Guncel counter degeri (Redis hatasi durumunda 0)
+     * Esigini asan farkli operasyon turlerini tutan SET key'i (akilli pasiflestirme karari icin).
+     */
+    static getFailedOpsKey(userId: string, integrationId: string): string {
+        return `integration:auth-failed-ops:${userId}:${integrationId}`;
+    }
+
+    /**
+     * 401/403 aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * Operasyon kendi esigini asarsa fail-eden-operasyonlar SET'ine eklenir; SET boyutu
+     * deactivationOperationThreshold'a ulasirsa (gercek credential sorunu) event publish edilir.
+     * @returns Guncel operasyon counter degeri (Redis hatasi durumunda 0)
      */
     static async increment(
         context: AuthFailureTrackerContext,
         lastErrorStatus: 401 | 403,
-        lastErrorMessage?: string
+        lastErrorMessage?: string,
+        operationType?: OperationType | string
     ): Promise<number> {
-        const key = AuthFailureTracker.getKey(context.userId, context.integrationId);
+        const op = operationType || OperationType.OTHER;
+        const key = AuthFailureTracker.getKey(context.userId, context.integrationId, op);
         let count = 0;
 
         try {
             count = await redisWrapper.client.incr(key);
-            // Yeni key olusturulduysa TTL ayarla (sadece ilk increment'te)
-            if (count === 1) {
-                await redisWrapper.client.expire(key, AuthFailureTracker.TTL_SECONDS);
-            }
+            // TTL'i HER increment'te yenile: INCR ile EXPIRE arasinda servis crash olursa
+            // key'in TTL'siz (kalici) kalmasini ve yanlis-pozitif pasiflestirmeyi onler (#566 guvenlik incelemesi).
+            await redisWrapper.client.expire(key, AuthFailureTracker.TTL_SECONDS);
         } catch (redisError) {
             logger.warn('AuthFailureTracker: Redis increment failed, skipping tracking', {
                 error: (redisError as Error).message,
                 userId: context.userId,
-                integrationId: context.integrationId
+                integrationId: context.integrationId,
+                operationType: op
             });
             return 0;
         }
 
         const threshold = context.threshold ?? AuthFailureTracker.DEFAULT_THRESHOLD;
-        logger.warn(`AuthFailureTracker: auth failure recorded for ${context.integrationName}`, {
+        logger.warn(`AuthFailureTracker: auth failure recorded for ${context.integrationName} [${op}]`, {
             userId: context.userId,
             integrationId: context.integrationId,
+            operationType: op,
             count,
             threshold,
             status: lastErrorStatus
         });
 
         if (count >= threshold) {
-            await AuthFailureTracker.publishExceededEvent(context, count, lastErrorStatus, lastErrorMessage);
+            await AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage);
         }
 
         return count;
     }
 
     /**
-     * Basarili bir API call sonrasi counter'i sifirla.
+     * Bir operasyon kendi esigini astiginda cagrilir.
+     * Operasyonu fail-eden-operasyonlar SET'ine ekler ve SET boyutuna gore
+     * entegrasyonu pasife cekip cekmeyecegine karar verir.
      */
-    static async reset(userId: string, integrationId: string): Promise<void> {
-        const key = AuthFailureTracker.getKey(userId, integrationId);
+    private static async evaluateDeactivation(
+        context: AuthFailureTrackerContext,
+        operationType: OperationType | string,
+        failureCount: number,
+        lastErrorStatus: 401 | 403,
+        lastErrorMessage?: string
+    ): Promise<void> {
+        const failedOpsKey = AuthFailureTracker.getFailedOpsKey(context.userId, context.integrationId);
+        const deactivationThreshold =
+            context.deactivationOperationThreshold ?? AuthFailureTracker.DEFAULT_DEACTIVATION_OP_THRESHOLD;
+
+        let distinctFailedOps = 0;
+        let failedOperations: string[] = [];
         try {
-            const deleted = await redisWrapper.client.del(key);
-            if (deleted === 1) {
-                logger.info('AuthFailureTracker: counter reset', { userId, integrationId });
+            await redisWrapper.client.sAdd(failedOpsKey, String(operationType));
+            // SET TTL'ini her tetiklemede yenile (sAdd/EXPIRE atomik degil — kalici key riskini onler).
+            await redisWrapper.client.expire(failedOpsKey, AuthFailureTracker.TTL_SECONDS);
+            failedOperations = await redisWrapper.client.sMembers(failedOpsKey);
+            distinctFailedOps = failedOperations.length;
+        } catch (redisError) {
+            // SET okunamazsa pasiflestirme karari guvenli tarafta kalir: entegrasyon AÇIK tutulur.
+            logger.warn('AuthFailureTracker: failed-ops SET update failed — keeping integration active', {
+                error: (redisError as Error).message,
+                userId: context.userId,
+                integrationId: context.integrationId,
+                operationType
+            });
+            return;
+        }
+
+        if (distinctFailedOps >= deactivationThreshold) {
+            // Gercek credential-geneli sorun: entegrasyonu pasife cek.
+            await AuthFailureTracker.publishExceededEvent(
+                context,
+                failureCount,
+                lastErrorStatus,
+                lastErrorMessage,
+                failedOperations
+            );
+        } else {
+            // Tek operasyon bozuk: entegrasyon AÇIK kalir, yalnizca o operasyonun devresi acilir.
+            logger.warn(
+                `AuthFailureTracker: operation [${operationType}] threshold exceeded but integration kept ACTIVE ` +
+                    `(${distinctFailedOps}/${deactivationThreshold} distinct failing operations)`,
+                {
+                    userId: context.userId,
+                    integrationId: context.integrationId,
+                    integrationName: context.integrationName,
+                    operationType,
+                    failedOperations,
+                    distinctFailedOps,
+                    deactivationThreshold
+                }
+            );
+        }
+    }
+
+    /**
+     * Basarili bir API call sonrasi counter'i sifirla.
+     *  - operationType verilirse: YALNIZCA o operasyonun sayacini sifirlar ve SET'ten cikarir.
+     *  - operationType verilmezse: TUM operasyon sayaclarini + fail-eden-operasyonlar SET'ini temizler
+     *    (entegrasyon pasiflestirme/reaktivasyon sirasinda temiz baslangic icin).
+     */
+    static async reset(
+        userId: string,
+        integrationId: string,
+        operationType?: OperationType | string
+    ): Promise<void> {
+        const failedOpsKey = AuthFailureTracker.getFailedOpsKey(userId, integrationId);
+        try {
+            if (operationType) {
+                const key = AuthFailureTracker.getKey(userId, integrationId, operationType);
+                const deleted = await redisWrapper.client.del(key);
+                await redisWrapper.client.sRem(failedOpsKey, String(operationType));
+                if (deleted === 1) {
+                    logger.info('AuthFailureTracker: operation counter reset', { userId, integrationId, operationType });
+                }
+                return;
+            }
+
+            // Tam reset: SET uyelerinin tum sayaclarini ve SET'in kendisini temizle.
+            let members: string[] = [];
+            try {
+                members = await redisWrapper.client.sMembers(failedOpsKey);
+            } catch {
+                members = [];
+            }
+            const keysToDelete = members.map((op) => AuthFailureTracker.getKey(userId, integrationId, op));
+            // Legacy (operasyon-oncesi #521) key'i de temizle — deploy gecisi guvenligi
+            keysToDelete.push(`integration:auth-failures:${userId}:${integrationId}`);
+            keysToDelete.push(failedOpsKey);
+            const deleted = await redisWrapper.client.del(keysToDelete);
+            if (deleted > 0) {
+                logger.info('AuthFailureTracker: full counter reset', { userId, integrationId, clearedKeys: deleted });
             }
         } catch (redisError) {
             logger.warn('AuthFailureTracker: Redis reset failed', {
                 error: (redisError as Error).message,
                 userId,
-                integrationId
+                integrationId,
+                operationType
             });
         }
     }
 
     /**
      * Mevcut counter degerini oku (debug/UI icin).
+     *  - operationType verilirse: o operasyonun sayaci.
+     *  - verilmezse: fail-eden tum operasyonlarin sayaclari toplami (best-effort aggregate).
      */
-    static async get(userId: string, integrationId: string): Promise<number> {
-        const key = AuthFailureTracker.getKey(userId, integrationId);
+    static async get(
+        userId: string,
+        integrationId: string,
+        operationType?: OperationType | string
+    ): Promise<number> {
         try {
-            const value = await redisWrapper.client.get(key);
-            return value ? parseInt(value, 10) : 0;
+            if (operationType) {
+                const key = AuthFailureTracker.getKey(userId, integrationId, operationType);
+                const value = await redisWrapper.client.get(key);
+                return value ? parseInt(value, 10) : 0;
+            }
+
+            const failedOpsKey = AuthFailureTracker.getFailedOpsKey(userId, integrationId);
+            const members = await redisWrapper.client.sMembers(failedOpsKey);
+            let total = 0;
+            for (const op of members) {
+                const value = await redisWrapper.client.get(
+                    AuthFailureTracker.getKey(userId, integrationId, op)
+                );
+                total += value ? parseInt(value, 10) : 0;
+            }
+            return total;
         } catch {
             return 0;
         }
@@ -120,7 +262,8 @@ export class AuthFailureTracker {
         context: AuthFailureTrackerContext,
         failureCount: number,
         lastErrorStatus: 401 | 403,
-        lastErrorMessage?: string
+        lastErrorMessage: string | undefined,
+        failedOperations: string[]
     ): Promise<void> {
         const connection = AuthFailureTracker.connection;
         if (!connection) {
@@ -142,6 +285,7 @@ export class AuthFailureTracker {
                     failureCount,
                     lastErrorStatus,
                     lastErrorMessage,
+                    failedOperations,
                     timestamp: new Date()
                 },
                 status: 'pending'
@@ -153,7 +297,8 @@ export class AuthFailureTracker {
                 integrationId: context.integrationId,
                 integrationName: context.integrationName,
                 failureCount,
-                lastErrorStatus
+                lastErrorStatus,
+                failedOperations
             });
         } catch (error) {
             logger.error('AuthFailureTracker: Failed to queue IntegrationAuthFailureExceeded event', {

@@ -1,3 +1,4 @@
+import { OperationType } from '../../enums/operation-type.enum';
 interface AxiosRequestConfig {
     method?: string;
     url?: string;
@@ -28,7 +29,7 @@ export interface LogRequestParams {
     requestBody?: any;
     userId?: string;
     integrationName?: string;
-    operationType?: any;
+    operationType?: OperationType;
 }
 export interface LogResponseParams {
     status: number;
@@ -49,7 +50,7 @@ export interface RequestConfig extends AxiosRequestConfig {
     skipRateLimit?: boolean;
     skipCircuitBreaker?: boolean;
     logRequest?: boolean;
-    operationType?: any;
+    operationType?: OperationType;
     method?: string;
     url?: string;
     headers?: Record<string, any>;

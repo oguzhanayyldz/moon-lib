@@ -372,7 +372,8 @@ export declare const RetryableListener: {
 };
 export declare const AuthFailureTracker: {
     initialize: jest.Mock<any, any, any>;
-    getKey: jest.Mock<string, [userId: string, integrationId: string], any>;
+    getKey: jest.Mock<string, [userId: string, integrationId: string, operationType?: string | undefined], any>;
+    getFailedOpsKey: jest.Mock<string, [userId: string, integrationId: string], any>;
     increment: jest.Mock<any, any, any>;
     reset: jest.Mock<any, any, any>;
     get: jest.Mock<any, any, any>;
