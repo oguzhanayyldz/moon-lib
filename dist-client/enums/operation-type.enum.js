@@ -1,0 +1,65 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.OperationType = void 0;
+/**
+ * Integration işlemlerinin türlerini belirten enum
+ * Log kayıtlarının kategorize edilmesi ve filtrelenmesi için kullanılır
+ */
+var OperationType;
+(function (OperationType) {
+    // Ürün İşlemleri
+    OperationType["SEND_PRODUCTS"] = "SEND_PRODUCTS";
+    OperationType["FETCH_PRODUCTS"] = "FETCH_PRODUCTS";
+    OperationType["UPDATE_PRODUCTS"] = "UPDATE_PRODUCTS";
+    OperationType["DELETE_PRODUCTS"] = "DELETE_PRODUCTS";
+    OperationType["CHECK_PRODUCT_STATUS"] = "CHECK_PRODUCT_STATUS";
+    // Batch İşlemleri
+    OperationType["GET_BATCH_STATUS"] = "GET_BATCH_STATUS";
+    OperationType["CREATE_BATCH_REQUEST"] = "CREATE_BATCH_REQUEST";
+    // Kategori ve Marka İşlemleri
+    OperationType["GET_CATEGORIES"] = "GET_CATEGORIES";
+    OperationType["GET_BRANDS"] = "GET_BRANDS";
+    OperationType["GET_CATEGORY_ATTRIBUTES"] = "GET_CATEGORY_ATTRIBUTES";
+    // Stok İşlemleri
+    OperationType["CHECK_STOCK"] = "CHECK_STOCK";
+    OperationType["UPDATE_STOCK"] = "UPDATE_STOCK";
+    OperationType["SYNC_STOCK"] = "SYNC_STOCK";
+    OperationType["UPDATE_STOCK_AND_PRICE"] = "UPDATE_STOCK_AND_PRICE";
+    // Sipariş İşlemleri
+    OperationType["CREATE_ORDER"] = "CREATE_ORDER";
+    OperationType["UPDATE_ORDER"] = "UPDATE_ORDER";
+    OperationType["CANCEL_ORDER"] = "CANCEL_ORDER";
+    OperationType["FETCH_ORDERS"] = "FETCH_ORDERS";
+    // Kargo/Tracking İşlemleri
+    OperationType["SEND_TRACKING"] = "SEND_TRACKING";
+    OperationType["DELIVER_ORDER"] = "DELIVER_ORDER";
+    // Paketleme İşlemleri (Hepsiburada)
+    OperationType["CHECK_PACKAGEABLE_ITEMS"] = "CHECK_PACKAGEABLE_ITEMS";
+    OperationType["CREATE_PACKAGE"] = "CREATE_PACKAGE";
+    OperationType["FETCH_PACKAGES"] = "FETCH_PACKAGES";
+    OperationType["SPLIT_PACKAGE"] = "SPLIT_PACKAGE";
+    OperationType["UNPACK_PACKAGE"] = "UNPACK_PACKAGE";
+    OperationType["CANCEL_LINE_ITEM"] = "CANCEL_LINE_ITEM";
+    // Fiyat İşlemleri
+    OperationType["UPDATE_PRICES"] = "UPDATE_PRICES";
+    OperationType["FETCH_PRICES"] = "FETCH_PRICES";
+    // Fatura İşlemleri
+    OperationType["SEND_INVOICES"] = "SEND_INVOICES";
+    OperationType["FETCH_INVOICES"] = "FETCH_INVOICES";
+    OperationType["CANCEL_INVOICE"] = "CANCEL_INVOICE";
+    // Diğer İşlemler
+    OperationType["HEALTH_CHECK"] = "HEALTH_CHECK";
+    OperationType["READ"] = "READ";
+    OperationType["OTHER"] = "OTHER";
+    OperationType["FETCH_CLAIMS"] = "FETCH_CLAIMS";
+    OperationType["FETCH_ORDER_STATUS"] = "FETCH_ORDER_STATUS";
+    OperationType["FETCH_ORDER_CANCELLED"] = "FETCH_ORDER_CANCELLED";
+    OperationType["FETCH_ORDER_SHIPPED"] = "FETCH_ORDER_SHIPPED";
+    OperationType["FETCH_ORDER_IN_TRANSIT"] = "FETCH_ORDER_IN_TRANSIT";
+    OperationType["FETCH_ORDER_DELIVERED"] = "FETCH_ORDER_DELIVERED";
+    OperationType["FETCH_MISSING_INVOICE_PACKAGES"] = "FETCH_MISSING_INVOICE_PACKAGES";
+    OperationType["FETCH_UNPACKED_PACKAGES"] = "FETCH_UNPACKED_PACKAGES";
+    OperationType["FETCH_UNDELIVERED_PACKAGES"] = "FETCH_UNDELIVERED_PACKAGES";
+    OperationType["ACCEPT_CLAIM"] = "ACCEPT_CLAIM";
+    OperationType["REJECT_CLAIM"] = "REJECT_CLAIM";
+})(OperationType || (exports.OperationType = OperationType = {}));

@@ -10,14 +10,26 @@ export interface BaseApiClientConfig {
     authFailureTracking?: AuthFailureTrackingConfig;
 }
 /**
- * 401/403 auth hatalarinin ardisik olarak sayilmasi icin config (issue #521).
- * userId + integrationId kombinasyonuna gore Redis'te counter tutulur.
+ * 401/403 auth hatalarinin ardisik olarak sayilmasi icin config (issue #521, #566).
+ * userId + integrationId + operationType kombinasyonuna gore Redis'te counter tutulur.
  */
 export interface AuthFailureTrackingConfig {
     userId: string;
     integrationId: string;
     integrationName: string;
     threshold?: number;
+    /**
+     * Akilli pasiflestirme esigi (issue #566): Entegrasyonu pasife cekmek icin
+     * KAC FARKLI operasyon turunun kendi auth esigini asmasi gerektigi.
+     * Tek bir bozuk endpoint (orn. FETCH_INVOICES) tum entegrasyonu durdurmasin diye;
+     * gercek credential-geneli sorunlarda (>=N farkli operasyon basarisiz) pasife cekilir.
+     * Varsayilan: 2
+     *
+     * NOT: SADECE TEK bir operasyon turu calistiran entegrasyonlarda (orn. yalnizca FETCH_ORDERS
+     * yapan bir client) distinct sayisi asla 2'ye ulasmaz; credential tamamen gecersiz olsa bile
+     * pasiflestirme tetiklenmez. Bu tip entegrasyonlar icin bu degeri ACIKCA 1 gecin.
+     */
+    deactivationOperationThreshold?: number;
 }
 export interface ResponseProcessingConfig {
     enableGraphQLProcessing?: boolean;

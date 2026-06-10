@@ -1,3 +1,5 @@
+import { OperationType } from '../../enums/operation-type.enum';
+
 // Local axios type definition for compatibility
 interface AxiosRequestConfig {
   method?: string;
@@ -33,7 +35,7 @@ export interface LogRequestParams {
   requestBody?: any;
   userId?: string;
   integrationName?: string;
-  operationType?: any; // OperationType enum - imported from enums
+  operationType?: OperationType; // İşlem kategorisi (issue #566: any → OperationType)
 }
 
 export interface LogResponseParams {
@@ -58,7 +60,7 @@ export interface RequestConfig extends AxiosRequestConfig {
   skipRateLimit?: boolean;
   skipCircuitBreaker?: boolean;
   logRequest?: boolean;
-  operationType?: any; // OperationType enum - işlem kategorisi
+  operationType?: OperationType; // İşlem kategorisi (issue #566: any → OperationType)
   method?: string;
   url?: string;
   headers?: Record<string, any>;
