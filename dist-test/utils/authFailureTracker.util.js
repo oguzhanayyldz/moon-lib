@@ -56,9 +56,6 @@ class AuthFailureTracker {
         let count = 0;
         try {
             count = await redisWrapper_service_1.redisWrapper.client.incr(key);
-            // TTL'i HER increment'te yenile: INCR ile EXPIRE arasinda servis crash olursa
-            // key'in TTL'siz (kalici) kalmasini ve yanlis-pozitif pasiflestirmeyi onler (#566 guvenlik incelemesi).
-            await redisWrapper_service_1.redisWrapper.client.expire(key, AuthFailureTracker.TTL_SECONDS);
         }
         catch (redisError) {
             logger_service_1.logger.warn('AuthFailureTracker: Redis increment failed, skipping tracking', {
@@ -68,6 +65,21 @@ class AuthFailureTracker {
                 operationType: op
             });
             return 0;
+        }
+        // TTL'i HER increment'te yenile: INCR ile EXPIRE arasinda servis crash olursa
+        // key'in TTL'siz (kalici) kalmasini onler (#566 guvenlik incelemesi).
+        // Ayri try: EXPIRE basarisiz olsa bile gecerli `count` korunur — esik/pasiflestirme
+        // degerlendirmesi atlanmaz (best-effort TTL tazeleme).
+        try {
+            await redisWrapper_service_1.redisWrapper.client.expire(key, AuthFailureTracker.TTL_SECONDS);
+        }
+        catch (expireError) {
+            logger_service_1.logger.warn('AuthFailureTracker: Redis expire (TTL refresh) failed — counter still valid', {
+                error: expireError.message,
+                userId: context.userId,
+                integrationId: context.integrationId,
+                operationType: op
+            });
         }
         const threshold = (_a = context.threshold) !== null && _a !== void 0 ? _a : AuthFailureTracker.DEFAULT_THRESHOLD;
         logger_service_1.logger.warn(`AuthFailureTracker: auth failure recorded for ${context.integrationName} [${op}]`, {

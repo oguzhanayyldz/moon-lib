@@ -195,6 +195,19 @@ describe('AuthFailureTracker (operation-aware #566)', () => {
             expect(OptimisticLockingUtil.saveWithRetry).not.toHaveBeenCalled();
         });
 
+        it('preserves a valid count and still evaluates when only TTL refresh (expire) fails', async () => {
+            const ctx = { ...baseContext, deactivationOperationThreshold: 1 };
+            store[AuthFailureTracker.getKey(userId, integrationId, OperationType.FETCH_ORDERS)] = '4';
+            mockClient.expire.mockRejectedValueOnce(new Error('Redis EXPIRE failed'));
+
+            // incr -> 5 (gecerli), expire patlar; count atilmamali, eval devam etmeli
+            const count = await AuthFailureTracker.increment(ctx, 401, 'unauthorized', OperationType.FETCH_ORDERS);
+
+            expect(count).toBe(5);
+            expect(mockClient.sAdd).toHaveBeenCalled(); // evaluateDeactivation calisti
+            expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalled(); // threshold=1 -> publish
+        });
+
         it('keeps integration active when failed-ops SET read fails (safe default)', async () => {
             // Counter esigi asacak ama SET guncellemesi patlayacak → publish YOK
             store[AuthFailureTracker.getKey(userId, integrationId, OperationType.FETCH_ORDERS)] = '4';

@@ -23,7 +23,10 @@ class TestApiClient extends BaseApiClient {
 function makeClient(httpRequest: jest.Mock, authTracking = false): TestApiClient {
     const config: any = {
         rateLimiter: { points: 1000, duration: 1 },
-        queue: { concurrency: 5, intervalCap: 1000, interval: 1000 },
+        // interval: 0 -> p-queue intervalCap'i yok sayar ve interval timer'i OLUSTURMAZ
+        // (test sonrasi "worker failed to exit gracefully" timer sizintisini onler).
+        // intervalCap p-queue tarafindan >=1 zorunlu kilindigi icin gecerli birakilir.
+        queue: { concurrency: 5, intervalCap: 1000, interval: 0 },
         circuitBreaker: {
             failureThreshold: 2,
             resetTimeout: 60000,
