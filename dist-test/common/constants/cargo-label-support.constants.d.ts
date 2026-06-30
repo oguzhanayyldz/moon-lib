@@ -29,6 +29,22 @@ export declare function hasHepsiburadaLabelSupport(cargoCompanyName: string | un
  * @returns true: Mağaza Hesabı, false: Normal kargo
  */
 export declare function isHepsiburadaStoreAccount(cargoCompanyId: number | string | undefined | null): boolean;
+/** Idefix ortak barkod destekleyen kargo firmaları (HB ile aynı varsayım) */
+export declare const IDEFIX_SUPPORTED_CARGOS: string[];
+/** Idefix Mağaza Hesabı (kendi kargo) - Platform etiketi kullanılamaz (HB ile aynı varsayım, Faz 4'te doğrula) */
+export declare const IDEFIX_STORE_ACCOUNT_ID = 89100;
+/**
+ * Idefix kargo firmasının ortak barkod desteği var mı kontrol eder
+ * @param cargoCompanyName - Kargo firması adı
+ * @returns true: Destekliyor, false: Desteklemiyor
+ */
+export declare function hasIdefixLabelSupport(cargoCompanyName: string | undefined | null): boolean;
+/**
+ * Idefix siparişinin Mağaza Hesabı (kendi kargo) olup olmadığını kontrol eder
+ * @param cargoCompanyId - Kargo firma ID'si
+ * @returns true: Mağaza Hesabı, false: Normal kargo
+ */
+export declare function isIdefixStoreAccount(cargoCompanyId: number | string | undefined | null): boolean;
 /** Trendyol ortak etiket destekleyen kargo firmaları */
 export declare const TRENDYOL_SUPPORTED_CARGOS: string[];
 /**
@@ -59,6 +75,10 @@ export declare const CARGO_NO_LABEL_MESSAGES: {
     hepsiburada_no_support: string;
     /** Hepsiburada - Mağaza Hesabı siparişi */
     hepsiburada_store_account: string;
+    /** Idefix - Desteklenmeyen kargo firması */
+    idefix_no_support: string;
+    /** Idefix - Mağaza Hesabı siparişi */
+    idefix_store_account: string;
     /** Trendyol - Desteklenmeyen kargo firması */
     trendyol_no_support: string;
     /** Çiçeksepeti - Desteklenmeyen kargo firması */

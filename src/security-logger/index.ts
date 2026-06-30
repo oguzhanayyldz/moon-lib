@@ -20,6 +20,7 @@ export {
     shopifySecurityLogger,
     trendyolSecurityLogger,
     hepsiburadaSecurityLogger,
+    idefixSecurityLogger,
     ikasSecurityLogger,
     tsoftSecurityLogger,
     ciceksepetiSecurityLogger,

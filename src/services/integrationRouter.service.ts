@@ -27,6 +27,7 @@ export class IntegrationRouter {
         [ResourceName.WooCommerce]: IntegrationType.Ecommerce,
         [ResourceName.Trendyol]: IntegrationType.MarketPlace,
         [ResourceName.Hepsiburada]: IntegrationType.MarketPlace,
+        [ResourceName.Idefix]: IntegrationType.MarketPlace,
         [ResourceName.Amazon]: IntegrationType.MarketPlace,
         [ResourceName.N11]: IntegrationType.MarketPlace,
         [ResourceName.CicekSepeti]: IntegrationType.MarketPlace,

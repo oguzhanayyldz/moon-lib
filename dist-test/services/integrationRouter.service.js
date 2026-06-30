@@ -65,6 +65,7 @@ IntegrationRouter.PLATFORM_TYPE_MAP = {
     [resourceName_1.ResourceName.WooCommerce]: integration_type_1.IntegrationType.Ecommerce,
     [resourceName_1.ResourceName.Trendyol]: integration_type_1.IntegrationType.MarketPlace,
     [resourceName_1.ResourceName.Hepsiburada]: integration_type_1.IntegrationType.MarketPlace,
+    [resourceName_1.ResourceName.Idefix]: integration_type_1.IntegrationType.MarketPlace,
     [resourceName_1.ResourceName.Amazon]: integration_type_1.IntegrationType.MarketPlace,
     [resourceName_1.ResourceName.N11]: integration_type_1.IntegrationType.MarketPlace,
     [resourceName_1.ResourceName.CicekSepeti]: integration_type_1.IntegrationType.MarketPlace,
