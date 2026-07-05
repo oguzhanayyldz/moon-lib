@@ -6,6 +6,7 @@ var ResourceName;
     ResourceName["Main"] = "Main";
     ResourceName["Trendyol"] = "Trendyol";
     ResourceName["Hepsiburada"] = "Hepsiburada";
+    ResourceName["Idefix"] = "Idefix";
     ResourceName["N11"] = "N11";
     ResourceName["CicekSepeti"] = "CicekSepeti";
     ResourceName["Amazon"] = "Amazon";

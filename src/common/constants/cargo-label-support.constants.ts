@@ -44,6 +44,38 @@ export function isHepsiburadaStoreAccount(cargoCompanyId: number | string | unde
     return numericId === HEPSIBURADA_STORE_ACCOUNT_ID;
 }
 
+// ===== IDEFIX KARGO DESTEĞİ =====
+// NOT: Idefix, Hepsiburada altyapısında çalışır; kargo modeli HB ile aynı kabul edilir.
+// Mağaza Hesabı ID ve desteklenen kargo listesi Faz 4'te Idefix kargo dokümanıyla doğrulanmalı.
+
+/** Idefix ortak barkod destekleyen kargo firmaları (HB ile aynı varsayım) */
+export const IDEFIX_SUPPORTED_CARGOS = ['HepsiJet', 'hepsijet', 'Aras', 'aras', 'ARAS'];
+
+/** Idefix Mağaza Hesabı (kendi kargo) - Platform etiketi kullanılamaz (HB ile aynı varsayım, Faz 4'te doğrula) */
+export const IDEFIX_STORE_ACCOUNT_ID = 89100;
+
+/**
+ * Idefix kargo firmasının ortak barkod desteği var mı kontrol eder
+ * @param cargoCompanyName - Kargo firması adı
+ * @returns true: Destekliyor, false: Desteklemiyor
+ */
+export function hasIdefixLabelSupport(cargoCompanyName: string | undefined | null): boolean {
+    if (!cargoCompanyName) return false; // Bilinmiyorsa desteklemiyor kabul et
+    const lowerName = cargoCompanyName.toLowerCase();
+    return lowerName.includes('hepsijet') || lowerName.includes('aras');
+}
+
+/**
+ * Idefix siparişinin Mağaza Hesabı (kendi kargo) olup olmadığını kontrol eder
+ * @param cargoCompanyId - Kargo firma ID'si
+ * @returns true: Mağaza Hesabı, false: Normal kargo
+ */
+export function isIdefixStoreAccount(cargoCompanyId: number | string | undefined | null): boolean {
+    if (!cargoCompanyId) return false;
+    const numericId = typeof cargoCompanyId === 'string' ? parseInt(cargoCompanyId, 10) : cargoCompanyId;
+    return numericId === IDEFIX_STORE_ACCOUNT_ID;
+}
+
 // ===== TRENDYOL KARGO DESTEĞİ =====
 
 /** Trendyol ortak etiket destekleyen kargo firmaları */
@@ -95,6 +127,12 @@ export const CARGO_NO_LABEL_MESSAGES = {
     /** Hepsiburada - Mağaza Hesabı siparişi */
     hepsiburada_store_account: 'Mağaza Hesabı siparişlerinde platform etiketi kullanılamaz.',
 
+    /** Idefix - Desteklenmeyen kargo firması */
+    idefix_no_support: 'Bu kargo firması ortak barkod desteklemiyor. Sadece HepsiJet ve Aras destekliyor.',
+
+    /** Idefix - Mağaza Hesabı siparişi */
+    idefix_store_account: 'Mağaza Hesabı siparişlerinde platform etiketi kullanılamaz.',
+
     /** Trendyol - Desteklenmeyen kargo firması */
     trendyol_no_support: 'Bu kargo firması ortak etiket desteklemiyor. Sadece TEX ve Aras (trendyol öder) destekliyor.',
 
@@ -116,6 +154,11 @@ export function getCargoNoLabelMessage(platform: string, isStoreAccount: boolean
         return isStoreAccount
             ? CARGO_NO_LABEL_MESSAGES.hepsiburada_store_account
             : CARGO_NO_LABEL_MESSAGES.hepsiburada_no_support;
+    }
+    if (platform.toLowerCase().includes('idefix')) {
+        return isStoreAccount
+            ? CARGO_NO_LABEL_MESSAGES.idefix_store_account
+            : CARGO_NO_LABEL_MESSAGES.idefix_no_support;
     }
     if (platform.toLowerCase().includes('trendyol')) {
         return CARGO_NO_LABEL_MESSAGES.trendyol_no_support;

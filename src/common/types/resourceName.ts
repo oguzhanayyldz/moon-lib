@@ -2,6 +2,7 @@ export enum ResourceName {
     Main= "Main",
     Trendyol = "Trendyol",
     Hepsiburada = "Hepsiburada",
+    Idefix = "Idefix",
     N11 = "N11",
     CicekSepeti = "CicekSepeti",
     Amazon = "Amazon",

@@ -352,6 +352,7 @@ export const cdnSecurityLogger = new SecurityLogger('cdn');
 export const shopifySecurityLogger = new SecurityLogger('shopify');
 export const trendyolSecurityLogger = new SecurityLogger('trendyol');
 export const hepsiburadaSecurityLogger = new SecurityLogger('hepsiburada');
+export const idefixSecurityLogger = new SecurityLogger('idefix');
 export const ikasSecurityLogger = new SecurityLogger('ikas');
 export const tsoftSecurityLogger = new SecurityLogger('tsoft');
 export const ciceksepetiSecurityLogger = new SecurityLogger('ciceksepeti');

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.woocommerceSecurityLogger = exports.ciceksepetiSecurityLogger = exports.tsoftSecurityLogger = exports.ikasSecurityLogger = exports.hepsiburadaSecurityLogger = exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.cdnSecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.SecurityLogger = void 0;
+exports.woocommerceSecurityLogger = exports.ciceksepetiSecurityLogger = exports.tsoftSecurityLogger = exports.ikasSecurityLogger = exports.idefixSecurityLogger = exports.hepsiburadaSecurityLogger = exports.trendyolSecurityLogger = exports.shopifySecurityLogger = exports.cdnSecurityLogger = exports.integrationSecurityLogger = exports.pricingSecurityLogger = exports.productsSecurityLogger = exports.inventorySecurityLogger = exports.ordersSecurityLogger = exports.catalogSecurityLogger = exports.authSecurityLogger = exports.SecurityLogger = void 0;
 exports.createSecurityLogger = createSecurityLogger;
 const SecurityEventTypes_1 = require("./SecurityEventTypes");
 /**
@@ -209,6 +209,7 @@ exports.cdnSecurityLogger = new SecurityLogger('cdn');
 exports.shopifySecurityLogger = new SecurityLogger('shopify');
 exports.trendyolSecurityLogger = new SecurityLogger('trendyol');
 exports.hepsiburadaSecurityLogger = new SecurityLogger('hepsiburada');
+exports.idefixSecurityLogger = new SecurityLogger('idefix');
 exports.ikasSecurityLogger = new SecurityLogger('ikas');
 exports.tsoftSecurityLogger = new SecurityLogger('tsoft');
 exports.ciceksepetiSecurityLogger = new SecurityLogger('ciceksepeti');
