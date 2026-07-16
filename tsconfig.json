@@ -10,9 +10,8 @@
 		"strict": true,
 		"skipLibCheck": true,
 		"moduleResolution": "node",
-		"baseUrl": ".",
 		"paths": {
-			"*": ["src/*"]
+			"*": ["./src/*"]
 		},
 		"composite": true,
 		"ignoreDeprecations": "5.0"

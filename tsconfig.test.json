@@ -12,9 +12,8 @@
     "strict": true,
     "skipLibCheck": true,
     "moduleResolution": "node",
-    "baseUrl": ".",
     "paths": {
-      "*": ["src/*"]
+      "*": ["./src/*"]
     }
   },
   "include": [
