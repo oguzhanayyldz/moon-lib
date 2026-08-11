@@ -128,6 +128,7 @@ __exportStar(require("./events/publishers/deleteProductImagesPublisher.publisher
 __exportStar(require("./events/publishers/importImagesFromUrlsCompletedPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/importImagesFromUrlsPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/notificationCreated.publisher"), exports);
+__exportStar(require("./events/publishers/newsletterEmailRequested.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceIntegrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockIntegrationUpdated.publisher"), exports);

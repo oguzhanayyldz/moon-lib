@@ -68,7 +68,8 @@ import {
     SubscriptionPaymentFailedEvent,
     PriceProcessingCompletedEvent,
     IntegrationAuthFailureExceededEvent,
-    StockUpdateConfirmedEvent
+    StockUpdateConfirmedEvent,
+    NewsletterEmailRequestedEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -138,6 +139,7 @@ interface EventPayloadMap {
     [Subjects.PriceProcessingCompleted]: PriceProcessingCompletedEvent['data'];
     [Subjects.IntegrationAuthFailureExceeded]: IntegrationAuthFailureExceededEvent['data'];
     [Subjects.StockUpdateConfirmed]: StockUpdateConfirmedEvent['data'];
+    [Subjects.NewsletterEmailRequested]: NewsletterEmailRequestedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {

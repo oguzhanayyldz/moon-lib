@@ -72,11 +72,24 @@ var Subjects;
     // Subscription Events
     Subjects["SubscriptionUpdated"] = "subscription:updated";
     Subjects["SubscriptionPaymentCompleted"] = "subscription:payment:completed";
-    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
+    /**
+     * RESERVED — bilinçli olarak tutuluyor, SİLME! (bkz. issue #586 kapanış notu)
+     * Şu an producer/listener yok; gelecekteki abonelik ödeme akışı için rezerve.
+     * Mevcut davranış: SubscriptionService.publishPaymentFailed sadece bildirim atar.
+     */
     Subjects["SubscriptionPaymentFailed"] = "subscription:payment:failed";
-    /** @deprecated Listener yok — publish ediliyor ama kimse dinlemiyor */
+    /**
+     * RESERVED — bilinçli olarak tutuluyor, SİLME! (bkz. issue #586 kapanış notu)
+     * Şu an producer/listener yok; gelecekteki abonelik faturalandırma akışının
+     * downstream tüketicileri (muhasebe, raporlama) için rezerve.
+     */
     Subjects["SubscriptionInvoiceCreated"] = "subscription:invoice:created";
     // Stock Update Confirmation (issue #567)
     // Entegrasyon → catalog: stok platforma GERÇEKTEN yazıldı teyidi (async batch/sync sonucu)
     Subjects["StockUpdateConfirmed"] = "stock:update:confirmed";
+    // Newsletter (issue #611)
+    // auth → notification: bulten abonesine tek bir mail gonderilecek.
+    // NotificationCreated YENIDEN KULLANILMADI: onun payload'i userId zorunlu kilar ve
+    // listener bunu dedupe key'i olarak kullanir; bulten abonesi User DEGILDIR.
+    Subjects["NewsletterEmailRequested"] = "newsletter:email:requested";
 })(Subjects || (exports.Subjects = Subjects = {}));
