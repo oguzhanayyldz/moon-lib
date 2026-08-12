@@ -36,7 +36,8 @@ export declare enum EntityType {
     PaymentMethod = "payment-method",
     UserConfig = "user-config",
     Coupon = "coupon",
-    CouponRedemption = "coupon-redemption"
+    CouponRedemption = "coupon-redemption",
+    NewsletterSubscriber = "newsletter-subscriber"
 }
 /**
  * Service Names

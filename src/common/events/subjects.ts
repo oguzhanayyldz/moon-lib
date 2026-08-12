@@ -88,4 +88,10 @@ export enum Subjects {
     // Stock Update Confirmation (issue #567)
     // Entegrasyon → catalog: stok platforma GERÇEKTEN yazıldı teyidi (async batch/sync sonucu)
     StockUpdateConfirmed = "stock:update:confirmed",
+
+    // Newsletter (issue #611)
+    // auth → notification: bulten abonesine tek bir mail gonderilecek.
+    // NotificationCreated YENIDEN KULLANILMADI: onun payload'i userId zorunlu kilar ve
+    // listener bunu dedupe key'i olarak kullanir; bulten abonesi User DEGILDIR.
+    NewsletterEmailRequested = "newsletter:email:requested",
 }

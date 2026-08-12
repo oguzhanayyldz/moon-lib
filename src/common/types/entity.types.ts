@@ -39,6 +39,8 @@ export enum EntityType {
   UserConfig = 'user-config',
   Coupon = 'coupon',
   CouponRedemption = 'coupon-redemption',
+  // Auth Service Entities (issue #611)
+  NewsletterSubscriber = 'newsletter-subscriber',
 }
 
 /**

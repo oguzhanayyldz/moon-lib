@@ -43,6 +43,8 @@ var EntityType;
     EntityType["UserConfig"] = "user-config";
     EntityType["Coupon"] = "coupon";
     EntityType["CouponRedemption"] = "coupon-redemption";
+    // Auth Service Entities (issue #611)
+    EntityType["NewsletterSubscriber"] = "newsletter-subscriber";
 })(EntityType || (exports.EntityType = EntityType = {}));
 /**
  * Service Names

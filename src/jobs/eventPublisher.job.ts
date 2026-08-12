@@ -38,6 +38,7 @@ import { UserIntegrationSettingsPublisher } from '../events/publishers/userInteg
 import { OrderIntegrationStatusUpdatedPublisher } from '../events/publishers/orderIntegrationStatusUpdated.publisher';
 import { ProductMatchedPublisher } from '../events/publishers/productMatched.publisher';
 import { NotificationCreatedPublisher } from '../events/publishers/notificationCreated.publisher';
+import { NewsletterEmailRequestedPublisher } from '../events/publishers/newsletterEmailRequested.publisher';
 import { OrderProductStockUpdatedPublisher } from '../events/publishers/orderProductUpdated.publisher';
 import { EntityVersionUpdatedPublisher } from '../events/publishers/entityVersionUpdated.publisher';
 import { EntityVersionBulkUpdatedPublisher } from '../events/publishers/entityVersionBulkUpdated.publisher';
@@ -629,6 +630,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.NotificationCreated:
                 await new NotificationCreatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.NewsletterEmailRequested:
+                await new NewsletterEmailRequestedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case Subjects.OrderProductUpdated:

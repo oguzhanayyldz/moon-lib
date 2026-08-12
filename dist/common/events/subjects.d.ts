@@ -72,5 +72,6 @@ export declare enum Subjects {
      * downstream tüketicileri (muhasebe, raporlama) için rezerve.
      */
     SubscriptionInvoiceCreated = "subscription:invoice:created",
-    StockUpdateConfirmed = "stock:update:confirmed"
+    StockUpdateConfirmed = "stock:update:confirmed",
+    NewsletterEmailRequested = "newsletter:email:requested"
 }
