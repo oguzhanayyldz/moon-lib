@@ -1,6 +1,38 @@
 import { ObjectId } from 'bson';
 import { ValidatorFuncParams } from "../interfaces/validator-func-params.interface";
 
+/**
+ * `optional` ayarinin v7-UYUMLU bicimleri (issue #625)
+ *
+ * ⚠️ NEDEN: express-validator v7 sema API'si `optional`i
+ * `boolean | { options?: OptionalOptions }` olarak bekliyor
+ * (`express-validator/src/middlewares/schema.d.ts`). Bu dosya 17/08/2026'ya kadar
+ * eski `{ nullable, checkFalsy }` bicimini uretiyordu — `options` SARMALAYICISI
+ * olmadigi icin ayar sessizce yok sayiliyor ve alan varsayilana dusuyordu:
+ * "yalnizca `undefined` opsiyoneldir". Sonuc: alan hic gonderilmezse geciyor ama
+ * BOS STRING 400 aliyordu. Ayni hata uc issue'da (#609, #619, #613) servis
+ * seviyesinde yerel sabitlerle yamalandi; burada kokten cozuluyor.
+ * Eski iki anahtar v7 tip tanimda `@deprecated` — yerine `values` kullaniliyor
+ * (`express-validator/src/chain/context-handler.d.ts:16`).
+ *
+ * 🔴 TIP-DUYARLI OLMAK ZORUNDA — tek bir deger TUM tipler icin dogru degil:
+ * `values: 'falsy'` TUM falsy degerleri "gonderilmedi" sayar; buna sayisal `0` ve
+ * mantiksal `false` de dahildir. Metin alanlarinda istenen davranis budur (client bos
+ * formu `''` gonderir) ama sayisal/mantiksal alanlarda YENI HATA dogurur:
+ *   - `{ limit: "" }` → dogrulama atlanir, route `parseInt("")` = NaN alir
+ *     (oncesinde 400 donuyordu)
+ *   - `{ isActive: false }` → tip kontrolu hic calismaz
+ * Bu yuzden sayisal/mantiksal/yapisal tipler `values: 'null'` kullanir: yalnizca
+ * `null` ve `undefined` "gonderilmedi" sayilir; `0` / `false` / `""` dogrulanir.
+ */
+
+/** Metin tipleri: bos string de "gonderilmedi" sayilir. */
+const OPTIONAL_TEXT = { options: { values: 'falsy' as const } };
+
+/** Sayisal / mantiksal / yapisal tipler: yalnizca null ve undefined "gonderilmedi" sayilir. */
+const OPTIONAL_NULLISH = { options: { values: 'null' as const } };
+
+
 export const isObjectValidator = (value: string, params?: ValidatorFuncParams): any => {
     let obj: any = {
         isObject: {
@@ -15,7 +47,7 @@ export const isObjectValidator = (value: string, params?: ValidatorFuncParams): 
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_NULLISH;
         }
         if (params.notEmptyClose) {
             delete obj.notEmpty;
@@ -42,7 +74,7 @@ export const isStringValidator = (value: string, params?: ValidatorFuncParams): 
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_TEXT;
         }
         if (params.notEmptyClose) {
             delete obj.notEmpty;
@@ -93,7 +125,7 @@ export const isInBodyValidator = (value: string, inArray: string[], params?: Val
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_TEXT;
         }
         if (params.in) {
             obj.in = params.in;
@@ -114,7 +146,7 @@ export const isEmailValidator = (value: string, params?: ValidatorFuncParams): a
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_TEXT;
         }
         if (params.in) {
             obj.in = params.in;
@@ -139,7 +171,7 @@ export const isDateValidator = (value: string, params?: ValidatorFuncParams): an
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_TEXT;
         }
         if (params.notEmptyClose) {
             delete obj.notEmpty;
@@ -166,7 +198,7 @@ export const isFloatValidator = (value: string, params?: ValidatorFuncParams): a
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_NULLISH;
         }
         if (params.notEmptyClose) {
             delete obj.notEmpty;
@@ -219,7 +251,7 @@ export const isNumberValidator = (value: string, params?: ValidatorFuncParams): 
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_NULLISH;
         }
         if (params.notEmptyClose) {
             delete obj.notEmpty;
@@ -280,7 +312,7 @@ export const isArrayValidator = (attr: string, params?: ValidatorFuncParams): an
         if (params.isOptional) {
             delete obj.errorMessage;
             delete obj.custom;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_NULLISH;
         }
         if (params.notEmptyClose) {
             delete obj.notEmpty;
@@ -324,7 +356,7 @@ export const isBooleanValidator = (value: string, params?: ValidatorFuncParams):
     if (params) {
         if (params.isOptional) {
             delete obj.errorMessage;
-            obj.optional = { nullable: true, checkFalsy: true };
+            obj.optional = OPTIONAL_NULLISH;
         }
         if (params.notEmptyClose) {
             delete obj.notEmpty;
