@@ -59,6 +59,13 @@ import { AuthFailureTracker } from '../utils/authFailureTracker.util';
 export abstract class BaseApiClient implements IApiClient {
   protected httpClient!: any;
   protected rateLimiter!: RateLimiterMemory;
+  /**
+   * Issue #604: Servis-grubu farkindalikli rate limiting. Grup tanimlanmis entegrasyonlarda
+   * (orn. Trendyol'un 14 Eylul 2026 limitleri) her grup kendi bagimsiz sayacini tutar.
+   * Bos ise tum istekler ortak `rateLimiter`'i kullanir — grup tanimlanmamis entegrasyonlarin
+   * davranisi degismez.
+   */
+  protected rateLimiterGroups: Map<string, RateLimiterMemory> = new Map();
   protected queue!: any;
   /**
    * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
@@ -546,17 +553,55 @@ export abstract class BaseApiClient implements IApiClient {
     throw lastError!;
   }
 
+  /**
+   * Issue #604: Bir istegin hangi servis-grubu limitine dahil oldugunu belirler.
+   *
+   * Varsayilan davranis: grup yok — tum istekler ortak limiter'i kullanir.
+   * Servis-grubu limiti uygulayan entegrasyonlar (orn. Trendyol) bu metodu override edip
+   * operationType'i `rateLimiter.groups` icindeki bir grup adina esler.
+   *
+   * @param operationType Istegin operasyon turu
+   * @returns Grup adi; undefined donerse ortak limiter kullanilir
+   */
+  protected resolveRateLimitGroup(_operationType: OperationType | string): string | undefined {
+    return undefined;
+  }
+
+  /**
+   * Istegin tabi oldugu limiter'i dondurur (issue #604).
+   * Cozumlenen grup tanimli degilse ortak limiter'a duser.
+   */
+  private getRateLimiter(operationType: OperationType | string): { limiter: RateLimiterMemory; group?: string } {
+    const group = this.resolveRateLimitGroup(operationType);
+    if (group) {
+      const groupLimiter = this.rateLimiterGroups.get(group);
+      if (groupLimiter) {
+        return { limiter: groupLimiter, group };
+      }
+      logger.warn('Resolved rate limit group is not configured, falling back to shared limiter', {
+        group,
+        operationType: String(operationType),
+        integrationName: this.integrationName
+      });
+    }
+    return { limiter: this.rateLimiter };
+  }
+
   private async checkRateLimit(requestConfig: RequestConfig): Promise<void> {
+    const operationType = requestConfig.operationType ?? OperationType.OTHER;
+    const { limiter, group } = this.getRateLimiter(operationType);
+
     try {
       const userId = this.config.userId || 'default';
-      await this.rateLimiter.consume(userId, 1);
+      await limiter.consume(userId, 1);
     } catch (rateLimiterResponse: any) {
       const msBeforeNext = rateLimiterResponse.msBeforeNext || 5000;
 
       logger.warn('Rate limit exceeded, waiting before retry', {
         userId: this.config.userId,
         waitTime: msBeforeNext,
-        url: requestConfig.url
+        url: requestConfig.url,
+        rateLimitGroup: group
       });
 
       await this.sleep(msBeforeNext);
@@ -564,11 +609,12 @@ export abstract class BaseApiClient implements IApiClient {
       // Bekledikten sonra tekrar consume et (pencere açılmış olmalı)
       try {
         const userId = this.config.userId || 'default';
-        await this.rateLimiter.consume(userId, 1);
+        await limiter.consume(userId, 1);
       } catch {
         // Hala limit aşılıyorsa, isteği yine de gönder — Trendyol tarafı 429 dönerse retry mekanizması devreye girer
         logger.warn('Rate limit still exceeded after wait, proceeding anyway', {
-          url: requestConfig.url
+          url: requestConfig.url,
+          rateLimitGroup: group
         });
       }
     }
@@ -707,6 +753,24 @@ export abstract class BaseApiClient implements IApiClient {
       duration: config.duration,
       blockDuration: config.blockDuration || config.duration
     });
+
+    // Issue #604: Servis-grubu limitleri tanimliysa her grup icin ayri sayac kur.
+    // Gruplar config'de bilindigi icin eager olusturulur (lazy'ye gerek yok).
+    this.rateLimiterGroups.clear();
+    for (const [groupName, groupConfig] of Object.entries(config.groups || {})) {
+      this.rateLimiterGroups.set(groupName, new RateLimiterMemory({
+        points: groupConfig.points,
+        duration: groupConfig.duration,
+        blockDuration: groupConfig.blockDuration || groupConfig.duration
+      }));
+    }
+
+    if (this.rateLimiterGroups.size > 0) {
+      logger.debug('Rate limiter groups configured', {
+        groups: Array.from(this.rateLimiterGroups.keys()),
+        integrationName: this.integrationName
+      });
+    }
   }
 
   private setupQueue(config: QueueConfig): void {

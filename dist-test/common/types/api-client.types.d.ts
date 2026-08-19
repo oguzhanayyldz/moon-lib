@@ -46,6 +46,30 @@ export interface ApiRateLimitConfig {
     points: number;
     duration: number;
     blockDuration?: number;
+    /**
+     * Servis-grubu bazli limitler (issue #604).
+     *
+     * Bazi pazaryerleri limitleri tekil endpoint yerine servis GRUBU bazinda uygular:
+     * ayni gruptaki tum endpoint'ler ortak kotayi tuketir. Ornek (Trendyol, 14 Eylul 2026):
+     * "Product Integration Write" grubu 200 req/min ise; urun aktarma + guncelleme + silme
+     * ayni dakika icinde TOPLAM 200 istek yapabilir.
+     *
+     * Anahtar = grup adi, deger = o grubun limiti. Verilmezse tum istekler tek ortak
+     * limiter'i (points/duration) kullanir — mevcut davranis korunur.
+     *
+     * Bir istegin hangi gruba dustugunu alt sinif `resolveRateLimitGroup()` metodunu
+     * override ederek belirler; cozumlenen grup burada tanimli degilse ortak limiter kullanilir.
+     */
+    groups?: Record<string, ApiRateLimitGroupConfig>;
+}
+/**
+ * Tek bir servis grubunun rate limit tanimi (issue #604).
+ * Her grup kendi bagimsiz sayacini tutar.
+ */
+export interface ApiRateLimitGroupConfig {
+    points: number;
+    duration: number;
+    blockDuration?: number;
 }
 export interface QueueConfig {
     concurrency: number;
