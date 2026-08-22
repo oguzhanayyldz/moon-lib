@@ -19,6 +19,13 @@ import { OperationType } from '../enums/operation-type.enum';
 export declare abstract class BaseApiClient implements IApiClient {
     protected httpClient: any;
     protected rateLimiter: RateLimiterMemory;
+    /**
+     * Issue #604: Servis-grubu farkindalikli rate limiting. Grup tanimlanmis entegrasyonlarda
+     * (orn. Trendyol'un 14 Eylul 2026 limitleri) her grup kendi bagimsiz sayacini tutar.
+     * Bos ise tum istekler ortak `rateLimiter`'i kullanir — grup tanimlanmamis entegrasyonlarin
+     * davranisi degismez.
+     */
+    protected rateLimiterGroups: Map<string, RateLimiterMemory>;
     protected queue: any;
     /**
      * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
@@ -53,6 +60,22 @@ export declare abstract class BaseApiClient implements IApiClient {
     protected getGraphQLEndpoint?(): string;
     protected makeRequest<T>(requestConfig: RequestConfig): Promise<T>;
     private executeRequest;
+    /**
+     * Issue #604: Bir istegin hangi servis-grubu limitine dahil oldugunu belirler.
+     *
+     * Varsayilan davranis: grup yok — tum istekler ortak limiter'i kullanir.
+     * Servis-grubu limiti uygulayan entegrasyonlar (orn. Trendyol) bu metodu override edip
+     * operationType'i `rateLimiter.groups` icindeki bir grup adina esler.
+     *
+     * @param operationType Istegin operasyon turu
+     * @returns Grup adi; undefined donerse ortak limiter kullanilir
+     */
+    protected resolveRateLimitGroup(_operationType: OperationType | string): string | undefined;
+    /**
+     * Istegin tabi oldugu limiter'i dondurur (issue #604).
+     * Cozumlenen grup tanimli degilse ortak limiter'a duser.
+     */
+    private getRateLimiter;
     private checkRateLimit;
     private calculateRetryDelay;
     private logRequest;

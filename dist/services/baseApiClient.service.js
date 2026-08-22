@@ -26,6 +26,13 @@ const authFailureTracker_util_1 = require("../utils/authFailureTracker.util");
 class BaseApiClient {
     constructor(config, serviceName, integrationName, tracer, logService) {
         /**
+         * Issue #604: Servis-grubu farkindalikli rate limiting. Grup tanimlanmis entegrasyonlarda
+         * (orn. Trendyol'un 14 Eylul 2026 limitleri) her grup kendi bagimsiz sayacini tutar.
+         * Bos ise tum istekler ortak `rateLimiter`'i kullanir — grup tanimlanmamis entegrasyonlarin
+         * davranisi degismez.
+         */
+        this.rateLimiterGroups = new Map();
+        /**
          * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
          * her operasyon turu (operationType) icin ayri breaker. Bir operasyon ust uste hata
          * verirse SADECE o operasyonun devresi acilir; diger operasyonlar etkilenmez.
@@ -426,29 +433,66 @@ class BaseApiClient {
             throw lastError;
         });
     }
+    /**
+     * Issue #604: Bir istegin hangi servis-grubu limitine dahil oldugunu belirler.
+     *
+     * Varsayilan davranis: grup yok — tum istekler ortak limiter'i kullanir.
+     * Servis-grubu limiti uygulayan entegrasyonlar (orn. Trendyol) bu metodu override edip
+     * operationType'i `rateLimiter.groups` icindeki bir grup adina esler.
+     *
+     * @param operationType Istegin operasyon turu
+     * @returns Grup adi; undefined donerse ortak limiter kullanilir
+     */
+    resolveRateLimitGroup(_operationType) {
+        return undefined;
+    }
+    /**
+     * Istegin tabi oldugu limiter'i dondurur (issue #604).
+     * Cozumlenen grup tanimli degilse ortak limiter'a duser.
+     */
+    getRateLimiter(operationType) {
+        const group = this.resolveRateLimitGroup(operationType);
+        if (group) {
+            const groupLimiter = this.rateLimiterGroups.get(group);
+            if (groupLimiter) {
+                return { limiter: groupLimiter, group };
+            }
+            logger_service_1.logger.warn('Resolved rate limit group is not configured, falling back to shared limiter', {
+                group,
+                operationType: String(operationType),
+                integrationName: this.integrationName
+            });
+        }
+        return { limiter: this.rateLimiter };
+    }
     checkRateLimit(requestConfig) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const operationType = (_a = requestConfig.operationType) !== null && _a !== void 0 ? _a : operation_type_enum_1.OperationType.OTHER;
+            const { limiter, group } = this.getRateLimiter(operationType);
             try {
                 const userId = this.config.userId || 'default';
-                yield this.rateLimiter.consume(userId, 1);
+                yield limiter.consume(userId, 1);
             }
             catch (rateLimiterResponse) {
                 const msBeforeNext = rateLimiterResponse.msBeforeNext || 5000;
                 logger_service_1.logger.warn('Rate limit exceeded, waiting before retry', {
                     userId: this.config.userId,
                     waitTime: msBeforeNext,
-                    url: requestConfig.url
+                    url: requestConfig.url,
+                    rateLimitGroup: group
                 });
                 yield this.sleep(msBeforeNext);
                 // Bekledikten sonra tekrar consume et (pencere açılmış olmalı)
                 try {
                     const userId = this.config.userId || 'default';
-                    yield this.rateLimiter.consume(userId, 1);
+                    yield limiter.consume(userId, 1);
                 }
-                catch (_a) {
+                catch (_b) {
                     // Hala limit aşılıyorsa, isteği yine de gönder — Trendyol tarafı 429 dönerse retry mekanizması devreye girer
                     logger_service_1.logger.warn('Rate limit still exceeded after wait, proceeding anyway', {
-                        url: requestConfig.url
+                        url: requestConfig.url,
+                        rateLimitGroup: group
                     });
                 }
             }
@@ -573,6 +617,22 @@ class BaseApiClient {
             duration: config.duration,
             blockDuration: config.blockDuration || config.duration
         });
+        // Issue #604: Servis-grubu limitleri tanimliysa her grup icin ayri sayac kur.
+        // Gruplar config'de bilindigi icin eager olusturulur (lazy'ye gerek yok).
+        this.rateLimiterGroups.clear();
+        for (const [groupName, groupConfig] of Object.entries(config.groups || {})) {
+            this.rateLimiterGroups.set(groupName, new rate_limiter_flexible_1.RateLimiterMemory({
+                points: groupConfig.points,
+                duration: groupConfig.duration,
+                blockDuration: groupConfig.blockDuration || groupConfig.duration
+            }));
+        }
+        if (this.rateLimiterGroups.size > 0) {
+            logger_service_1.logger.debug('Rate limiter groups configured', {
+                groups: Array.from(this.rateLimiterGroups.keys()),
+                integrationName: this.integrationName
+            });
+        }
     }
     setupQueue(config) {
         this.queue = new PQueue({
