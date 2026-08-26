@@ -69,7 +69,9 @@ import {
     PriceProcessingCompletedEvent,
     IntegrationAuthFailureExceededEvent,
     StockUpdateConfirmedEvent,
-    NewsletterEmailRequestedEvent
+    NewsletterEmailRequestedEvent,
+    StockCountStartedEvent,
+    StockCountFinishedEvent
 } from "../common";
 
 // Event tiplerini tanımla
@@ -140,6 +142,8 @@ interface EventPayloadMap {
     [Subjects.IntegrationAuthFailureExceeded]: IntegrationAuthFailureExceededEvent['data'];
     [Subjects.StockUpdateConfirmed]: StockUpdateConfirmedEvent['data'];
     [Subjects.NewsletterEmailRequested]: NewsletterEmailRequestedEvent['data'];
+    [Subjects.StockCountStarted]: StockCountStartedEvent['data'];
+    [Subjects.StockCountFinished]: StockCountFinishedEvent['data'];
 }
 
 export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloadMap> extends BaseAttrs {
@@ -275,6 +279,12 @@ export function getEventPriority(eventType: string): number {
 
         // Priority 2: Auth failure — integration deactivation kritik (issue #521)
         [Subjects.IntegrationAuthFailureExceeded]: 2,
+
+        // Priority 1: Depo sayimi kilidi (issue #637)
+        // Kilit yayilimi gecikirse tuketici servisler sayim sirasinda siparis ceker
+        // ve stok degisir — sayim sonucu bozulur. Silme kadar oncelikli.
+        [Subjects.StockCountStarted]: 1,
+        [Subjects.StockCountFinished]: 1,
     };
     
     return PRIORITY_MAP[eventType] ?? 3;

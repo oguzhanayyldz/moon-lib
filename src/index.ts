@@ -128,6 +128,8 @@ export * from './events/publishers/importImagesFromUrlsCompletedPublisher.publis
 export * from './events/publishers/importImagesFromUrlsPublisher.publisher';
 export * from './events/publishers/notificationCreated.publisher';
 export * from './events/publishers/newsletterEmailRequested.publisher';
+export * from './events/publishers/stockCountStarted.publisher';
+export * from './events/publishers/stockCountFinished.publisher';
 export * from './events/publishers/productPriceIntegrationUpdated.publisher';
 export * from './events/publishers/productPriceUpdated.publisher';
 export * from './events/publishers/productStockIntegrationUpdated.publisher';

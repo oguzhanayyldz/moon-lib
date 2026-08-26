@@ -96,3 +96,8 @@ export * from './integration-auth-failure-exceeded-event';
 
 // Stock Update Confirmation (issue #567)
 export * from './stock-update-confirmed-event';
+
+// Depo sayimi (issue #637)
+export * from './stock-count-started-event';
+export * from './stock-count-finished-event';
+export * from './types/stock-count-status';

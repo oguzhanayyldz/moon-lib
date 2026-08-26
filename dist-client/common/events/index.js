@@ -107,3 +107,7 @@ __exportStar(require("./price-processing-completed-event"), exports);
 __exportStar(require("./integration-auth-failure-exceeded-event"), exports);
 // Stock Update Confirmation (issue #567)
 __exportStar(require("./stock-update-confirmed-event"), exports);
+// Depo sayimi (issue #637)
+__exportStar(require("./stock-count-started-event"), exports);
+__exportStar(require("./stock-count-finished-event"), exports);
+__exportStar(require("./types/stock-count-status"), exports);

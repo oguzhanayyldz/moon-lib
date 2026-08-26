@@ -71,6 +71,8 @@ const subscriptionInvoiceCreated_publisher_1 = require("../events/publishers/sub
 const priceProcessingCompleted_publisher_1 = require("../events/publishers/priceProcessingCompleted.publisher");
 const integrationAuthFailureExceeded_publisher_1 = require("../events/publishers/integrationAuthFailureExceeded.publisher");
 const stockUpdateConfirmed_publisher_1 = require("../events/publishers/stockUpdateConfirmed.publisher");
+const stockCountStarted_publisher_1 = require("../events/publishers/stockCountStarted.publisher");
+const stockCountFinished_publisher_1 = require("../events/publishers/stockCountFinished.publisher");
 class EventPublisherJob {
     constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
     ) {
@@ -662,6 +664,14 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.StockUpdateConfirmed:
                 await new stockUpdateConfirmed_publisher_1.StockUpdateConfirmedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.StockCountStarted:
+                await new stockCountStarted_publisher_1.StockCountStartedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.StockCountFinished:
+                await new stockCountFinished_publisher_1.StockCountFinishedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             default:

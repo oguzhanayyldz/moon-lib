@@ -17,6 +17,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./bad-request-error"), exports);
 __exportStar(require("./custom-error"), exports);
 __exportStar(require("./database-connection-error"), exports);
+__exportStar(require("./locked-error"), exports);
+__exportStar(require("./conflict-error"), exports);
 __exportStar(require("./not-authorized-error"), exports);
 __exportStar(require("./not-found-error"), exports);
 __exportStar(require("./request-validation-error"), exports);
