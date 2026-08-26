@@ -246,8 +246,27 @@ export const createTracer = (config: any) => ({
 });
 
 // Redis Wrapper - Test-friendly version
+/**
+ * Redis taklidinin paylasilan deposu.
+ *
+ * ⚠️ MODUL DUZEYINDE OLMAK ZORUNDA (issue #605 incelemesi): daha once
+ * `setupTestEnvironment()` her `beforeEach`te `set`/`get`/`del`i YENI bir yerel
+ * depoyla degistiriyordu, ama `scan`, `keys`, `sAdd`, `hGet` gibi geri kalan
+ * komutlar ILK kurulumdaki closure'a bagli kaliyordu. Sonuc: testte yazilan bir
+ * anahtar `get` ile gorunuyor, `scan` ile GORUNMUYORDU — sessiz ve teshisi zor
+ * bir tutarsizlik. Artik reset depoyu DEGISTIRMIYOR, ICERIGINI temizliyor.
+ */
+const sharedMockStorage: Record<string, any> = {};
+
+/** Test izolasyonu: referansi koru, icerigi bosalt. */
+export const clearRedisMockStorage = (): void => {
+    for (const key of Object.keys(sharedMockStorage)) {
+        delete sharedMockStorage[key];
+    }
+};
+
 export const createRedisWrapper = () => {
-    const mockStorage: Record<string, any> = {};
+    const mockStorage = sharedMockStorage;
     return {
         client: {
             set: jest.fn((key: string, value: any, options?: any) => {
@@ -255,14 +274,21 @@ export const createRedisWrapper = () => {
                 return Promise.resolve('OK');
             }),
             get: jest.fn((key: string) => Promise.resolve(mockStorage[key] || null)),
+            // ⚠️ GERCEK Redis semantigi: `DEL` SILINEN anahtar sayisini doner,
+            // istenen anahtar sayisini DEGIL (issue #605 incelemesi). Onceki
+            // taklit var olmayan bir anahtar icin de 1 donuyordu; "sildim mi?"
+            // sorusunu `del`in donusuyle yanitlayan kod (tek seferlik token
+            // tuketimi, es zamanlilik korumasi) testte DOGRULANAMIYORDU.
             del: jest.fn((key: string | string[]) => {
-                if (Array.isArray(key)) {
-                    key.forEach(k => delete mockStorage[k]);
-                    return Promise.resolve(key.length);
-                } else {
-                    delete mockStorage[key];
-                    return Promise.resolve(1);
+                const keys = Array.isArray(key) ? key : [key];
+                let removed = 0;
+                for (const k of keys) {
+                    if (k in mockStorage) {
+                        delete mockStorage[k];
+                        removed++;
+                    }
                 }
+                return Promise.resolve(removed);
             }),
             incr: jest.fn((key: string) => {
                 const current = parseInt(mockStorage[key] || '0');
@@ -1130,24 +1156,11 @@ export const setupTestEnvironment = () => {
         (logger as any)[key] = jest.fn();
     });
     
-    // Reset Redis wrapper (only if client exists)
-    if (redisWrapper.client) {
-        const mockStorage: Record<string, any> = {};
-        redisWrapper.client.set = jest.fn((key: string, value: any) => {
-            mockStorage[key] = value;
-            return Promise.resolve('OK');
-        });
-        redisWrapper.client.get = jest.fn((key: string) => Promise.resolve(mockStorage[key] || null));
-        redisWrapper.client.del = jest.fn((key: string | string[]) => {
-            if (Array.isArray(key)) {
-                key.forEach(k => delete mockStorage[k]);
-                return Promise.resolve(key.length);
-            } else {
-                delete mockStorage[key];
-                return Promise.resolve(1);
-            }
-        });
-    }
+    // Reset Redis wrapper — komutlari YENIDEN TANIMLAMADAN, yalnizca paylasilan
+    // deponun icerigini bosaltarak. Yeniden tanimlamak `scan`/`keys`/`sAdd` gibi
+    // komutlari eski closure'da birakip sessiz tutarsizlik uretiyordu
+    // (bkz. `sharedMockStorage` notu).
+    clearRedisMockStorage();
 };
 
 // Test Mock Verification Helpers

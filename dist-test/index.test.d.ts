@@ -77,6 +77,8 @@ export declare const createTracer: (config: any) => {
     extract: jest.Mock<any, any, any>;
     close: jest.Mock<any, any, any>;
 };
+/** Test izolasyonu: referansi koru, icerigi bosalt. */
+export declare const clearRedisMockStorage: () => void;
 export declare const createRedisWrapper: () => {
     client: {
         set: jest.Mock<Promise<string>, [key: string, value: any, options?: any], any>;

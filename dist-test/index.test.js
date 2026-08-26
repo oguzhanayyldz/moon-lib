@@ -22,7 +22,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.AuthFailureTracker = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.resetUserContextMocks = exports.getParentUserId = exports.isSubUserMode = exports.getDataOwnerId = exports.getPerformerId = exports.createNormalUserPayload = exports.createSubUserPayload = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
+exports.setupGlobalTestEnvironment = exports.cleanupTestEnvironment = exports.setIntervalTracked = exports.setTimeoutTracked = exports.createSecurityManager = exports.createSecurityHeaders = exports.createBruteForceProtection = exports.createRateLimiter = exports.createSecurityValidator = exports.SecurityManager = exports.SecurityHeaders = exports.BruteForceProtection = exports.RateLimiter = exports.SecurityValidator = exports.commonTestPatterns = exports.expectOptimisticLockingSaved = exports.expectOutboxEventCreated = exports.setupTestEnvironment = exports.createOutboxMock = exports.createOutboxModel = exports.AuthFailureTracker = exports.RetryableListener = exports.EventPublisherJob = exports.EventPublisher = exports.OptimisticLockingUtil = exports.logger = exports.natsWrapper = exports.tracer = exports.resetUserContextMocks = exports.getParentUserId = exports.isSubUserMode = exports.getDataOwnerId = exports.getPerformerId = exports.createNormalUserPayload = exports.createSubUserPayload = exports.microserviceSecurityService = exports.createMicroserviceSecurityService = exports.redisWrapper = exports.createRedisWrapper = exports.clearRedisMockStorage = exports.createTracer = exports.createNatsWrapper = exports.EnhancedEntityDeletionRegistry = void 0;
 const index_1 = require("./index");
 // Global test cleanup registry
 let testTimers = new Set();
@@ -233,8 +233,26 @@ const createTracer = (config) => ({
 });
 exports.createTracer = createTracer;
 // Redis Wrapper - Test-friendly version
+/**
+ * Redis taklidinin paylasilan deposu.
+ *
+ * ⚠️ MODUL DUZEYINDE OLMAK ZORUNDA (issue #605 incelemesi): daha once
+ * `setupTestEnvironment()` her `beforeEach`te `set`/`get`/`del`i YENI bir yerel
+ * depoyla degistiriyordu, ama `scan`, `keys`, `sAdd`, `hGet` gibi geri kalan
+ * komutlar ILK kurulumdaki closure'a bagli kaliyordu. Sonuc: testte yazilan bir
+ * anahtar `get` ile gorunuyor, `scan` ile GORUNMUYORDU — sessiz ve teshisi zor
+ * bir tutarsizlik. Artik reset depoyu DEGISTIRMIYOR, ICERIGINI temizliyor.
+ */
+const sharedMockStorage = {};
+/** Test izolasyonu: referansi koru, icerigi bosalt. */
+const clearRedisMockStorage = () => {
+    for (const key of Object.keys(sharedMockStorage)) {
+        delete sharedMockStorage[key];
+    }
+};
+exports.clearRedisMockStorage = clearRedisMockStorage;
 const createRedisWrapper = () => {
-    const mockStorage = {};
+    const mockStorage = sharedMockStorage;
     return {
         client: {
             set: jest.fn((key, value, options) => {
@@ -242,15 +260,21 @@ const createRedisWrapper = () => {
                 return Promise.resolve('OK');
             }),
             get: jest.fn((key) => Promise.resolve(mockStorage[key] || null)),
+            // ⚠️ GERCEK Redis semantigi: `DEL` SILINEN anahtar sayisini doner,
+            // istenen anahtar sayisini DEGIL (issue #605 incelemesi). Onceki
+            // taklit var olmayan bir anahtar icin de 1 donuyordu; "sildim mi?"
+            // sorusunu `del`in donusuyle yanitlayan kod (tek seferlik token
+            // tuketimi, es zamanlilik korumasi) testte DOGRULANAMIYORDU.
             del: jest.fn((key) => {
-                if (Array.isArray(key)) {
-                    key.forEach(k => delete mockStorage[k]);
-                    return Promise.resolve(key.length);
+                const keys = Array.isArray(key) ? key : [key];
+                let removed = 0;
+                for (const k of keys) {
+                    if (k in mockStorage) {
+                        delete mockStorage[k];
+                        removed++;
+                    }
                 }
-                else {
-                    delete mockStorage[key];
-                    return Promise.resolve(1);
-                }
+                return Promise.resolve(removed);
             }),
             incr: jest.fn((key) => {
                 const current = parseInt(mockStorage[key] || '0');
@@ -1018,25 +1042,11 @@ const setupTestEnvironment = () => {
     Object.keys(exports.logger).forEach(key => {
         exports.logger[key] = jest.fn();
     });
-    // Reset Redis wrapper (only if client exists)
-    if (exports.redisWrapper.client) {
-        const mockStorage = {};
-        exports.redisWrapper.client.set = jest.fn((key, value) => {
-            mockStorage[key] = value;
-            return Promise.resolve('OK');
-        });
-        exports.redisWrapper.client.get = jest.fn((key) => Promise.resolve(mockStorage[key] || null));
-        exports.redisWrapper.client.del = jest.fn((key) => {
-            if (Array.isArray(key)) {
-                key.forEach(k => delete mockStorage[k]);
-                return Promise.resolve(key.length);
-            }
-            else {
-                delete mockStorage[key];
-                return Promise.resolve(1);
-            }
-        });
-    }
+    // Reset Redis wrapper — komutlari YENIDEN TANIMLAMADAN, yalnizca paylasilan
+    // deponun icerigini bosaltarak. Yeniden tanimlamak `scan`/`keys`/`sAdd` gibi
+    // komutlari eski closure'da birakip sessiz tutarsizlik uretiyordu
+    // (bkz. `sharedMockStorage` notu).
+    (0, exports.clearRedisMockStorage)();
 };
 exports.setupTestEnvironment = setupTestEnvironment;
 // Test Mock Verification Helpers
