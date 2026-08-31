@@ -73,5 +73,7 @@ export declare enum Subjects {
      */
     SubscriptionInvoiceCreated = "subscription:invoice:created",
     StockUpdateConfirmed = "stock:update:confirmed",
+    StockCountStarted = "stock:count:started",
+    StockCountFinished = "stock:count:finished",
     NewsletterEmailRequested = "newsletter:email:requested"
 }

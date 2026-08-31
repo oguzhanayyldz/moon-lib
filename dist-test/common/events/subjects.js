@@ -87,6 +87,12 @@ var Subjects;
     // Stock Update Confirmation (issue #567)
     // Entegrasyon → catalog: stok platforma GERÇEKTEN yazıldı teyidi (async batch/sync sonucu)
     Subjects["StockUpdateConfirmed"] = "stock:update:confirmed";
+    // Depo sayimi (issue #637)
+    // inventory → integration + orders: sayim basladi/bitti.
+    // Kilit paylasilan Redis anahtariyla TASINAMAZ — Redis her serviste izole
+    // (inventory `/6`, integration `/0`, ayri secret'lar). Tek guvenilir yol NATS.
+    Subjects["StockCountStarted"] = "stock:count:started";
+    Subjects["StockCountFinished"] = "stock:count:finished";
     // Newsletter (issue #611)
     // auth → notification: bulten abonesine tek bir mail gonderilecek.
     // NotificationCreated YENIDEN KULLANILMADI: onun payload'i userId zorunlu kilar ve

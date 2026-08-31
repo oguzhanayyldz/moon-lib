@@ -103,6 +103,11 @@ function getEventPriority(eventType) {
         [common_1.Subjects.PriceProcessingCompleted]: 1,
         // Priority 2: Auth failure — integration deactivation kritik (issue #521)
         [common_1.Subjects.IntegrationAuthFailureExceeded]: 2,
+        // Priority 1: Depo sayimi kilidi (issue #637)
+        // Kilit yayilimi gecikirse tuketici servisler sayim sirasinda siparis ceker
+        // ve stok degisir — sayim sonucu bozulur. Silme kadar oncelikli.
+        [common_1.Subjects.StockCountStarted]: 1,
+        [common_1.Subjects.StockCountFinished]: 1,
     };
     return (_a = PRIORITY_MAP[eventType]) !== null && _a !== void 0 ? _a : 3;
 }

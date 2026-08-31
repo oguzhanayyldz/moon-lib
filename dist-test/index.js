@@ -129,6 +129,8 @@ __exportStar(require("./events/publishers/importImagesFromUrlsCompletedPublisher
 __exportStar(require("./events/publishers/importImagesFromUrlsPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/notificationCreated.publisher"), exports);
 __exportStar(require("./events/publishers/newsletterEmailRequested.publisher"), exports);
+__exportStar(require("./events/publishers/stockCountStarted.publisher"), exports);
+__exportStar(require("./events/publishers/stockCountFinished.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceIntegrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockIntegrationUpdated.publisher"), exports);
