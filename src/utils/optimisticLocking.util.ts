@@ -365,6 +365,90 @@ export class OptimisticLockingUtil {
     }
 
     /**
+    * Versiyon kilitli ATOMİK güncelleme — FOREIGN kopya yakınsaması için (issue #637)
+    *
+    * NEDEN VAR (canlıda kanıtlandı, 31/08/2026): FOREIGN kopya listener'ları
+    * versiyonu "oku → karşılaştır → yaz" ile denetliyordu. NATS aynı varlığa ait
+    * ardışık event'leri EŞZAMANLI teslim edebildiği için (base-listener'da
+    * maxInFlight sınırı yok, onMessage await'siz) iki event de eski değeri okuyor,
+    * ikisi de kontrolü geçiyor ve SON YAZAN kazanıyordu: depo sayımı sonrası
+    * kaynakta 0 (v=19) olan grup ürünü, dört kopya serviste 15 (v=18) kaldı ve
+    * pazaryerlerine OLMAYAN stok gitti.
+    *
+    * Bu metod kontrolü ve yazmayı TEK MongoDB belge işleminde birleştirir:
+    *
+    *     findOneAndUpdate({ _id, version: { $lt: N } }, { $set: {...) })
+    *
+    * MongoDB'nin tek-belge atomikliği altında ESKİ VERSİYON YENİYİ ASLA EZEMEZ —
+    * teslim sırasından, kilitten ve tekrar sayısından bağımsız, yapısal garanti.
+    *
+    * SONUÇ SÖZLEŞMESİ (çağıranın ack kararı buna dayanır):
+    *   - 'applied' → yazıldı; versiyon event'i yayınlandı → BAŞARI, ack
+    *   - 'stale'   → kopya zaten daha yeni; no-op → BAŞARI, ack
+    *                 (bayat event'i ack'lememek NATS'ta sonsuz yeniden teslim
+    *                  birikimi yaratır — bayatlık TERMİNALDİR, hata değildir)
+    *   - 'missing' → kayıt hiç yok → çağıran OLUŞTURMA yolunu dener
+    *
+    * NOT: soft-delete filtresi yalnız find/findOne'a enjekte edilir
+    * (base.schema.ts:410-432), findOneAndUpdate'e DEĞİL — silinmiş kopyaya gelen
+    * idempotent tekrar da doğru şekilde 'stale'/'applied' üretir.
+    * RETRY YOK: işlem tek ve atomik; geçici Mongo hatası fırlar ve listener'ın
+    * kendi retry/DLQ zinciri devralır.
+    */
+    static async applyVersionedUpdate<T = any>(
+        Model: any,
+        id: string,
+        version: number,
+        updateFields: Record<string, any>,
+        operationName?: string
+    ): Promise<{ outcome: 'applied' | 'stale' | 'missing'; doc: T | null }> {
+        const docName = operationName || `${Model.modelName} ${id}`;
+
+        /**
+         * İKİ TUR ZORUNLU (kendi race testinde yakalandı, 31/08): CAS eşleşmeyip
+         * exists kontrolüne geçtiğimiz ARADA eşzamanlı bir oluşturma commit
+         * olabilir — exists=true'yu tek başına "bayat" saymak, az önce doğmuş
+         * DÜŞÜK versiyonlu kaydı güncellemeden event'i no-op'a düşürür (TOCTOU).
+         * exists=true görülünce CAS bir kez daha denenir; versiyonlar yalnız
+         * YUKARI gittiği için ikinci eşleşmeme kesin bayatlıktır.
+         */
+        for (let attempt = 0; attempt < 2; attempt++) {
+            // `version` alanı filtrede kilit, $set'te hedef — updateFields'tan
+            // gelecek bir version bu sözleşmeyi sessizce bozar, burada ezilir.
+            const doc = await Model.findOneAndUpdate(
+                { _id: id, version: { $lt: version } },
+                { $set: { ...updateFields, version, updatedOn: new Date() } },
+                { new: true }
+            );
+
+            if (doc) {
+                try {
+                    // updateMetadataWithRetry ile AYNI yayın yolu: sync servisi
+                    // (EntitySyncState/versionDiff) kopyanın ilerlediğini görmeli.
+                    await this.publishVersionEventForUpdate(Model, doc, version);
+                } catch (error) {
+                    logger.error(`❌ Versiyon event'i yayınlanamadı (${docName}):`, error);
+                    // Yayın hatası yazımı geri almaz; drift'i sync döngüsü yakalar
+                }
+                return { outcome: 'applied', doc };
+            }
+
+            // `includeDeleted: true` ŞART — soft-delete edilmiş kopya "yok"
+            // sanılırsa çağıran oluşturmayı dener ve E11000'e çarpar.
+            const exists = await Model.findOne({ _id: id, includeDeleted: true })
+                .select('_id')
+                .lean();
+
+            if (!exists) {
+                return { outcome: 'missing', doc: null };
+            }
+            // exists ama eşleşmedi → ikinci turda kesinleşir
+        }
+
+        return { outcome: 'stale', doc: null };
+    }
+
+    /**
     * Context-aware updateMetadataWithRetry: Request object'ten session algılama
     *
     * @static

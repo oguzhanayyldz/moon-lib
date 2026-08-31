@@ -133,6 +133,41 @@ export declare class OptimisticLockingUtil {
     */
     static updateMetadataWithRetry<T>(Model: any, id: string, updateFields: any, options?: any, operationName?: string, session?: ClientSession): Promise<T>;
     /**
+    * Versiyon kilitli ATOMİK güncelleme — FOREIGN kopya yakınsaması için (issue #637)
+    *
+    * NEDEN VAR (canlıda kanıtlandı, 31/08/2026): FOREIGN kopya listener'ları
+    * versiyonu "oku → karşılaştır → yaz" ile denetliyordu. NATS aynı varlığa ait
+    * ardışık event'leri EŞZAMANLI teslim edebildiği için (base-listener'da
+    * maxInFlight sınırı yok, onMessage await'siz) iki event de eski değeri okuyor,
+    * ikisi de kontrolü geçiyor ve SON YAZAN kazanıyordu: depo sayımı sonrası
+    * kaynakta 0 (v=19) olan grup ürünü, dört kopya serviste 15 (v=18) kaldı ve
+    * pazaryerlerine OLMAYAN stok gitti.
+    *
+    * Bu metod kontrolü ve yazmayı TEK MongoDB belge işleminde birleştirir:
+    *
+    *     findOneAndUpdate({ _id, version: { $lt: N } }, { $set: {...) })
+    *
+    * MongoDB'nin tek-belge atomikliği altında ESKİ VERSİYON YENİYİ ASLA EZEMEZ —
+    * teslim sırasından, kilitten ve tekrar sayısından bağımsız, yapısal garanti.
+    *
+    * SONUÇ SÖZLEŞMESİ (çağıranın ack kararı buna dayanır):
+    *   - 'applied' → yazıldı; versiyon event'i yayınlandı → BAŞARI, ack
+    *   - 'stale'   → kopya zaten daha yeni; no-op → BAŞARI, ack
+    *                 (bayat event'i ack'lememek NATS'ta sonsuz yeniden teslim
+    *                  birikimi yaratır — bayatlık TERMİNALDİR, hata değildir)
+    *   - 'missing' → kayıt hiç yok → çağıran OLUŞTURMA yolunu dener
+    *
+    * NOT: soft-delete filtresi yalnız find/findOne'a enjekte edilir
+    * (base.schema.ts:410-432), findOneAndUpdate'e DEĞİL — silinmiş kopyaya gelen
+    * idempotent tekrar da doğru şekilde 'stale'/'applied' üretir.
+    * RETRY YOK: işlem tek ve atomik; geçici Mongo hatası fırlar ve listener'ın
+    * kendi retry/DLQ zinciri devralır.
+    */
+    static applyVersionedUpdate<T = any>(Model: any, id: string, version: number, updateFields: Record<string, any>, operationName?: string): Promise<{
+        outcome: 'applied' | 'stale' | 'missing';
+        doc: T | null;
+    }>;
+    /**
     * Context-aware updateMetadataWithRetry: Request object'ten session algılama
     *
     * @static

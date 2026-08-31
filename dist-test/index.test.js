@@ -758,6 +758,29 @@ exports.OptimisticLockingUtil = {
         }
         return result;
     }),
+    applyVersionedUpdate: jest.fn().mockImplementation(async (Model, id, version, updateFields, _operationName) => {
+        // GERÇEK implementasyonla AYNI atomik sorgu + AYNI iki-tur TOCTOU
+        // koruması — yarış testleri ancak böyle anlamlı kalır (basit bir
+        // sahte, sınanan yarışın kendisini yok eder). Yalnız versiyon-event
+        // yayını atlanır: test ortamında outbox yok.
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const doc = await Model.findOneAndUpdate({ _id: id, version: { $lt: version } }, { $set: Object.assign(Object.assign({}, updateFields), { version, updatedOn: new Date() }) }, { new: true });
+            if (doc)
+                return { outcome: 'applied', doc };
+            // Zincir-güvenli exists: model MOCK'LANMIŞ testlerde findOne
+            // sorgu nesnesi değil düz değer/promise dönebilir — select/lean
+            // varsa kullanılır, yoksa sonuç doğrudan değerlendirilir.
+            const query = Model.findOne({ _id: id, includeDeleted: true });
+            const exists = (query && typeof query.select === 'function')
+                ? await query.select('_id').lean()
+                : await query;
+            if (!exists)
+                return { outcome: 'missing', doc: null };
+            // exists ama eşleşmedi: arada doğmuş düşük versiyon olabilir —
+            // ikinci turda kesinleşir (versiyonlar yalnız yukarı gider)
+        }
+        return { outcome: 'stale', doc: null };
+    }),
     retryWithOptimisticLocking: jest.fn().mockImplementation(async (operation, maxRetries = 3, backoffMs = 100, operationName = 'operation') => {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
