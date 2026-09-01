@@ -269,7 +269,15 @@ export const createRedisWrapper = () => {
     const mockStorage = sharedMockStorage;
     return {
         client: {
+            // ⚠️ GERCEK Redis semantigi: `NX`/`XX` guard'lari yazmayi
+            // ENGELLEYEBILIR ve engellendiginde `SET` 'OK' degil `null` doner
+            // (issue #641). Onceki taklit secenekleri TAMAMEN yok sayip her
+            // cagride uzerine yaziyor ve 'OK' donuyordu; "yalnizca biri
+            // kazanir" kurgulari (token rotasyon kilidi, dagitik kilit) testte
+            // DOGRULANAMIYORDU — es zamanli iki cagri da kazandigini sanirdi.
             set: jest.fn((key: string, value: any, options?: any) => {
+                if (options?.NX && key in mockStorage) return Promise.resolve(null);
+                if (options?.XX && !(key in mockStorage)) return Promise.resolve(null);
                 mockStorage[key] = value;
                 return Promise.resolve('OK');
             }),

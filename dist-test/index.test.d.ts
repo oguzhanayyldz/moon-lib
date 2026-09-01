@@ -81,7 +81,7 @@ export declare const createTracer: (config: any) => {
 export declare const clearRedisMockStorage: () => void;
 export declare const createRedisWrapper: () => {
     client: {
-        set: jest.Mock<Promise<string>, [key: string, value: any, options?: any], any>;
+        set: jest.Mock<Promise<string> | Promise<null>, [key: string, value: any, options?: any], any>;
         get: jest.Mock<Promise<any>, [key: string], any>;
         del: jest.Mock<Promise<number>, [key: string | string[]], any>;
         incr: jest.Mock<Promise<number>, [key: string], any>;
@@ -120,7 +120,7 @@ export declare const createRedisWrapper: () => {
 };
 export declare const redisWrapper: {
     client: {
-        set: jest.Mock<Promise<string>, [key: string, value: any, options?: any], any>;
+        set: jest.Mock<Promise<string> | Promise<null>, [key: string, value: any, options?: any], any>;
         get: jest.Mock<Promise<any>, [key: string], any>;
         del: jest.Mock<Promise<number>, [key: string | string[]], any>;
         incr: jest.Mock<Promise<number>, [key: string], any>;
