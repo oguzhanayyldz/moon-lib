@@ -5,11 +5,13 @@ const current_user_1 = require("./current-user");
 /**
  * Merkezi SubUser Context Middleware
  * Tüm servislerde kullanılabilir, request'e context bilgilerini ekler
+ *
+ * ⚠️ `X-Effective-User-Id`/`X-Actual-User-Id` header'ları BİLEREK okunmaz
+ * (issue #653 — çapraz-tenant IDOR). Bu değerler istemciden gelen, imzasız
+ * girdi; sunucu tarafı yetki sınırı olarak kullanılamaz. effectiveUserId/
+ * actualUserId SADECE `req.currentUser`'daki imzalı JWT'den hesaplanır.
  */
 const subUserContext = (req, res, next) => {
-    // X-Effective-User-Id ve X-Actual-User-Id header'larını kontrol et
-    const effectiveUserIdHeader = req.headers['x-effective-user-id'];
-    const actualUserIdHeader = req.headers['x-actual-user-id'];
     // Eğer currentUser varsa, context bilgilerini ayıkla
     if (req.currentUser) {
         // Helper method'ları kullanarak context bilgilerini al
@@ -19,12 +21,6 @@ const subUserContext = (req, res, next) => {
         req.effectiveUserId = effectiveUserId;
         req.actualUserId = actualUserId;
         req.isSubUser = (0, current_user_1.isSubUser)(req.currentUser);
-        // Header'dan gelen bilgileri de kontrol et (admin impersonation için)
-        if (effectiveUserIdHeader && actualUserIdHeader) {
-            // Header'dan gelen bilgileri kullan (admin impersonation durumu)
-            req.effectiveUserId = effectiveUserIdHeader;
-            req.actualUserId = actualUserIdHeader;
-        }
         // Audit logging için orijinal user bilgilerini sakla
         req.auditContext = {
             actualUserId: actualUserId,

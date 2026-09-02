@@ -4,30 +4,24 @@ import { UserPayload, getEffectiveUserId, getActualUserId, isSubUser } from './c
 /**
  * Merkezi SubUser Context Middleware
  * Tüm servislerde kullanılabilir, request'e context bilgilerini ekler
+ *
+ * ⚠️ `X-Effective-User-Id`/`X-Actual-User-Id` header'ları BİLEREK okunmaz
+ * (issue #653 — çapraz-tenant IDOR). Bu değerler istemciden gelen, imzasız
+ * girdi; sunucu tarafı yetki sınırı olarak kullanılamaz. effectiveUserId/
+ * actualUserId SADECE `req.currentUser`'daki imzalı JWT'den hesaplanır.
  */
 export const subUserContext = (req: Request, res: Response, next: NextFunction) => {
-    // X-Effective-User-Id ve X-Actual-User-Id header'larını kontrol et
-    const effectiveUserIdHeader = req.headers['x-effective-user-id'] as string;
-    const actualUserIdHeader = req.headers['x-actual-user-id'] as string;
-    
     // Eğer currentUser varsa, context bilgilerini ayıkla
     if (req.currentUser) {
         // Helper method'ları kullanarak context bilgilerini al
         const effectiveUserId = getEffectiveUserId(req.currentUser);
         const actualUserId = getActualUserId(req.currentUser);
-        
+
         // Request'e context bilgilerini ekle
         (req as any).effectiveUserId = effectiveUserId;
         (req as any).actualUserId = actualUserId;
         (req as any).isSubUser = isSubUser(req.currentUser);
-        
-        // Header'dan gelen bilgileri de kontrol et (admin impersonation için)
-        if (effectiveUserIdHeader && actualUserIdHeader) {
-            // Header'dan gelen bilgileri kullan (admin impersonation durumu)
-            (req as any).effectiveUserId = effectiveUserIdHeader;
-            (req as any).actualUserId = actualUserIdHeader;
-        }
-        
+
         // Audit logging için orijinal user bilgilerini sakla
         (req as any).auditContext = {
             actualUserId: actualUserId,
