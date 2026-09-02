@@ -30,8 +30,6 @@ export interface UserPayload {
  * (string/number) hem de yanlis alan. Rol normalizasyonu (bkz. `currentUser`)
  * yalnizca birincisini cozer; dogru sinyal `isSubUserMode`.
  */
-export declare const getEffectiveUserId: (user: UserPayload) => string;
-export declare const getActualUserId: (user: UserPayload) => string;
 /**
  * ⚠️ SADECE `isSubUserMode` da YETERSIZ (guvenlik incelemesi, issue #651): bu
  * bayrak yalnizca NORMAL giris akisinda (`buildLoginJwtPayload`) yaziliyor.
@@ -45,6 +43,17 @@ export declare const getActualUserId: (user: UserPayload) => string;
  * `role` GERCEKTEN `SubUser`. Ikisinin OR'u hem yaygin hem nadir yolu kapatiyor.
  */
 export declare const isSubUser: (user: UserPayload) => boolean;
+/**
+ * ⚠️ `isSubUser()` ile AYNI iki sinyali kullanir (issue #653) — daha once
+ * yalnizca `isSubUserMode`'a bakiyordu, bu yuzden admin taklit akisinda
+ * (`impersonateUser.ts`, `isSubUserMode` YAZILMAZ, `role` gercekten SubUser)
+ * `parentUser` yerine taklit edilenin KENDI id'sini donduruyordu. O bosluk
+ * daha once istemciden gelen `X-Effective-User-Id` header'iyla (guvensiz)
+ * kapatiliyordu; header kaldirildiginda bu fonksiyon dogru degeri TEK BASINA
+ * uretebilmeli.
+ */
+export declare const getEffectiveUserId: (user: UserPayload) => string;
+export declare const getActualUserId: (user: UserPayload) => string;
 export declare const hasPermission: (user: UserPayload, resource: string, action: string) => boolean;
 /**
  * Platform-aware permission check

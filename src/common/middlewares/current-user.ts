@@ -35,16 +35,6 @@ export interface UserPayload {
  * (string/number) hem de yanlis alan. Rol normalizasyonu (bkz. `currentUser`)
  * yalnizca birincisini cozer; dogru sinyal `isSubUserMode`.
  */
-export const getEffectiveUserId = (user: UserPayload): string => {
-    // For SubUsers, return parent user ID for data access
-    // For regular users and admins, return their own ID
-    return user.isSubUserMode && user.parentUser ? user.parentUser : user.id;
-};
-
-export const getActualUserId = (user: UserPayload): string => {
-    // Always return the actual user ID for audit logging
-    return user.id;
-};
 
 /**
  * ⚠️ SADECE `isSubUserMode` da YETERSIZ (guvenlik incelemesi, issue #651): bu
@@ -60,6 +50,26 @@ export const getActualUserId = (user: UserPayload): string => {
  */
 export const isSubUser = (user: UserPayload): boolean => {
     return user.isSubUserMode === true || Number(user.role) === UserRole.SubUser;
+};
+
+/**
+ * ⚠️ `isSubUser()` ile AYNI iki sinyali kullanir (issue #653) — daha once
+ * yalnizca `isSubUserMode`'a bakiyordu, bu yuzden admin taklit akisinda
+ * (`impersonateUser.ts`, `isSubUserMode` YAZILMAZ, `role` gercekten SubUser)
+ * `parentUser` yerine taklit edilenin KENDI id'sini donduruyordu. O bosluk
+ * daha once istemciden gelen `X-Effective-User-Id` header'iyla (guvensiz)
+ * kapatiliyordu; header kaldirildiginda bu fonksiyon dogru degeri TEK BASINA
+ * uretebilmeli.
+ */
+export const getEffectiveUserId = (user: UserPayload): string => {
+    // For SubUsers, return parent user ID for data access
+    // For regular users and admins, return their own ID
+    return isSubUser(user) && user.parentUser ? user.parentUser : user.id;
+};
+
+export const getActualUserId = (user: UserPayload): string => {
+    // Always return the actual user ID for audit logging
+    return user.id;
 };
 
 export const hasPermission = (user: UserPayload, resource: string, action: string): boolean => {

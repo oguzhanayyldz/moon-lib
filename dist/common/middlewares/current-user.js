@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.currentUser = exports.hasPlatformPermission = exports.hasPermission = exports.isSubUser = exports.getActualUserId = exports.getEffectiveUserId = void 0;
+exports.currentUser = exports.hasPlatformPermission = exports.hasPermission = exports.getActualUserId = exports.getEffectiveUserId = exports.isSubUser = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_role_1 = require("../types/user-role");
 const redisWrapper_service_1 = require("../../services/redisWrapper.service");
@@ -19,17 +19,6 @@ const redisWrapper_service_1 = require("../../services/redisWrapper.service");
  * (string/number) hem de yanlis alan. Rol normalizasyonu (bkz. `currentUser`)
  * yalnizca birincisini cozer; dogru sinyal `isSubUserMode`.
  */
-const getEffectiveUserId = (user) => {
-    // For SubUsers, return parent user ID for data access
-    // For regular users and admins, return their own ID
-    return user.isSubUserMode && user.parentUser ? user.parentUser : user.id;
-};
-exports.getEffectiveUserId = getEffectiveUserId;
-const getActualUserId = (user) => {
-    // Always return the actual user ID for audit logging
-    return user.id;
-};
-exports.getActualUserId = getActualUserId;
 /**
  * ⚠️ SADECE `isSubUserMode` da YETERSIZ (guvenlik incelemesi, issue #651): bu
  * bayrak yalnizca NORMAL giris akisinda (`buildLoginJwtPayload`) yaziliyor.
@@ -46,6 +35,26 @@ const isSubUser = (user) => {
     return user.isSubUserMode === true || Number(user.role) === user_role_1.UserRole.SubUser;
 };
 exports.isSubUser = isSubUser;
+/**
+ * ⚠️ `isSubUser()` ile AYNI iki sinyali kullanir (issue #653) — daha once
+ * yalnizca `isSubUserMode`'a bakiyordu, bu yuzden admin taklit akisinda
+ * (`impersonateUser.ts`, `isSubUserMode` YAZILMAZ, `role` gercekten SubUser)
+ * `parentUser` yerine taklit edilenin KENDI id'sini donduruyordu. O bosluk
+ * daha once istemciden gelen `X-Effective-User-Id` header'iyla (guvensiz)
+ * kapatiliyordu; header kaldirildiginda bu fonksiyon dogru degeri TEK BASINA
+ * uretebilmeli.
+ */
+const getEffectiveUserId = (user) => {
+    // For SubUsers, return parent user ID for data access
+    // For regular users and admins, return their own ID
+    return (0, exports.isSubUser)(user) && user.parentUser ? user.parentUser : user.id;
+};
+exports.getEffectiveUserId = getEffectiveUserId;
+const getActualUserId = (user) => {
+    // Always return the actual user ID for audit logging
+    return user.id;
+};
+exports.getActualUserId = getActualUserId;
 const hasPermission = (user, resource, action) => {
     // Convert role to number to ensure type safety
     const roleNumber = Number(user.role);
