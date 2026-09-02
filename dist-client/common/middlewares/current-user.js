@@ -7,11 +7,22 @@ exports.currentUser = exports.hasPlatformPermission = exports.hasPermission = ex
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_role_1 = require("../types/user-role");
 const redisWrapper_service_1 = require("../../services/redisWrapper.service");
-// Helper functions for SubUser context
+/**
+ * ⚠️ ALT KULLANICI TESPITI `role` ILE YAPILAMAZ — issue #651
+ *
+ * Giris akisi alt kullaniciya "otomatik impersonation" uyguluyor: JWT'ye
+ * `role` olarak PARENT'IN rolu yaziliyor (`buildLoginJwtPayload`), alt
+ * kullanicinin kendi rolu `subUserRole` alaninda ayri tasiniyor. Yani bir alt
+ * kullanicinin JWT'sinde `role` HICBIR ZAMAN `UserRole.SubUser` DEGILDIR.
+ *
+ * `role === UserRole.SubUser` kalibi bu yuzden iki kez hataliydi: hem tip
+ * (string/number) hem de yanlis alan. Rol normalizasyonu (bkz. `currentUser`)
+ * yalnizca birincisini cozer; dogru sinyal `isSubUserMode`.
+ */
 const getEffectiveUserId = (user) => {
     // For SubUsers, return parent user ID for data access
     // For regular users and admins, return their own ID
-    return user.role === user_role_1.UserRole.SubUser && user.parentUser ? user.parentUser : user.id;
+    return user.isSubUserMode && user.parentUser ? user.parentUser : user.id;
 };
 exports.getEffectiveUserId = getEffectiveUserId;
 const getActualUserId = (user) => {
@@ -19,8 +30,20 @@ const getActualUserId = (user) => {
     return user.id;
 };
 exports.getActualUserId = getActualUserId;
+/**
+ * ⚠️ SADECE `isSubUserMode` da YETERSIZ (guvenlik incelemesi, issue #651): bu
+ * bayrak yalnizca NORMAL giris akisinda (`buildLoginJwtPayload`) yaziliyor.
+ * Iki KENAR durumda role=SubUser oldugu halde `isSubUserMode` YAZILMIYOR:
+ *   1. `impersonateUser.ts` — admin bir alt kullaniciyi taklit ederken uretilen
+ *      JWT'de bu alan hic yok.
+ *   2. `buildLoginJwtPayload`'in "orphan" dali — `parentUser` alani bos bir
+ *      alt kullanici (semada zorunlu degil) normal kullanici gibi donuyor.
+ * `Number(role) === UserRole.SubUser` yedek sinyal olarak eklendi: normal akista
+ * hicbir zaman dogru olmuyordu (role = PARENT'IN rolu), bu iki kenar durumda ise
+ * `role` GERCEKTEN `SubUser`. Ikisinin OR'u hem yaygin hem nadir yolu kapatiyor.
+ */
 const isSubUser = (user) => {
-    return user.role === user_role_1.UserRole.SubUser;
+    return user.isSubUserMode === true || Number(user.role) === user_role_1.UserRole.SubUser;
 };
 exports.isSubUser = isSubUser;
 const hasPermission = (user, resource, action) => {
@@ -92,6 +115,21 @@ const hasPlatformPermission = (user, resource, action, platformName) => {
     return false;
 };
 exports.hasPlatformPermission = hasPlatformPermission;
+/**
+ * ⚠️ `Number(...)` TEK BASINA GUVENLI DEGIL (issue #651 guvenlik incelemesi):
+ * `Number(null) === 0 === UserRole.Admin`. Normalizasyon eklenmeden ONCE
+ * `null != UserRole.Admin` (gevsek karsilastirma) DOGRU sekilde reddediyordu;
+ * `Number(null)` sonrasi `0 != 0` false olup SESSIZCE ADMIN yetkisi verilirdi
+ * — normalizasyonun kendisinin actigi bir fail-open.
+ *
+ * `null`/`undefined` (rol hic yok) `NaN`'a eslenir — hicbir `UserRole` degeriyle
+ * ESLESMEZ, yani hem gevsek hem kati karsilastirmalarda GUVENLI sekilde
+ * reddedilir. Bos string/dizi/`false` gibi diger "sahte sifir" degerler zaten
+ * ONCEDEN de gevsek (`!=`) karsilastirmalarda kazara gecebiliyordu — bu, bu
+ * PR'in kapsami DISINDA (issue #651 yalnizca dogru bicimli roldeki tip
+ * uyumsuzlugunu hedefliyor).
+ */
+const normalizeRole = (role) => role === null || role === undefined ? NaN : Number(role);
 const currentUser = (req, res, next) => {
     var _a;
     if (!((_a = req.session) === null || _a === void 0 ? void 0 : _a.jwt)) {
@@ -99,6 +137,27 @@ const currentUser = (req, res, next) => {
     }
     try {
         const payload = jsonwebtoken_1.default.verify(req.session.jwt, process.env.JWT_KEY);
+        // ⚠️ ROL NORMALIZASYONU — issue #651
+        //
+        // `UserPayload.role` tipi `UserRole` (NUMBER) diyor ama JWT'de STRING
+        // tasiniyor: sema `role: { type: String, enum: … }` ve giris akislari
+        // degeri oldugu gibi yaziyor (`"1"`). Tip bildiriminin yalan soylemesi
+        // yuzunden `role === UserRole.User` gibi her karsilastirma sessizce
+        // `false` donuyordu — derleyici uyarmiyor, testler de yakalamiyordu
+        // (`test/setup.ts` JWT'yi number rolle uretiyor).
+        //
+        // Somut sonuclari: `invalidate-subuser-sessions` parent'a HER ZAMAN 403
+        // donuyordu (issue #650'de bulundu), `deleteUser`'daki "admin silinemez"
+        // korumasi hic devreye girmiyordu.
+        //
+        // ⚠️ NORMALIZASYON BURADA, OKUMA NOKTASINDA yapiliyor — JWT'ye yazarken
+        // degil: dolasimda 7 gune kadar eski (string rollu) token var ve onlar
+        // da bu yoldan geciyor. Yazma noktasinda duzeltilseydi o token'lar
+        // omurlerinin sonuna kadar kirik davranmaya devam ederdi.
+        payload.role = normalizeRole(payload.role);
+        if (payload.subUserRole !== undefined) {
+            payload.subUserRole = normalizeRole(payload.subUserRole);
+        }
         // Session validation - if sessionId exists in JWT and Redis is available (make it non-blocking)
         if (payload.sessionId) {
             // Check if Redis is available before attempting session validation
