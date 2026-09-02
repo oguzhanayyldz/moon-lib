@@ -18,8 +18,32 @@ export interface UserPayload {
     emailVerified?: boolean;
     onboardingCompleted?: boolean;
 }
+/**
+ * ⚠️ ALT KULLANICI TESPITI `role` ILE YAPILAMAZ — issue #651
+ *
+ * Giris akisi alt kullaniciya "otomatik impersonation" uyguluyor: JWT'ye
+ * `role` olarak PARENT'IN rolu yaziliyor (`buildLoginJwtPayload`), alt
+ * kullanicinin kendi rolu `subUserRole` alaninda ayri tasiniyor. Yani bir alt
+ * kullanicinin JWT'sinde `role` HICBIR ZAMAN `UserRole.SubUser` DEGILDIR.
+ *
+ * `role === UserRole.SubUser` kalibi bu yuzden iki kez hataliydi: hem tip
+ * (string/number) hem de yanlis alan. Rol normalizasyonu (bkz. `currentUser`)
+ * yalnizca birincisini cozer; dogru sinyal `isSubUserMode`.
+ */
 export declare const getEffectiveUserId: (user: UserPayload) => string;
 export declare const getActualUserId: (user: UserPayload) => string;
+/**
+ * ⚠️ SADECE `isSubUserMode` da YETERSIZ (guvenlik incelemesi, issue #651): bu
+ * bayrak yalnizca NORMAL giris akisinda (`buildLoginJwtPayload`) yaziliyor.
+ * Iki KENAR durumda role=SubUser oldugu halde `isSubUserMode` YAZILMIYOR:
+ *   1. `impersonateUser.ts` — admin bir alt kullaniciyi taklit ederken uretilen
+ *      JWT'de bu alan hic yok.
+ *   2. `buildLoginJwtPayload`'in "orphan" dali — `parentUser` alani bos bir
+ *      alt kullanici (semada zorunlu degil) normal kullanici gibi donuyor.
+ * `Number(role) === UserRole.SubUser` yedek sinyal olarak eklendi: normal akista
+ * hicbir zaman dogru olmuyordu (role = PARENT'IN rolu), bu iki kenar durumda ise
+ * `role` GERCEKTEN `SubUser`. Ikisinin OR'u hem yaygin hem nadir yolu kapatiyor.
+ */
 export declare const isSubUser: (user: UserPayload) => boolean;
 export declare const hasPermission: (user: UserPayload, resource: string, action: string) => boolean;
 /**
