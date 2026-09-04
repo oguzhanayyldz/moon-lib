@@ -35,24 +35,41 @@ const withTransaction = (options = {}) => {
         // Check if MongoDB is running as a replica set (with caching)
         const now = Date.now();
         if (isReplicaSetCache === null || now - replicaSetCheckTime > REPLICA_SET_CHECK_INTERVAL) {
-            try {
-                const admin = mongoose_1.default.connection.db.admin();
-                await admin.replSetGetStatus();
-                isReplicaSetCache = true;
+            // Baglanti henuz hazir degilse `mongoose.connection.db` undefined olur ve
+            // `.admin()` TypeError firlatir. Bu hata asagidaki replSet dalina uymadigi
+            // icin yeniden firlatiliyor, `express-async-errors` sayesinde 500'e donusuyordu
+            // — yani baglanti kurulmadan gelen ilk istek islenebilir olmasina ragmen
+            // hata veriyordu. Baglanti yoksa transaction'siz devam etmek dogru davranis
+            // (standalone MongoDB dalinin aynisi). issue #639
+            const db = mongoose_1.default.connection.db;
+            if (!db) {
+                isReplicaSetCache = false;
                 replicaSetCheckTime = now;
-                logger_service_1.logger.info(`✅ Replica set detected - transactions enabled`);
+                logger_service_1.logger.warn(`⚠️  MongoDB baglantisi henuz hazir degil - transactions will be disabled`);
             }
-            catch (error) {
-                // Not a replica set (standalone MongoDB)
-                if (((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('replSet')) || error.codeName === 'NoReplicationEnabled') {
-                    isReplicaSetCache = false;
+            else {
+                try {
+                    const admin = db.admin();
+                    await admin.replSetGetStatus();
+                    isReplicaSetCache = true;
                     replicaSetCheckTime = now;
-                    logger_service_1.logger.warn(`⚠️  Standalone MongoDB detected - transactions will be disabled`);
+                    logger_service_1.logger.info(`✅ Replica set detected - transactions enabled`);
                 }
-                else {
-                    // Different error, rethrow
-                    logger_service_1.logger.error(`❌ Error checking replica set status:`, error);
-                    throw error;
+                catch (error) {
+                    // Not a replica set (standalone MongoDB)
+                    if (((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('replSet')) || error.codeName === 'NoReplicationEnabled') {
+                        isReplicaSetCache = false;
+                        replicaSetCheckTime = now;
+                        logger_service_1.logger.warn(`⚠️  Standalone MongoDB detected - transactions will be disabled`);
+                    }
+                    else {
+                        // Beklenmeyen hata: FAIL-CLOSED kal. Sessizce transaction'siz
+                        // devam etmek, atomiklik bekleyen bir yazma yolunu sessizce
+                        // zayiflatir ve `isReplicaSetCache` 60 sn boyunca onbelleklendigi
+                        // icin tek bir anlik hata butun pod'u etkilerdi.
+                        logger_service_1.logger.error(`❌ Error checking replica set status:`, error);
+                        throw error;
+                    }
                 }
             }
         }

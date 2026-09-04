@@ -431,6 +431,11 @@ export const createRedisWrapper = () => {
         getOrder: jest.fn().mockResolvedValue(null),
         setOrder: jest.fn().mockResolvedValue('OK'),
         delOrder: jest.fn().mockResolvedValue(1),
+        // NOT (issue #639): gercek RedisWrapper'da `deleteOrder` var
+        // (redisWrapper.service.ts:121) ama mock'ta yoktu; orders'ta silme route'unu
+        // olcen testler "redisWrapper.deleteOrder is not a function" ile kiriliyordu.
+        // Mock yuzeyi gercek servisle ayni olmali.
+        deleteOrder: jest.fn().mockResolvedValue(1),
     };
 };
 
@@ -1043,6 +1048,10 @@ export const AuthFailureTracker = {
 };
 
 // Model Creation Functions - Test-friendly versions
+// NOT (issue #639): Statik metot kumesi asagidaki createOutboxMock ile AYNI olmali.
+// `deleteMany` burada eksikti; `jest.requireActual('../models/outbox.schema')` ile
+// gercek semayi isteyen testler yine bu mock'a dusuyor ve temizlik adiminda
+// "Outbox.deleteMany is not a function" ile kiriliyordu.
 export const createOutboxModel = jest.fn(() => ({
     build: jest.fn().mockReturnValue({
         save: jest.fn().mockResolvedValue({
@@ -1056,10 +1065,15 @@ export const createOutboxModel = jest.fn(() => ({
     }),
     findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
+    findByIdAndDelete: jest.fn(),
     findOne: jest.fn(),
     find: jest.fn(),
     deleteOne: jest.fn(),
-    updateOne: jest.fn()
+    deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+    updateOne: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ nModified: 0 }),
+    countDocuments: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue([])
 }));
 
 // Outbox Mock - Universal mock for all services

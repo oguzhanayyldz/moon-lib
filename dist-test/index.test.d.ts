@@ -117,6 +117,7 @@ export declare const createRedisWrapper: () => {
     getOrder: jest.Mock<any, any, any>;
     setOrder: jest.Mock<any, any, any>;
     delOrder: jest.Mock<any, any, any>;
+    deleteOrder: jest.Mock<any, any, any>;
 };
 export declare const redisWrapper: {
     client: {
@@ -156,6 +157,7 @@ export declare const redisWrapper: {
     getOrder: jest.Mock<any, any, any>;
     setOrder: jest.Mock<any, any, any>;
     delOrder: jest.Mock<any, any, any>;
+    deleteOrder: jest.Mock<any, any, any>;
 };
 export declare const createMicroserviceSecurityService: (config?: any) => {
     config: any;
@@ -386,10 +388,15 @@ export declare const createOutboxModel: jest.Mock<{
     create: jest.Mock<any, any, any>;
     findById: jest.Mock<any, any, any>;
     findByIdAndUpdate: jest.Mock<any, any, any>;
+    findByIdAndDelete: jest.Mock<any, any, any>;
     findOne: jest.Mock<any, any, any>;
     find: jest.Mock<any, any, any>;
     deleteOne: jest.Mock<any, any, any>;
+    deleteMany: jest.Mock<any, any, any>;
     updateOne: jest.Mock<any, any, any>;
+    updateMany: jest.Mock<any, any, any>;
+    countDocuments: jest.Mock<any, any, any>;
+    aggregate: jest.Mock<any, any, any>;
 }, [], any>;
 export declare const createOutboxMock: () => {
     Outbox: jest.Mock<any, any, any>;
