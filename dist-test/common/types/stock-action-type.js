@@ -23,6 +23,11 @@ var StockActionType;
     StockActionType["Return"] = "return";
     // Seri numarası kontrolü 
     StockActionType["SerialNumberCheck"] = "serial_number_check";
+    // Alış faturasından stok girişi (issue #638)
+    // Addition'dan AYRI: Addition elle yapılan genel stok girişidir, bunun bir alış
+    // fiyatı ve tedarikçisi yoktur. Purchase kayıtları referenceId ile fatura kalemine
+    // bağlanır — "ne zaman girdi, kaça girdi" sorgusu bu ayrım olmadan yapılamaz.
+    StockActionType["Purchase"] = "purchase";
     // Diğer değişimler
     StockActionType["Other"] = "other";
 })(StockActionType || (exports.StockActionType = StockActionType = {}));

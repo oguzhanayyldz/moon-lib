@@ -47,6 +47,7 @@ export * from './order-integration-status-updated-event';
 export * from './product-matched-event';
 export * from './notification-created-event';
 export * from './newsletter-email-requested-event';
+export * from './product-cost-updated-event';
 export * from './entity-version-updated-event';
 export * from './entity-version-bulk-updated-event';
 export * from './sync-requested-event';

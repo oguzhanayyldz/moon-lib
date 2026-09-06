@@ -38,6 +38,10 @@ export const PERMISSION_RESOURCES = {
     CATALOGS: 'catalogs',
     FULFILLMENT: 'fulfillment',
     ANALYTICS: 'analytics',
+    // Alis faturasi + tedarikci (issue #638) — INVENTORY'den AYRI tutuldu:
+    // alis fiyati ticari veridir, alt kullaniciya stok gorme yetkisi verip
+    // alis fiyatini gizlemek mesru bir ihtiyactir.
+    PURCHASES: 'purchases',
     ALL: '*'
 } as const;
 

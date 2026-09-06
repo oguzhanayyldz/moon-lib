@@ -9,5 +9,6 @@ export declare enum StockActionType {
     Inventory = "inventory",
     Return = "return",
     SerialNumberCheck = "serial_number_check",
+    Purchase = "purchase",
     Other = "other"
 }
