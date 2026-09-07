@@ -28,6 +28,7 @@ import {
     DeleteProductImagesCompletedEvent,
     ProductPriceIntegrationUpdatedEvent,
     ProductPriceUpdatedEvent,
+    ProductCostUpdatedEvent,
     ProductErpIdUpdatedEvent,
     ProductStockIntegrationUpdatedEvent,
     CatalogMappingCreatedEvent,
@@ -83,6 +84,7 @@ interface EventPayloadMap {
     [Subjects.ProductStockIntegrationUpdated]: ProductStockIntegrationUpdatedEvent['data'];
     [Subjects.ProductImageIntegrationUpdated]: ProductImageIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
+    [Subjects.ProductCostUpdated]: ProductCostUpdatedEvent['data'];
     [Subjects.ProductErpIdUpdated]: ProductErpIdUpdatedEvent['data'];
     // Combination/PPL/RPL outbox type'ları kaldırıldı (issue #507)
     [Subjects.UserCreated]: UserCreatedEvent['data'];

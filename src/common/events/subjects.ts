@@ -96,6 +96,13 @@ export enum Subjects {
     StockCountStarted = "stock:count:started",
     StockCountFinished = "stock:count:finished",
 
+    // Urun maliyeti guncellendi (issue #638)
+    // inventory -> pricing: alis faturasi hareketli ortalama maliyeti degistirdi,
+    // pricing bunu Price.costPrice'a yazar. Maliyet hesabi inventory'de yapilir cunku
+    // formulun "mevcut stok" girdisi ProductStock'tur (inventory NATIVE) — pricing
+    // oraya erisemez (Kural 2).
+    ProductCostUpdated = "product:cost:updated",
+
     // Newsletter (issue #611)
     // auth → notification: bulten abonesine tek bir mail gonderilecek.
     // NotificationCreated YENIDEN KULLANILMADI: onun payload'i userId zorunlu kilar ve

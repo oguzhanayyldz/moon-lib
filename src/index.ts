@@ -132,6 +132,7 @@ export * from './events/publishers/stockCountStarted.publisher';
 export * from './events/publishers/stockCountFinished.publisher';
 export * from './events/publishers/productPriceIntegrationUpdated.publisher';
 export * from './events/publishers/productPriceUpdated.publisher';
+export * from './events/publishers/productCostUpdated.publisher';
 export * from './events/publishers/productStockIntegrationUpdated.publisher';
 export * from './events/publishers/productImageIntegrationUpdated.publisher';
 export * from './events/publishers/catalogMappingCreated.publisher';
