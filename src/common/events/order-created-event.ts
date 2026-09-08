@@ -119,6 +119,14 @@ export interface OrderCreated {
     invoiceTotal?: number;
     creditTotal?: number;
     shippingTotal?: number;
+    /**
+     * Siparisin KARGO MALIYETI — bize kargo firmasinin faturaladigi tutar (issue #638 Faz 2).
+     * `shippingTotal` ile KARISTIRILMAMALI: o, musteriden TAHSIL EDILEN kargo bedelidir (gelir);
+     * bu ise gider. Kar hesabinda ikisi ayri isaretle girer.
+     * Kaynak manuel/parametrik: kargo firmasi API'lerinde ucret alani yok (bkz. issue #638 Risk 1).
+     * Girilmemisse `undefined` kalir — kar panosu bunu "kargo haric" olarak isaretler.
+     */
+    cargoCost?: number;
     shippingTaxRate?: number;
     note?: string;
     date: Date;
