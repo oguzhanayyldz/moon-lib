@@ -76,6 +76,7 @@ export declare enum Subjects {
     StockCountStarted = "stock:count:started",
     StockCountFinished = "stock:count:finished",
     ProductCostUpdated = "product:cost:updated",
+    OrderProductCostAssigned = "order:product:cost:assigned",
     NewsletterEmailRequested = "newsletter:email:requested"
 }
 //# sourceMappingURL=subjects.d.ts.map

@@ -27,6 +27,7 @@ const importImagesFromUrlsCompletedPublisher_publisher_1 = require("../events/pu
 const productPriceIntegrationUpdated_publisher_1 = require("../events/publishers/productPriceIntegrationUpdated.publisher");
 const productPriceUpdated_publisher_1 = require("../events/publishers/productPriceUpdated.publisher");
 const productCostUpdated_publisher_1 = require("../events/publishers/productCostUpdated.publisher");
+const orderProductCostAssigned_publisher_1 = require("../events/publishers/orderProductCostAssigned.publisher");
 const productErpIdUpdated_publisher_1 = require("../events/publishers/productErpIdUpdated.publisher");
 const productStockIntegrationUpdated_publisher_1 = require("../events/publishers/productStockIntegrationUpdated.publisher");
 const productImageIntegrationUpdated_publisher_1 = require("../events/publishers/productImageIntegrationUpdated.publisher");
@@ -498,6 +499,10 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.ProductCostUpdated:
                 await new productCostUpdated_publisher_1.ProductCostUpdatedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.OrderProductCostAssigned:
+                await new orderProductCostAssigned_publisher_1.OrderProductCostAssignedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case common_1.Subjects.ProductErpIdUpdated:
