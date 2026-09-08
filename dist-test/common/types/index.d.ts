@@ -24,5 +24,6 @@ export * from './integration-params';
 export * from './integration-limits';
 export * from './cron-defaults';
 export * from './cost-source';
+export * from './goods-receipt-status';
 export * from './costing-method';
 //# sourceMappingURL=index.d.ts.map
