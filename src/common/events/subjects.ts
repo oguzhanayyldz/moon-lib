@@ -103,6 +103,15 @@ export enum Subjects {
     // oraya erisemez (Kural 2).
     ProductCostUpdated = "product:cost:updated",
 
+    // Siparis kaleminin maliyeti ATANDI (issue #683, epic #677 Faz C).
+    // Yayinlayan: inventory — rezervasyon aninda maliyet katmanlari tuketilir ve
+    // tuketilen agirlikli birim maliyet bu event ile orders'a tasinir.
+    // Dinleyen: orders (OrderProduct.costPrice/costTotal/costSource yazar)
+    //
+    // NEDEN AYRI EVENT: maliyet inventory'de hesaplanir (katmanlar orada NATIVE'dir),
+    // ama siparis kalemi orders'a aittir. Kural 2 geregi inventory oraya yazamaz.
+    OrderProductCostAssigned = "order:product:cost:assigned",
+
     // Newsletter (issue #611)
     // auth → notification: bulten abonesine tek bir mail gonderilecek.
     // NotificationCreated YENIDEN KULLANILMADI: onun payload'i userId zorunlu kilar ve

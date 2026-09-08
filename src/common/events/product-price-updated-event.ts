@@ -18,6 +18,17 @@ export interface ProductPriceUpdated {
     combination?: string,
     price: number,
     listPrice?: number,
+    /**
+     * SABIT maliyet — kullanicinin beyan ettigi alis fiyati (issue #683).
+     *
+     * Orders bunu Product FOREIGN kopyasina yazar ve maliyet katmani BULUNAMAYAN
+     * siparislerde kalem maliyeti olarak kullanir (CostSource.Fixed). Katman varsa
+     * `OrderProductCostAssigned` bunu ezer — katman daha kesin bir kaynaktir.
+     *
+     * `Price.averageCost` (fatura ortalamasi) BURAYA KONMAZ: o bilgi amaclidir ve
+     * siparis maliyetine girmez (bkz. docs/architecture/maliyet-kurgusu.md).
+     */
+    costPrice?: number,
     version: number,  // Version bilgisini de ekleyin
     source: ResourceName,
     integrationName?: ResourceName,
