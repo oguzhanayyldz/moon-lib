@@ -40,5 +40,6 @@ __exportStar(require("./integration-params"), exports);
 __exportStar(require("./integration-limits"), exports);
 __exportStar(require("./cron-defaults"), exports);
 __exportStar(require("./cost-source"), exports);
+__exportStar(require("./goods-receipt-status"), exports);
 __exportStar(require("./costing-method"), exports);
 //# sourceMappingURL=index.js.map
