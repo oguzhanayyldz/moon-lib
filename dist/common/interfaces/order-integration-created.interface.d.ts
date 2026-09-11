@@ -1,6 +1,7 @@
 import { OrderStatus } from "../events/types/order-status";
 import { OrderType } from "../events/types/order-type";
 import { PaymentType } from "../events/types/payment-type";
+import { CostSource } from "../types/cost-source";
 import { CurrencyCode } from "../types/currency-code";
 import { ResourceName } from "../types/resourceName";
 export interface OrderIntegrationCreated {
@@ -47,6 +48,7 @@ export interface OrderIntegrationProductCreted {
     discountTotal?: number;
     commissionPrice?: number;
     commissionTotal?: number;
+    commissionSource?: CostSource;
     costPrice?: number;
     costTotal?: number;
     fields?: Record<string, any>;
