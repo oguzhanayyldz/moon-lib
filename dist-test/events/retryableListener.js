@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RetryableListener = void 0;
 const common_1 = require("../common");
 const retryManager_1 = require("../services/retryManager");
+const redisEnvScope_util_1 = require("../utils/redisEnvScope.util");
 const deadLetter_schema_1 = require("../models/deadLetter.schema");
 const mongoose_1 = __importDefault(require("mongoose"));
 const redisWrapper_service_1 = require("../services/redisWrapper.service");
@@ -27,7 +28,11 @@ class RetryableListener extends common_1.Listener {
      * Distributed lock ile işlem yapmak için yardımcı metod
      */
     async processWithLock(eventId, callback) {
-        const lockKey = `lock:${this.subject}:${eventId}`;
+        // Ortam kapsamlı kilit (ENV-ISO): ad yalnız çözülen ortam 'production' ise aynı kalır
+        // (REDIS_KEY_ENV || NODE_ENV || 'production'). invoice ve shipment prod'da NODE_ENV=development
+        // koşar; REDIS_KEY_ENV=production verilmezse orada da `development:` öneki alır.
+        // Farklı ortamlar aynı eventId için birbirinin kilidini tutup mesajı düşürtemez.
+        const lockKey = (0, redisEnvScope_util_1.envScopedKey)(`lock:${this.subject}:${eventId}`);
         const lockValue = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
         // Log ekleniyor
         logger_service_1.logger.debug(`Attempting to acquire lock for ${this.subject}:${eventId}`);
@@ -126,7 +131,7 @@ class RetryableListener extends common_1.Listener {
                 catch (lockError) {
                     if ((_a = lockError.message) === null || _a === void 0 ? void 0 : _a.includes('Lock acquisition failed')) {
                         // Lock alınamadı — kısa jitter ile return, blocking sleep YAPMA
-                        const lockKey = `lock:${this.subject}:${eventId}`;
+                        const lockKey = (0, redisEnvScope_util_1.envScopedKey)(`lock:${this.subject}:${eventId}`);
                         try {
                             const ttl = await redisWrapper_service_1.redisWrapper.client.ttl(lockKey);
                             span.setTag('lock.conflict', true);

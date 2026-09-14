@@ -1,5 +1,6 @@
 import { RedisClientType } from 'redis';
 import { redisWrapper } from './redisWrapper.service';
+import { envScopedKey } from '../utils/redisEnvScope.util';
 
 export interface RetryConfig {
     maxRetries: number;
@@ -9,6 +10,10 @@ export interface RetryConfig {
 
 export class RetryManager {
     private readonly redisClient: RedisClientType;
+    // Anahtarlar envScopedKey ile ortam kapsamlı (ENV-ISO): ad yalnız çözülen ortam 'production'
+    // ise aynı kalır (REDIS_KEY_ENV || NODE_ENV || 'production'). invoice ve shipment prod'da
+    // NODE_ENV=development koşar; REDIS_KEY_ENV=production verilmezse orada da önek alır.
+    // Farklı ortamların başarısızlıkları birbirinin deneme sayacını tüketmez.
     private readonly keyPrefix: string = 'event:retry:';
     private readonly defaultConfig: RetryConfig = {
         maxRetries: 5,
@@ -26,7 +31,7 @@ export class RetryManager {
      * Bir olayın retry sayısını al
      */
     async getRetryCount(eventType: string, eventId: string): Promise<number> {
-        const key = `${this.keyPrefix}${eventType}:${eventId}`;
+        const key = envScopedKey(`${this.keyPrefix}${eventType}:${eventId}`);
         const count = await this.redisClient.get(key);
         return count ? parseInt(count, 10) : 0;
     }
@@ -35,7 +40,7 @@ export class RetryManager {
      * Retry sayısını artır ve yeni değeri döndür
      */
     async incrementRetryCount(eventType: string, eventId: string): Promise<number> {
-        const key = `${this.keyPrefix}${eventType}:${eventId}`;
+        const key = envScopedKey(`${this.keyPrefix}${eventType}:${eventId}`);
         const retryCount = await this.getRetryCount(eventType, eventId);
         const newCount = retryCount + 1;
 
@@ -50,7 +55,7 @@ export class RetryManager {
      * Retry sayacını sıfırla
      */
     async resetRetryCount(eventType: string, eventId: string): Promise<void> {
-        const key = `${this.keyPrefix}${eventType}:${eventId}`;
+        const key = envScopedKey(`${this.keyPrefix}${eventType}:${eventId}`);
         await this.redisClient.del(key);
     }
 
@@ -86,7 +91,7 @@ export class RetryManager {
      * Retry'ı planla - Redis'te delayed retry key'i oluştur
      */
     async scheduleRetry(eventType: string, eventId: string, delayMs: number): Promise<void> {
-        const scheduleKey = `${this.keyPrefix}scheduled:${eventType}:${eventId}`;
+        const scheduleKey = envScopedKey(`${this.keyPrefix}scheduled:${eventType}:${eventId}`);
         const nextRetryAt = Date.now() + delayMs;
         
         await this.redisClient.set(scheduleKey, nextRetryAt.toString(), {
@@ -98,7 +103,7 @@ export class RetryManager {
      * Planlanmış retry'ı kontrol et
      */
     async isRetryScheduled(eventType: string, eventId: string): Promise<boolean> {
-        const scheduleKey = `${this.keyPrefix}scheduled:${eventType}:${eventId}`;
+        const scheduleKey = envScopedKey(`${this.keyPrefix}scheduled:${eventType}:${eventId}`);
         const nextRetryAt = await this.redisClient.get(scheduleKey);
         
         if (!nextRetryAt) return false;
@@ -113,7 +118,7 @@ export class RetryManager {
      * Planlanmış retry'ı temizle
      */
     async clearScheduledRetry(eventType: string, eventId: string): Promise<void> {
-        const scheduleKey = `${this.keyPrefix}scheduled:${eventType}:${eventId}`;
+        const scheduleKey = envScopedKey(`${this.keyPrefix}scheduled:${eventType}:${eventId}`);
         await this.redisClient.del(scheduleKey);
     }
 }
