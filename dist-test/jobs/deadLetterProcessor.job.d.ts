@@ -28,6 +28,7 @@ export declare class DeadLetterProcessorJob {
      * - Yalnız bu süreçte kayıtlı ve oynatması açık listener'ların kayıtları claim edilir. Başka kuyruk grubunun
      *   kaydı, oynatması kapalı listener'ın kaydı ve listenerKey'i olmayan eski kayıt seçilmez.
      * - Bir tur sürerken yeni tur başlamaz; bir turda en fazla MAX_REPLAYS_PER_CYCLE kayıt işlenir.
+     * - Bir oynatma en fazla PROCESSING_TIMEOUT beklenir; dönmeyen handler turu durduramaz.
      */
     private processPendingEvents;
     /**
@@ -38,6 +39,12 @@ export declare class DeadLetterProcessorJob {
      * Tek bir dead letter olayını kaydı yazan listener'a oynat ve sonucu aynı kayda yaz
      */
     private processEvent;
+    /**
+     * Oynatmayı PROCESSING_TIMEOUT ile sınırlar: dönmeyen bir handler bu işlemcinin turunu süresiz durdurmasın.
+     * Süre dolunca handler iptal edilemez, arka planda sürer ve geç gelen sonucu yazılmaz; kayıt `busy` sayılır ve
+     * deneme bütçesi tüketilmeden geri bırakılır. Süre, takılı kaydın başka işleyiciye geçtiği süreyle aynıdır.
+     */
+    private replayWithinTimeout;
     /**
      * Başarısız oynatma aynı kaydın sayacını artırır; bütçe dolunca kayıt `failed` olur ve bir daha oynatılmaz
      */

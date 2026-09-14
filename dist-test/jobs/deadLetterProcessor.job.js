@@ -72,6 +72,7 @@ class DeadLetterProcessorJob {
      * - Yalnız bu süreçte kayıtlı ve oynatması açık listener'ların kayıtları claim edilir. Başka kuyruk grubunun
      *   kaydı, oynatması kapalı listener'ın kaydı ve listenerKey'i olmayan eski kayıt seçilmez.
      * - Bir tur sürerken yeni tur başlamaz; bir turda en fazla MAX_REPLAYS_PER_CYCLE kayıt işlenir.
+     * - Bir oynatma en fazla PROCESSING_TIMEOUT beklenir; dönmeyen handler turu durduramaz.
      */
     async processPendingEvents() {
         if (this.running || !DeadLetterProcessorJob.isReplayEnabled()) {
@@ -155,7 +156,7 @@ class DeadLetterProcessorJob {
         logger_service_1.logger.info(`Replaying dead letter event ${event.id}: ${event.listenerKey}`);
         let result;
         try {
-            result = await target.replayDeadLetter(event.data);
+            result = await this.replayWithinTimeout(event, target);
         }
         catch (error) {
             // replayDeadLetter hatayı kendisi sonuca çevirir; beklenmeyen bir hata başarısız deneme sayılır
@@ -184,6 +185,28 @@ class DeadLetterProcessorJob {
             return;
         }
         await this.markReplayFailed(event, target);
+    }
+    /**
+     * Oynatmayı PROCESSING_TIMEOUT ile sınırlar: dönmeyen bir handler bu işlemcinin turunu süresiz durdurmasın.
+     * Süre dolunca handler iptal edilemez, arka planda sürer ve geç gelen sonucu yazılmaz; kayıt `busy` sayılır ve
+     * deneme bütçesi tüketilmeden geri bırakılır. Süre, takılı kaydın başka işleyiciye geçtiği süreyle aynıdır.
+     */
+    async replayWithinTimeout(event, target) {
+        let timer;
+        const timedOut = new Promise(resolve => {
+            timer = setTimeout(() => resolve('timeout'), DeadLetterProcessorJob.PROCESSING_TIMEOUT);
+        });
+        try {
+            const outcome = await Promise.race([target.replayDeadLetter(event.data), timedOut]);
+            if (outcome === 'timeout') {
+                logger_service_1.logger.warn(`Dead letter replay of ${event.id} did not finish within ${DeadLetterProcessorJob.PROCESSING_TIMEOUT / 60000} minutes, releasing the record without using the attempt budget: ${event.listenerKey}`);
+                return 'busy';
+            }
+            return outcome;
+        }
+        finally {
+            clearTimeout(timer);
+        }
     }
     /**
      * Başarısız oynatma aynı kaydın sayacını artırır; bütçe dolunca kayıt `failed` olur ve bir daha oynatılmaz
@@ -269,5 +292,5 @@ DeadLetterProcessorJob.PROCESSOR_INTERVAL = 60000; // Her 1 dakikada bir çalı�
 DeadLetterProcessorJob.MAX_RETRY_DELAY = 30 * 60000; // Başarısız oynatmadan sonra en fazla 30 dakika bekle
 DeadLetterProcessorJob.BUSY_RETRY_DELAY = 60000; // Olay kilitliyse 1 dakika sonra yeniden dene
 DeadLetterProcessorJob.MAX_REPLAYS_PER_CYCLE = 50; // Bir turda en fazla bu kadar kayıt oynatılır
-DeadLetterProcessorJob.PROCESSING_TIMEOUT = 10 * 60 * 1000; // Bu süreden uzun süren oynatma takılı sayılır
+DeadLetterProcessorJob.PROCESSING_TIMEOUT = 10 * 60 * 1000; // Bu süreden uzun süren oynatma takılı sayılır ve beklenmez
 //# sourceMappingURL=deadLetterProcessor.job.js.map

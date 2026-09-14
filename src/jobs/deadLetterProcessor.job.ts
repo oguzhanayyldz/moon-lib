@@ -10,7 +10,7 @@ export class DeadLetterProcessorJob {
     private static readonly MAX_RETRY_DELAY = 30 * 60000; // Başarısız oynatmadan sonra en fazla 30 dakika bekle
     private static readonly BUSY_RETRY_DELAY = 60000; // Olay kilitliyse 1 dakika sonra yeniden dene
     private static readonly MAX_REPLAYS_PER_CYCLE = 50; // Bir turda en fazla bu kadar kayıt oynatılır
-    private static readonly PROCESSING_TIMEOUT = 10 * 60 * 1000; // Bu süreden uzun süren oynatma takılı sayılır
+    private static readonly PROCESSING_TIMEOUT = 10 * 60 * 1000; // Bu süreden uzun süren oynatma takılı sayılır ve beklenmez
     private intervalId: NodeJS.Timeout | null = null;
     private stuckCheckIntervalId: NodeJS.Timeout | null = null;
     private running = false;
@@ -84,6 +84,7 @@ export class DeadLetterProcessorJob {
      * - Yalnız bu süreçte kayıtlı ve oynatması açık listener'ların kayıtları claim edilir. Başka kuyruk grubunun
      *   kaydı, oynatması kapalı listener'ın kaydı ve listenerKey'i olmayan eski kayıt seçilmez.
      * - Bir tur sürerken yeni tur başlamaz; bir turda en fazla MAX_REPLAYS_PER_CYCLE kayıt işlenir.
+     * - Bir oynatma en fazla PROCESSING_TIMEOUT beklenir; dönmeyen handler turu durduramaz.
      */
     private async processPendingEvents(): Promise<void> {
         if (this.running || !DeadLetterProcessorJob.isReplayEnabled()) {
@@ -178,7 +179,7 @@ export class DeadLetterProcessorJob {
 
         let result: DeadLetterReplayResult;
         try {
-            result = await target.replayDeadLetter(event.data);
+            result = await this.replayWithinTimeout(event, target);
         } catch (error) {
             // replayDeadLetter hatayı kendisi sonuca çevirir; beklenmeyen bir hata başarısız deneme sayılır
             logger.error(`Error replaying dead letter event ${event.id}:`, error);
@@ -213,6 +214,29 @@ export class DeadLetterProcessorJob {
         }
 
         await this.markReplayFailed(event, target);
+    }
+
+    /**
+     * Oynatmayı PROCESSING_TIMEOUT ile sınırlar: dönmeyen bir handler bu işlemcinin turunu süresiz durdurmasın.
+     * Süre dolunca handler iptal edilemez, arka planda sürer ve geç gelen sonucu yazılmaz; kayıt `busy` sayılır ve
+     * deneme bütçesi tüketilmeden geri bırakılır. Süre, takılı kaydın başka işleyiciye geçtiği süreyle aynıdır.
+     */
+    private async replayWithinTimeout(event: DeadLetterDoc, target: DeadLetterReplayTarget): Promise<DeadLetterReplayResult> {
+        let timer: NodeJS.Timeout | undefined;
+        const timedOut = new Promise<'timeout'>(resolve => {
+            timer = setTimeout(() => resolve('timeout'), DeadLetterProcessorJob.PROCESSING_TIMEOUT);
+        });
+
+        try {
+            const outcome = await Promise.race([target.replayDeadLetter(event.data), timedOut]);
+            if (outcome === 'timeout') {
+                logger.warn(`Dead letter replay of ${event.id} did not finish within ${DeadLetterProcessorJob.PROCESSING_TIMEOUT / 60000} minutes, releasing the record without using the attempt budget: ${event.listenerKey}`);
+                return 'busy';
+            }
+            return outcome;
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     /**

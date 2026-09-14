@@ -11,7 +11,8 @@
  *
  * Tests marked "K-2:" / "K-3:" failed on 11677f7 and pass with the 648-G3 fix; tests marked "G3:"
  * pin the behaviour of that fix (bounded replay, replay back-off schedule, no automatic replay of old records,
- * capped back-off, dead-letter records that stay valid for any thrown value, DLQ write error metric, indexes).
+ * capped back-off, a record written after the attempt budget ran out, dead-letter records that stay valid for any thrown value,
+ * DLQ write error metric, indexes).
  * Since DLQ-H the processor replays a record through the listener that wrote it instead of publishing it to NATS
  * (deadLetter.targetedReplay.test.ts), so replays are measured on the listener's handler and on the dead-letter record.
  * RetryableListener, RetryManager, DeadLetterProcessorJob and the DeadLetter schema run
@@ -266,6 +267,32 @@ describe('#648 K-2 — DeadLetterProcessorJob replays records written by Retryab
 
         expect(scheduled).toEqual([1, 2, 4, 8, 16, 30, 30]);
         expect(record.status).toBe('failed');
+    });
+
+    it.each([
+        { attemptsUsed: DEFAULT_RETRY_LIMIT + 4, status: 'queued', replays: 1 },
+        { attemptsUsed: 2 * DEFAULT_RETRY_LIMIT, status: 'failed', replays: 0 },
+    ])('G3: a message whose DLQ write failed until attempt $attemptsUsed of 10 is dead-lettered as $status once Mongo is back and replayed $replays time(s)', async ({ attemptsUsed, status, replays }) => {
+        const deadLetters = createDeadLetterStore({ readyState: 0 });
+        const listener = new FailingStockCopyListener(nats.client, {}, deadLetters.connection);
+        listener.listen();
+        const processor = new DeadLetterProcessorJob(nats.client, deadLetters.connection) as unknown as DeadLetterProcessorInternals;
+        const msg = createFakeMessage(payload);
+        // While Mongo is down every exhausted delivery fails to write its record and is not acked, so each redelivery uses an attempt.
+        await redeliver(listener, msg, attemptsUsed - 1);
+        expect({ acked: wasAcked(msg), records: deadLetters.collection.docs.length }).toEqual({ acked: false, records: 0 });
+
+        Object.assign(deadLetters.connection, { readyState: 1 });
+        await redeliver(listener, msg, 1);
+        const [record] = deadLetters.collection.docs;
+        expect({ acked: wasAcked(msg), records: deadLetters.collection.docs.length, status: record?.status, retryCount: record?.retryCount, maxRetries: record?.maxRetries })
+            .toEqual({ acked: true, records: 1, status, retryCount: attemptsUsed, maxRetries: 2 * DEFAULT_RETRY_LIMIT });
+
+        listener.failing = false;
+        const attemptsBefore = listener.attempts;
+        await clock.advance(31 * 60_000);
+        await processor.processPendingEvents();
+        expect(listener.attempts - attemptsBefore).toBe(replays);
     });
 
     it('G3: a pending record written before the fix (retryCount >= maxRetries) is not replayed automatically', async () => {

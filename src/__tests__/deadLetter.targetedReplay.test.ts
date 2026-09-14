@@ -8,7 +8,8 @@
  *
  * Tests marked "DLQ-H1".."DLQ-H3" failed on 9d13cf5 and pass with targeted replay; the other tests pin the safety
  * properties of targeted replay (H4 unregistered keys, H5 two processors, H6 busy, H7 switch, H8 re-entrancy),
- * the per-cycle cap, the per-listener opt-out, stuck replays, the replay metric and RetryableListener.replayDeadLetter.
+ * the per-cycle cap, the per-listener opt-out, stuck replays, the environment filter, the replay time limit,
+ * the replay metric and RetryableListener.replayDeadLetter.
  * Two services share one fake NATS bus that tells queue groups apart; each service has its own DeadLetter store.
  * In production every service has its own Redis database, so the listeners of the two services use
  * service-prefixed event ids and never share a retry counter or lock in the single in-memory Redis.
@@ -391,8 +392,10 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
 
         const stuckCycle = svcA.processor.processPendingEvents();
         await waitUntil(() => listener.started === 1);
-        // The first replay hangs past the 10 minute stuck timeout (its 30 s event lock expires); another processor takes the record over.
-        await clock.advance(11 * 60_000);
+        // Pod clocks differ: to the other pod the replay started more than 10 minutes ago, while the replay time limit of
+        // the first processor has not passed yet. The 30 s event lock of the first replay expires; the other processor takes the record over.
+        record.processingStartedAt = new Date(Date.now() - 11 * 60_000);
+        await clock.advance(31_000);
         const takeoverCycle = takeoverProcessor.processPendingEvents();
         await waitUntil(() => listener.started === 2);
         listener.release();
@@ -540,6 +543,31 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
         expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('no listener registered'));
     });
 
+    it('DLQ-H: the record of a listener started with deadLetterReplay: false is never claimed, so the processor does not touch it at all', async () => {
+        const svcA = createServiceA();
+        const optedOut = new FailingStockCopyListener(svcA.client, { deadLetterReplay: false }, svcA.deadLetters.connection);
+        const mirror = new StockMirrorListener(svcA.client, {}, svcA.deadLetters.connection);
+        optedOut.failing = false;
+        optedOut.listen();
+        mirror.listen();
+        // The opted-out record is due first, so a claim that ignored the opt-out would take it before the mirror record.
+        const optedOutRecord = seedQueued(svcA.deadLetters, { nextRetryAt: new Date(Date.now() - 2000) });
+        const mirrorRecord = seedQueued(svcA.deadLetters, {
+            eventId: `svc-b-stock-${stockV4.id}-v${stockV4.version}`, data: stockV4, listenerKey: SVC_B_KEY, queueGroupName: 'svc-b-stock-mirror',
+        });
+        const optedOutBefore = { ...optedOutRecord };
+
+        for (let cycle = 0; cycle < 3; cycle++) {
+            await clock.advance(31 * 60_000);
+            await svcA.processor.processPendingEvents();
+        }
+
+        expect({ ...optedOutRecord }).toEqual(optedOutBefore);
+        expect({ optedOutAttempts: optedOut.attempts, mirrorApplied: mirror.applied.map(data => data.version), mirrorStatus: mirrorRecord.status })
+            .toEqual({ optedOutAttempts: 0, mirrorApplied: [stockV4.version], mirrorStatus: 'completed' });
+        expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('No replay target registered'));
+    });
+
     it('DLQ-H: a replay stuck for more than 10 minutes is released and replayed again; a stuck record of the old processor goes back to pending', async () => {
         const svcA = createServiceA();
         const listener = new FailingStockCopyListener(svcA.client, {}, svcA.deadLetters.connection);
@@ -561,6 +589,88 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
         expect({ attempts: listener.attempts, record: record.status, legacy: legacy.status })
             .toEqual({ attempts: 1, record: 'completed', legacy: 'pending' });
         expect(logger.info).toHaveBeenCalledWith('Released 2 stuck dead letter events');
+    });
+
+    it('DLQ-H: a replay that started less than 10 minutes ago is not released, so another pod cannot replay it at the same time', async () => {
+        const svcA = createServiceA();
+        new FailingStockCopyListener(svcA.client, {}, svcA.deadLetters.connection).listen();
+        const running = seedQueued(svcA.deadLetters, {
+            status: 'replaying', processorId: 'pod-1', processingStartedAt: new Date(Date.now() - 9 * 60_000),
+        });
+        const stuck = seedQueued(svcA.deadLetters, {
+            eventId: `svc-a-stock-${stockV4.id}-v${stockV4.version}`, data: stockV4,
+            status: 'replaying', processorId: 'crashed-pod', processingStartedAt: new Date(Date.now() - 11 * 60_000),
+        });
+        const runningBefore = { ...running };
+
+        await svcA.processor.releaseStuckEvents();
+
+        expect({ ...running }).toEqual(runningBefore);
+        expect({ status: stuck.status, processorId: stuck.processorId }).toEqual({ status: 'queued', processorId: undefined });
+        expect(logger.info).toHaveBeenCalledWith('Released 1 stuck dead letter events');
+    });
+
+    it('DLQ-H: dead-letter records of another environment in the same database are neither claimed nor released', async () => {
+        // A process of one environment can share the database of another (e.g. a local service on the production database).
+        const currentEnvironment = process.env.NODE_ENV || 'production';
+        const otherEnvironment = currentEnvironment === 'production' ? 'development' : 'production';
+        const svcA = createServiceA();
+        const listener = new FailingStockCopyListener(svcA.client, {}, svcA.deadLetters.connection);
+        listener.failing = false;
+        listener.listen();
+        const otherQueued = seedQueued(svcA.deadLetters, { environment: otherEnvironment, nextRetryAt: new Date(Date.now() - 2000) });
+        const otherStuck = seedQueued(svcA.deadLetters, {
+            environment: otherEnvironment, eventId: `svc-a-stock-${stockV4.id}-v${stockV4.version}`, data: stockV4,
+            status: 'replaying', processorId: 'other-environment-pod', processingStartedAt: new Date(Date.now() - 11 * 60_000),
+        });
+        const ownData = { ...stockV3, id: 'stock-2' };
+        const own = seedQueued(svcA.deadLetters, { eventId: `svc-a-stock-${ownData.id}-v${ownData.version}`, data: ownData });
+        const otherBefore = [{ ...otherQueued }, { ...otherStuck }];
+
+        await svcA.processor.releaseStuckEvents();
+        await svcA.processor.processPendingEvents();
+
+        expect([{ ...otherQueued }, { ...otherStuck }]).toEqual(otherBefore);
+        expect({ applied: listener.applied.map(data => data.id), ownStatus: own.status }).toEqual({ applied: [ownData.id], ownStatus: 'completed' });
+    });
+
+    it('DLQ-H: a replay that does not finish within 10 minutes is released as busy with a warning and the processor goes on with the next record', async () => {
+        const svcA = createServiceA();
+        const listener = new GatedStockCopyListener(svcA.client, {}, svcA.deadLetters.connection);
+        listener.failing = false;
+        listener.listen();
+        const hanging = seedQueued(svcA.deadLetters, { nextRetryAt: new Date(Date.now() - 2000) });
+        const next = seedQueued(svcA.deadLetters, { eventId: `svc-a-stock-${stockV4.id}-v${stockV4.version}`, data: stockV4 });
+
+        const cycle = svcA.processor.processPendingEvents();
+        await waitUntil(() => listener.started === 1);
+        await clock.advance(9 * 60_000);
+        const beforeLimit = { status: hanging.status, started: listener.started };
+        // The handler never returns, e.g. an external call without a timeout.
+        await clock.advance(60_000);
+        await waitUntil(() => listener.started === 2);
+
+        expect(beforeLimit).toEqual({ status: 'replaying', started: 1 });
+        expect({
+            status: hanging.status,
+            retryCount: hanging.retryCount,
+            minutesUntilReplay: ((hanging.nextRetryAt as Date).getTime() - Date.now()) / 60_000,
+            processorId: hanging.processorId,
+            nextStatus: next.status,
+        }).toEqual({ status: 'queued', retryCount: DEFAULT_RETRY_LIMIT, minutesUntilReplay: 1, processorId: undefined, nextStatus: 'replaying' });
+        expect(logger.warn).toHaveBeenCalledWith(
+            `Dead letter replay of ${hanging.id} did not finish within 10 minutes, releasing the record without using the attempt budget: ${SVC_A_KEY}`
+        );
+
+        // Both handlers return: the late result of the released replay is not written, the next record completes.
+        listener.release();
+        await cycle;
+
+        const labels = { service: 'svc-a', event_type: Subjects.StockUpdated, queue_group: 'svc-a-stock-copy' };
+        expect({ status: hanging.status, retryCount: hanging.retryCount, nextStatus: next.status })
+            .toEqual({ status: 'queued', retryCount: DEFAULT_RETRY_LIMIT, nextStatus: 'completed' });
+        expect((EventMetrics.eventDlqReplayTotal.inc as jest.Mock).mock.calls).toEqual([[{ ...labels, result: 'busy' }], [{ ...labels, result: 'processed' }]]);
+        expect(jest.getTimerCount()).toBe(0);
     });
 
     it('DLQ-H: queued records whose listener is not started in this process are counted in a warning', async () => {
