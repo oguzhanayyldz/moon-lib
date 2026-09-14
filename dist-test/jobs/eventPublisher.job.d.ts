@@ -7,6 +7,7 @@ export declare class EventPublisherJob {
     private static readonly RETRY_INTERVAL;
     private static readonly VERSION_EVENT_INTERVAL;
     private static readonly ALERT_THRESHOLD;
+    private static readonly ALERT_LOG_INTERVAL;
     private static readonly MAX_PUBLISH_ATTEMPTS;
     private static readonly PUBLISH_RETRY_BASE_DELAY;
     private static readonly PUBLISH_RETRY_MAX_DELAY;
@@ -15,6 +16,7 @@ export declare class EventPublisherJob {
     private intervalId;
     private versionEventIntervalId;
     private monitoringId;
+    private lastAlertLoggedAt;
     private readonly outboxModel;
     private readonly serviceOffset;
     private lastProcessedPriority;

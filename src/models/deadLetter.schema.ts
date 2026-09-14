@@ -106,8 +106,13 @@ const deadLetterSchemaDefination = {
 const deadLetterSchema = createBaseSchema(deadLetterSchemaDefination);
 
 // Compound index for optimal query performance
-// Optimizes: { status: 'pending', environment: 'production', retryCount: { $lt: maxRetries } }
+// Issue #648 öncesindeki sorgu biçimi için: { status: 'pending', environment, retryCount: { $lt: 5 } }.
+// Mevcut veritabanlarında kurulu olduğu için tanımda bırakıldı.
 deadLetterSchema.index({ status: 1, environment: 1, retryCount: 1, nextRetryAt: 1 });
+// Issue #648 K-2: DeadLetterProcessorJob sorgusu { status: 'pending', environment, nextRetryAt: { $lte: now } }
+// ve sıralaması { nextRetryAt: 1 }. Bütçe koşulu ($expr: retryCount < maxRetries) index kullanamaz;
+// yalnız bu index'in daralttığı, zamanı gelmiş pending kayıtlar üzerinde değerlendirilir.
+deadLetterSchema.index({ status: 1, environment: 1, nextRetryAt: 1 });
 
 export function createDeadLetterModel(connection: mongoose.Connection) {
     try {

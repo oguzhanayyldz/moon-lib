@@ -92,6 +92,7 @@ class EventPublisherJob {
         this.intervalId = null;
         this.versionEventIntervalId = null; // Version eventleri için ayrı interval
         this.monitoringId = null;
+        this.lastAlertLoggedAt = null; // Son ALERT logunun zamanı; sayı eşiğin altına inince sıfırlanır
         // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
         this.lastProcessedPriority = new Map();
         this.outboxModel = (0, outbox_schema_1.createOutboxModel)(connection);
@@ -317,8 +318,9 @@ class EventPublisherJob {
                     yield this.publishEvent(event);
                 }
                 catch (error) {
-                    yield this.markPublishFailed({ _id: event.id }, event.retryCount);
+                    // Önce logla: markPublishFailed'daki Mongo hatası dış catch'e düşer ve asıl yayın hatası kaybolmaz
                     logger_service_1.logger.error(`Failed to publish event ${event.id}:`, error);
+                    yield this.markPublishFailed({ _id: event.id }, event.retryCount);
                     return;
                 }
                 // Başarılı olarak işaretle
@@ -416,6 +418,8 @@ class EventPublisherJob {
                     logger_service_1.logger.info(`✅ Bulk published ${versionEvents.length} EntityVersionUpdated events (batch: ${batchId})`);
                 }
                 catch (error) {
+                    // Önce logla: işaretleme sırasındaki Mongo hatası asıl yayın hatasını gizlemesin
+                    logger_service_1.logger.error('❌ Failed to publish bulk EntityVersionUpdated events:', error);
                     // Hata durumunda tümünü 'failed' yap; bekleme ve kalıcı başarısızlık kaydın kendi retryCount'una göre belirlenir
                     const idsByRetryCount = new Map();
                     for (const versionEvent of versionEvents) {
@@ -426,7 +430,6 @@ class EventPublisherJob {
                     for (const [retryCount, ids] of idsByRetryCount) {
                         yield this.markPublishFailed({ _id: { $in: ids } }, retryCount);
                     }
-                    logger_service_1.logger.error('❌ Failed to publish bulk EntityVersionUpdated events:', error);
                 }
             }
             catch (error) {
@@ -473,7 +476,12 @@ class EventPublisherJob {
                     status: 'failed',
                     retryCount: { $gte: EventPublisherJob.MAX_PUBLISH_ATTEMPTS }
                 });
-                if (failedEvents >= EventPublisherJob.ALERT_THRESHOLD) {
+                if (failedEvents < EventPublisherJob.ALERT_THRESHOLD) {
+                    // Kayıtlar temizlendi: eşik yeniden aşılırsa ALERT beklemeden loglanır
+                    this.lastAlertLoggedAt = null;
+                }
+                else if (this.lastAlertLoggedAt === null || Date.now() - this.lastAlertLoggedAt >= EventPublisherJob.ALERT_LOG_INTERVAL) {
+                    this.lastAlertLoggedAt = Date.now();
                     logger_service_1.logger.error(`ALERT: ${failedEvents} events have failed permanently!`);
                     // Burada alert sisteminize bağlanabilirsiniz (Slack, Email, vs.)
                 }
@@ -772,6 +780,9 @@ exports.EventPublisherJob = EventPublisherJob;
 EventPublisherJob.RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
 EventPublisherJob.VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
 EventPublisherJob.ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
+// Eşik aşılmış kaldıkça ALERT her pod'da en fazla bu aralıkla tekrar loglanır (izleme turu 3 sn'de bir koşar).
+// Kalıcı failed olan her kayıt ayrıca olduğu anda markPublishFailed içinde loglanır.
+EventPublisherJob.ALERT_LOG_INTERVAL = 15 * 60000; // 15 dakika
 // Issue #648 K-1: bir kaydın job seviyesindeki yayın denemesi üst sınırı. Hakkı kalan başarısız kayıt
 // bekleme süresi dolunca yeniden kuyruğa alınır (30 sn → 60 → 120 → 240 sn); son denemede kalıcı failed olur.
 EventPublisherJob.MAX_PUBLISH_ATTEMPTS = 5;

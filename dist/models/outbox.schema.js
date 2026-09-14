@@ -158,6 +158,9 @@ outboxSchema.index({ status: 1, processingStartedAt: 1 });
 outboxSchema.index({ status: 1, retryCount: 1 });
 // Distinct userId coverage (eventPublisher.job:235)
 outboxSchema.index({ status: 1, environment: 1, retryCount: 1, userId: 1, eventType: 1 });
+// Issue #648 K-1: bekleme süresi dolan failed kayıtları yeniden kuyruğa alma (eventPublisher.job monitorFailedEvents).
+// nextAttemptAt yalnız yeniden denenecek kayıtlarda bulunur; alanı olmayan eski failed kayıtlar aralık taramasına girmez.
+outboxSchema.index({ status: 1, environment: 1, nextAttemptAt: 1 });
 function createOutboxModel(connection) {
     try {
         return connection.model('Outbox');

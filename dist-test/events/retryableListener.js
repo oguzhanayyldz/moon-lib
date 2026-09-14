@@ -192,8 +192,9 @@ class RetryableListener extends common_1.Listener {
         }
         catch (error) {
             // Mevcut hata işleme kodu...
+            const errorMessage = this.describeError(error);
             span.setTag('error', true);
-            span.setTag('error.message', error.message);
+            span.setTag('error.message', errorMessage);
             logger_service_1.logger.error(`Error processing ${eventType}:${eventId}:`, error);
             // Record error metrics
             const duration = (Date.now() - startTime) / 1000;
@@ -231,7 +232,7 @@ class RetryableListener extends common_1.Listener {
                     EventMetrics_1.EventMetrics.eventRetryTotal.inc({
                         service: serviceName,
                         event_type: eventType,
-                        retry_reason: error.message.substring(0, 100), // Limit length
+                        retry_reason: errorMessage.substring(0, 100), // Limit length
                         retry_count: retryCount.toString()
                     });
                     // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
@@ -240,16 +241,24 @@ class RetryableListener extends common_1.Listener {
                     logger_service_1.logger.info(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
                     if (this.options.enableDeadLetter) {
                         try {
-                            await this.moveToDeadLetterQueue(data, error, retryCount);
+                            await this.moveToDeadLetterQueue(data, errorMessage, retryCount);
                             span.setTag('dead_letter.saved', true);
                             // Record DLQ metrics
                             EventMetrics_1.EventMetrics.eventDlqTotal.inc({
                                 service: serviceName,
                                 event_type: eventType,
-                                failure_reason: error.message.substring(0, 100) // Limit length
+                                failure_reason: errorMessage.substring(0, 100) // Limit length
                             });
                         }
                         catch (dlqError) {
+                            if ((dlqError === null || dlqError === void 0 ? void 0 : dlqError.name) === 'ValidationError') {
+                                // Kayıt her teslimde aynı veriden kurulur; şema doğrulaması yeniden teslimle düzelmez.
+                                // Ack'lenmezse mesaj her ackWait'te süresiz yeniden teslim edilir, bu yüzden hata loglanıp ack'lenir.
+                                logger_service_1.logger.error(`Dead letter record failed schema validation and can never be saved, acking without a DLQ record: ${eventType}:${eventId}`, dlqError);
+                                span.setTag('dead_letter.invalid', true);
+                                msg.ack();
+                                return;
+                            }
                             logger_service_1.logger.error('Failed to save to dead letter queue, NATS will redeliver:', dlqError);
                             span.setTag('dead_letter.error', dlqError.message);
                             // msg.ack() YOK - DLQ kaydı yokken ack'lemek mesajı kalıcı kaybeder (issue #648 K-3)
@@ -299,14 +308,15 @@ class RetryableListener extends common_1.Listener {
         }
     }
     /**
-     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez.
+     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez
+     * (kalıcı olan şema doğrulaması hatası hariç: o durumda hata loglanıp mesaj ack'lenir).
      *
      * Deneme bütçesi (issue #648 K-2): `retryCount` bu olayın toplam başarısız deneme sayısıdır (Redis sayacı),
      * `maxRetries` ise NATS denemeleri + DLQ oynatmaları toplamıdır. Sayaç yalnız başarıda sıfırlandığı için
      * DLQ'dan oynatılan mesaj yine başarısız olursa sayaç büyümeye devam eder; bütçe dolunca kayıt `failed`
      * yazılır ve bir daha oynatılmaz. Böylece hiç işlenemeyen bir mesaj DLQ → NATS döngüsüne girmez.
      */
-    async moveToDeadLetterQueue(data, error, retryCount) {
+    async moveToDeadLetterQueue(data, errorMessage, retryCount) {
         // Mikroservis özelinde bağlantı durumunu kontrol et
         if (this.connection.readyState !== 1) {
             throw new Error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
@@ -320,7 +330,7 @@ class RetryableListener extends common_1.Listener {
             subject: this.subject,
             eventId: eventId,
             data: data,
-            error: error.message,
+            error: errorMessage,
             retryCount: retryCount,
             maxRetries: attemptBudget,
             status: replayable ? 'pending' : 'failed',
@@ -476,6 +486,14 @@ class RetryableListener extends common_1.Listener {
             console.error('Error while analyzing error type:', analyzeError);
             return false;
         }
+    }
+    /**
+     * Hatanın metnini döndürür. Mesajsız Error ya da Error olmayan bir throw için de boş olmayan metin üretir:
+     * DeadLetter şemasında `error` zorunlu alandır ve boş metin kaydı geçersiz kılar.
+     */
+    describeError(error) {
+        const message = error === null || error === void 0 ? void 0 : error.message;
+        return (typeof message === 'string' && message) || String(error) || 'Unknown error';
     }
     /**
      * MongoDB duplicate key hatası olup olmadığını kontrol eder

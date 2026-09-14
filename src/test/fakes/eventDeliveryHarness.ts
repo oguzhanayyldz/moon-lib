@@ -11,7 +11,7 @@
 import mongoose, { Mongoose } from 'mongoose';
 import { Message, Stan } from 'node-nats-streaming';
 import { createDeadLetterModel, DeadLetterAttrs } from '../../models/deadLetter.schema';
-import { createOutboxModel, extractUserIdFromPayload, getEventPriority } from '../../models/outbox.schema';
+import { createOutboxModel, extractUserIdFromPayload, getEventPriority, OutboxAttrs } from '../../models/outbox.schema';
 import { InMemoryCollection } from './inMemoryCollection';
 
 const offlineMongoose = new Mongoose();
@@ -87,9 +87,12 @@ export function createOutboxStore() {
     const outboxModel = createOutboxModel(offlineMongoose.connection);
     const connection = { readyState: 1, model: () => collection } as unknown as mongoose.Connection;
 
-    /** Stores a record as a service would after `Outbox.build(...).save()` (pre-save hook fields included). */
-    const seed = (eventType: string, payload: Record<string, any>) => {
-        const doc = outboxModel.build({ eventType, payload } as any).toObject();
+    /**
+     * Stores a record as a service would after `Outbox.build(...).save()` (pre-save hook fields included).
+     * Test payloads carry only the fields the job reads, so they are asserted to the attrs type.
+     */
+    const seed = (eventType: string, payload: object) => {
+        const doc = outboxModel.build({ eventType, payload } as OutboxAttrs).toObject();
         return collection.insert({
             ...doc,
             priority: getEventPriority(eventType),
@@ -108,7 +111,9 @@ export function createDeadLetterStore(options: { readyState?: number; saveError?
         build: (attrs: DeadLetterAttrs) => {
             const doc = deadLetterModel.build(attrs);
             return {
+                // Like Document#save: schema validation runs before anything is written.
                 save: async () => {
+                    await doc.validate();
                     if (options.saveError) throw options.saveError;
                     collection.insert(doc.toObject());
                     return doc;
@@ -153,10 +158,10 @@ export function useFakeClock() {
 }
 
 /** Records the promise of every onMessage call, including the ones base-listener fires without awaiting. */
-export function trackInFlightMessages(listener: { onMessage(data: any, msg: Message): Promise<void> }): Promise<void>[] {
+export function trackInFlightMessages(listener: { onMessage(data: unknown, msg: Message): Promise<void> }): Promise<void>[] {
     const inFlight: Promise<void>[] = [];
     const original = listener.onMessage.bind(listener);
-    jest.spyOn(listener, 'onMessage').mockImplementation((data: any, msg: Message) => {
+    jest.spyOn(listener, 'onMessage').mockImplementation((data: unknown, msg: Message) => {
         const pending = original(data, msg);
         inFlight.push(pending);
         return pending;

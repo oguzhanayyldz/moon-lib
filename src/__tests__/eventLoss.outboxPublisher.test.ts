@@ -12,11 +12,14 @@
  * 1+2+3+4 s apart), so the trigger is a NATS outage longer than ~10 s.
  *
  * Tests marked "K-1:" failed on 11677f7 and pass with the 648-G3 fix; tests marked "G3:"
- * pin the safety properties of that fix (back-off, no automatic replay of old records, no double claim).
+ * pin the behaviour of that fix (back-off schedule, per-record back-off in bulk batches, no automatic
+ * replay of old records, no double claim, stale failure reports, ALERT rate limit, log order, indexes).
  * Production code is exercised as-is; only Mongo and NATS are replaced by in-memory fakes.
  */
+import { Mongoose } from 'mongoose';
 import { EventPublisherJob } from '../jobs/eventPublisher.job';
 import { Subjects } from '../common';
+import { createOutboxModel } from '../models/outbox.schema';
 import { logger } from '../services/logger.service';
 import { createFakeStan, createOutboxStore, useFakeClock } from '../test/fakes/eventDeliveryHarness';
 
@@ -34,12 +37,20 @@ const PUBLISHER_IN_PROCESS_ATTEMPTS = 5;
 const TICKS = 10;
 // Generous simulated gap between ticks: covers the publisher back-off and any retry back-off a fix may add.
 const TICK_INTERVAL_MS = 5 * 60_000;
+// Covers the in-process publisher retries (stockUpdated: 1+2+3+4 s, entityVersionBulkUpdated: 0.5+1+1.5+2 s)
+// and stays below the first job back-off (30 s).
+const IN_PROCESS_RETRY_WINDOW_MS = 15_000;
+const ALERT_LOG_INTERVAL_MS = 15 * 60_000;
+const MONITOR_INTERVAL_MS = 3_000;
+
+type OutboxRecord = Record<string, unknown>;
 
 type PublisherJobInternals = {
     processEvents(): Promise<void>;
     processVersionEventsAsBulk(): Promise<void>;
     monitorFailedEvents(): Promise<void>;
-    processOneEvent(event: Record<string, any>): Promise<void>;
+    processOneEvent(event: OutboxRecord): Promise<void>;
+    markPublishFailed(filter: OutboxRecord, retryCount: number): Promise<void>;
 };
 
 function stockPayload(id: string) {
@@ -50,7 +61,16 @@ function versionPayload(entityId: string) {
     return { entityType: 'ProductStock', entityId, service: 'inventory', version: 2, previousVersion: 1, timestamp: new Date(), userId: 'user-1' };
 }
 
-describe('#648 K-1 — EventPublisherJob: failed outbox record is never published again', () => {
+/** Delay between a failed attempt and the moment the record may be requeued. */
+function backOffOf(record: OutboxRecord): number {
+    return (record.nextAttemptAt as Date).getTime() - (record.lastAttempt as Date).getTime();
+}
+
+function alertLogCount(): number {
+    return (logger.error as jest.Mock).mock.calls.filter(([message]) => String(message).startsWith('ALERT')).length;
+}
+
+describe('#648 K-1 — EventPublisherJob: a failed outbox record is retried with back-off up to the attempt limit', () => {
     let nats: ReturnType<typeof createFakeStan>;
     let outbox: ReturnType<typeof createOutboxStore>;
     let job: PublisherJobInternals;
@@ -209,5 +229,123 @@ describe('#648 K-1 — EventPublisherJob: failed outbox record is never publishe
         await runTicks(1, normalTick);
         expect(nats.publish).toHaveBeenCalledTimes(1);
         expect(record.status).toBe('published');
+    });
+
+    it('G3: failed publish attempts are requeued after 30, 60, 120 and 240 seconds and the fifth failure is permanent', async () => {
+        const record = outbox.seed(Subjects.StockUpdated, stockPayload('stock-1'));
+        nats.setPublishFails(true);
+        const backOffs: number[] = [];
+
+        for (let attempt = 1; attempt <= PUBLISH_ATTEMPT_LIMIT; attempt++) {
+            await clock.run(job.processEvents(), IN_PROCESS_RETRY_WINDOW_MS);
+            expect(record).toMatchObject({ status: 'failed', retryCount: attempt });
+            if (attempt === PUBLISH_ATTEMPT_LIMIT) break;
+
+            backOffs.push(backOffOf(record));
+            await clock.advance((record.nextAttemptAt as Date).getTime() - Date.now());
+            await job.monitorFailedEvents();
+            expect(record.status).toBe('pending');
+        }
+
+        expect(backOffs).toEqual([30_000, 60_000, 120_000, 240_000]);
+        expect(record.nextAttemptAt).toBeUndefined();
+    });
+
+    it('G3: a failed bulk batch backs off every record by its own attempt count', async () => {
+        const onFirstAttempt = outbox.seed(Subjects.EntityVersionUpdated, versionPayload('product-stock-1'));
+        const onThirdAttempt = outbox.seed(Subjects.EntityVersionUpdated, versionPayload('product-stock-2'));
+        const onLastAttempt = outbox.seed(Subjects.EntityVersionUpdated, versionPayload('product-stock-3'));
+        // Requeued records wait in the same batch as a new one.
+        Object.assign(onThirdAttempt, { retryCount: 2 });
+        Object.assign(onLastAttempt, { retryCount: PUBLISH_ATTEMPT_LIMIT - 1 });
+        nats.setPublishFails(true);
+
+        await clock.run(job.processVersionEventsAsBulk(), IN_PROCESS_RETRY_WINDOW_MS);
+
+        expect(onFirstAttempt).toMatchObject({ status: 'failed', retryCount: 1 });
+        expect(backOffOf(onFirstAttempt)).toBe(30_000);
+        expect(onThirdAttempt).toMatchObject({ status: 'failed', retryCount: 3 });
+        expect(backOffOf(onThirdAttempt)).toBe(120_000);
+        expect(onLastAttempt).toMatchObject({ status: 'failed', retryCount: PUBLISH_ATTEMPT_LIMIT });
+        expect(onLastAttempt.nextAttemptAt).toBeUndefined();
+    });
+
+    it('G3: a publish failure reported with a stale retryCount does not change a record claimed again by another publisher', async () => {
+        const record = outbox.seed(Subjects.StockUpdated, stockPayload('stock-1'));
+        // Publisher A claimed the record at retryCount 1 and hung. Meanwhile the record was released as stuck,
+        // failed once more on publisher B (retryCount 2), was requeued and is now being published by publisher C.
+        Object.assign(record, { status: 'processing', retryCount: 2, processingStartedAt: new Date() });
+
+        await job.markPublishFailed({ _id: record.id }, 1);
+        expect(record).toMatchObject({ status: 'processing', retryCount: 2 });
+        expect(record.nextAttemptAt).toBeUndefined();
+
+        // Control: the failure of the current claim is recorded.
+        await job.markPublishFailed({ _id: record.id }, 2);
+        expect(record).toMatchObject({ status: 'failed', retryCount: 3 });
+    });
+
+    it('G3: the ALERT for permanently failed records is logged at most once per alert interval and again after the records are cleared', async () => {
+        const records = Array.from({ length: PUBLISH_ATTEMPT_LIMIT }, (_, index) =>
+            Object.assign(outbox.seed(Subjects.StockUpdated, stockPayload(`stock-${index}`)), { status: 'failed', retryCount: PUBLISH_ATTEMPT_LIMIT }));
+
+        await job.monitorFailedEvents();
+        expect(alertLogCount()).toBe(1);
+
+        // One monitoring pass every 3 s for 60 s.
+        for (let pass = 0; pass < 20; pass++) {
+            await clock.advance(MONITOR_INTERVAL_MS);
+            await job.monitorFailedEvents();
+        }
+        expect(alertLogCount()).toBe(1);
+
+        await clock.advance(ALERT_LOG_INTERVAL_MS);
+        await job.monitorFailedEvents();
+        expect(alertLogCount()).toBe(2);
+
+        // An operator clears the records; a new incident is reported without waiting for the interval.
+        records.forEach(record => Object.assign(record, { status: 'published' }));
+        await job.monitorFailedEvents();
+        records.forEach(record => Object.assign(record, { status: 'failed' }));
+        await clock.advance(MONITOR_INTERVAL_MS);
+        await job.monitorFailedEvents();
+        expect(alertLogCount()).toBe(3);
+    });
+
+    it('G3: the publish error is logged even when marking the record failed throws', async () => {
+        const record = outbox.seed(Subjects.StockUpdated, stockPayload('stock-1'));
+        const markFailedError = new Error('MongoNetworkError: connection 3 to mongo:27017 closed');
+        const updateMany = outbox.collection.updateMany.bind(outbox.collection);
+        jest.spyOn(outbox.collection, 'updateMany').mockImplementation((filter, update) =>
+            '$inc' in update ? Promise.reject(markFailedError) : updateMany(filter, update));
+        nats.setPublishFails(true);
+
+        await clock.run(job.processEvents(), IN_PROCESS_RETRY_WINDOW_MS);
+
+        expect(logger.error).toHaveBeenCalledWith(`Failed to publish event ${record.id}:`, expect.objectContaining({ message: expect.stringContaining('NATS publish failed') }));
+        expect(logger.error).toHaveBeenCalledWith(`Failed to update outbox state of event ${record.id}:`, markFailedError);
+    });
+
+    it('G3: the bulk publish error is logged even when marking the records failed throws', async () => {
+        outbox.seed(Subjects.EntityVersionUpdated, versionPayload('product-stock-1'));
+        const markFailedError = new Error('MongoNetworkError: connection 3 to mongo:27017 closed');
+        const updateMany = outbox.collection.updateMany.bind(outbox.collection);
+        jest.spyOn(outbox.collection, 'updateMany').mockImplementation((filter, update) =>
+            '$inc' in update ? Promise.reject(markFailedError) : updateMany(filter, update));
+        nats.setPublishFails(true);
+
+        await clock.run(job.processVersionEventsAsBulk(), IN_PROCESS_RETRY_WINDOW_MS);
+
+        expect(logger.error).toHaveBeenCalledWith('❌ Failed to publish bulk EntityVersionUpdated events:', expect.objectContaining({ message: expect.stringContaining('NATS publish failed') }));
+        expect(logger.error).toHaveBeenCalledWith('Version event bulk processing failed:', markFailedError);
+    });
+});
+
+describe('#648 K-1 — Outbox schema indexes', () => {
+    it('G3: the requeue query of monitorFailedEvents (status, environment, nextAttemptAt) has an index', () => {
+        const offline = new Mongoose();
+        const indexedFields = createOutboxModel(offline.connection).schema.indexes().map(([fields]) => fields);
+
+        expect(indexedFields).toContainEqual({ status: 1, environment: 1, nextAttemptAt: 1 });
     });
 });

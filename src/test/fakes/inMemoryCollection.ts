@@ -8,47 +8,80 @@
  * `$expr` supports a single comparison of field paths / literals, e.g. `{ $lt: ['$retryCount', '$maxRetries'] }`.
  */
 
-type Doc = Record<string, any>;
-type Filter = Record<string, any>;
-type Update = Record<string, any>;
+type Doc = Record<string, unknown>;
+type Filter = Record<string, unknown>;
+type Update = Record<string, unknown>;
 type SortSpec = Record<string, 1 | -1>;
+
+interface ObjectIdLike {
+    toHexString(): string;
+}
 
 const FIELD_OPERATORS = new Set(['$lt', '$lte', '$gt', '$gte', '$ne', '$in', '$nin', '$exists']);
 const EXPRESSION_COMPARISONS = new Set(['$lt', '$lte', '$gt', '$gte']);
 const UPDATE_OPERATORS = new Set(['$set', '$inc', '$unset']);
 
-function normalize(value: any): any {
-    if (value instanceof Date) return value.getTime();
-    if (value && typeof value === 'object' && typeof value.toHexString === 'function') return value.toHexString();
+function isObjectIdLike(value: unknown): value is ObjectIdLike {
+    return typeof value === 'object' && value !== null && typeof (value as Partial<ObjectIdLike>).toHexString === 'function';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date) && !isObjectIdLike(value);
+}
+
+function asRecord(value: unknown, context: string): Record<string, unknown> {
+    if (!isRecord(value)) {
+        throw new Error(`InMemoryCollection: ${context} must be an object, got ${JSON.stringify(value)}`);
+    }
     return value;
 }
 
-function valuesEqual(actual: any, expected: any): boolean {
+function asArray(value: unknown, context: string): unknown[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`InMemoryCollection: ${context} must be an array, got ${JSON.stringify(value)}`);
+    }
+    return value;
+}
+
+function normalize(value: unknown): unknown {
+    if (value instanceof Date) return value.getTime();
+    if (isObjectIdLike(value)) return value.toHexString();
+    return value;
+}
+
+function valuesEqual(actual: unknown, expected: unknown): boolean {
     if (expected === null) return actual === null || actual === undefined;
     return normalize(actual) === normalize(expected);
 }
 
-function isOperatorObject(value: any): boolean {
-    return value !== null
-        && typeof value === 'object'
-        && !(value instanceof Date)
-        && typeof value.toHexString !== 'function'
-        && Object.keys(value).some(key => key.startsWith('$'));
+function isOperatorObject(value: unknown): value is Record<string, unknown> {
+    return isRecord(value) && Object.keys(value).some(key => key.startsWith('$'));
 }
 
-function compare(actual: any, expected: any, operator: string): boolean {
-    if (actual === undefined || actual === null) return false;
+/** Orders two present values of the same kind (numbers and dates, or strings); anything else is unsupported. */
+function orderOf(actual: unknown, expected: unknown): number {
     const a = normalize(actual);
     const b = normalize(expected);
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    if (typeof a === 'string' && typeof b === 'string') return a < b ? -1 : a > b ? 1 : 0;
+    throw new Error(`InMemoryCollection: unsupported comparison of ${JSON.stringify(actual)} and ${JSON.stringify(expected)}`);
+}
+
+function orderMatches(order: number, operator: string): boolean {
     switch (operator) {
-        case '$lt': return a < b;
-        case '$lte': return a <= b;
-        case '$gt': return a > b;
-        default: return a >= b;
+        case '$lt': return order < 0;
+        case '$lte': return order <= 0;
+        case '$gt': return order > 0;
+        default: return order >= 0;
     }
 }
 
-function matchField(actual: any, condition: any): boolean {
+function compare(actual: unknown, expected: unknown, operator: string): boolean {
+    if (actual === undefined || actual === null) return false;
+    return orderMatches(orderOf(actual, expected), operator);
+}
+
+function matchField(actual: unknown, condition: unknown): boolean {
     if (!isOperatorObject(condition)) {
         return valuesEqual(actual, condition);
     }
@@ -58,21 +91,21 @@ function matchField(actual: any, condition: any): boolean {
         }
         switch (operator) {
             case '$ne': return !valuesEqual(actual, expected);
-            case '$in': return (expected as any[]).some(item => valuesEqual(actual, item));
-            case '$nin': return !(expected as any[]).some(item => valuesEqual(actual, item));
+            case '$in': return asArray(expected, '$in').some(item => valuesEqual(actual, item));
+            case '$nin': return !asArray(expected, '$nin').some(item => valuesEqual(actual, item));
             case '$exists': return (actual !== undefined) === expected;
             default: return compare(actual, expected, operator);
         }
     });
 }
 
-function resolveOperand(doc: Doc, operand: any): any {
+function resolveOperand(doc: Doc, operand: unknown): unknown {
     return typeof operand === 'string' && operand.startsWith('$') ? doc[operand.slice(1)] : operand;
 }
 
 /** Aggregation comparison: unlike a query filter, a missing or null value sorts below any other value. */
-function matchesExpression(doc: Doc, expression: Filter): boolean {
-    const entries = Object.entries(expression);
+function matchesExpression(doc: Doc, expression: unknown): boolean {
+    const entries = isRecord(expression) ? Object.entries(expression) : [];
     const [operator, operands] = entries[0] ?? [];
     if (entries.length !== 1 || !EXPRESSION_COMPARISONS.has(operator) || !Array.isArray(operands) || operands.length !== 2) {
         throw new Error(`InMemoryCollection: unsupported $expr ${JSON.stringify(expression)}`);
@@ -81,21 +114,15 @@ function matchesExpression(doc: Doc, expression: Filter): boolean {
     const leftMissing = left === undefined || left === null;
     const rightMissing = right === undefined || right === null;
     if (leftMissing || rightMissing) {
-        const order = Number(!leftMissing) - Number(!rightMissing);
-        switch (operator) {
-            case '$lt': return order < 0;
-            case '$lte': return order <= 0;
-            case '$gt': return order > 0;
-            default: return order >= 0;
-        }
+        return orderMatches(Number(!leftMissing) - Number(!rightMissing), operator);
     }
     return compare(left, right, operator);
 }
 
 export function matchesFilter(doc: Doc, filter: Filter): boolean {
     return Object.entries(filter).every(([key, condition]) => {
-        if (key === '$or') return (condition as Filter[]).some(sub => matchesFilter(doc, sub));
-        if (key === '$and') return (condition as Filter[]).every(sub => matchesFilter(doc, sub));
+        if (key === '$or') return asArray(condition, '$or').some(sub => matchesFilter(doc, asRecord(sub, '$or clause')));
+        if (key === '$and') return asArray(condition, '$and').every(sub => matchesFilter(doc, asRecord(sub, '$and clause')));
         if (key === '$expr') return matchesExpression(doc, condition);
         if (key.startsWith('$')) {
             throw new Error(`InMemoryCollection: unsupported top-level operator ${key}`);
@@ -109,10 +136,16 @@ function applyUpdate(doc: Doc, update: Update): void {
         if (!UPDATE_OPERATORS.has(operator)) {
             throw new Error(`InMemoryCollection: unsupported update operator ${operator}`);
         }
-        for (const [field, value] of Object.entries(fields as Doc)) {
+        for (const [field, value] of Object.entries(asRecord(fields, operator))) {
             if (operator === '$set') doc[field] = value;
-            if (operator === '$inc') doc[field] = (doc[field] ?? 0) + (value as number);
             if (operator === '$unset') delete doc[field];
+            if (operator === '$inc') {
+                const current = doc[field] ?? 0;
+                if (typeof current !== 'number' || typeof value !== 'number') {
+                    throw new Error(`InMemoryCollection: $inc needs numbers, got ${JSON.stringify(current)} and ${JSON.stringify(value)}`);
+                }
+                doc[field] = current + value;
+            }
         }
     }
 }
@@ -120,12 +153,12 @@ function applyUpdate(doc: Doc, update: Update): void {
 function sortDocs(docs: Doc[], spec: SortSpec): Doc[] {
     return [...docs].sort((left, right) => {
         for (const [field, direction] of Object.entries(spec)) {
-            const a = normalize(left[field]);
-            const b = normalize(right[field]);
-            if (a === b) continue;
+            const a = left[field];
+            const b = right[field];
+            if (normalize(a) === normalize(b)) continue;
             if (a === undefined || a === null) return -direction;
             if (b === undefined || b === null) return direction;
-            return a < b ? -direction : direction;
+            return orderOf(a, b) < 0 ? -direction : direction;
         }
         return 0;
     });
@@ -160,7 +193,7 @@ class InMemoryQuery implements PromiseLike<Doc[]> {
 
     then<R1 = Doc[], R2 = never>(
         onFulfilled?: ((value: Doc[]) => R1 | PromiseLike<R1>) | null,
-        onRejected?: ((reason: any) => R2 | PromiseLike<R2>) | null
+        onRejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null
     ): PromiseLike<R1 | R2> {
         return this.exec().then(onFulfilled, onRejected);
     }
@@ -182,7 +215,7 @@ export class InMemoryCollection {
         return new InMemoryQuery(() => this.docs.filter(doc => matchesFilter(doc, filter)));
     }
 
-    async distinct(field: string, filter: Filter): Promise<any[]> {
+    async distinct(field: string, filter: Filter): Promise<unknown[]> {
         const values = this.docs.filter(doc => matchesFilter(doc, filter)).map(doc => doc[field]);
         return [...new Set(values)];
     }

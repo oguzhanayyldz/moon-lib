@@ -240,8 +240,9 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             msg.ack();
         } catch (error) {
             // Mevcut hata işleme kodu...
+            const errorMessage = this.describeError(error);
             span.setTag('error', true);
-            span.setTag('error.message', (error as Error).message);
+            span.setTag('error.message', errorMessage);
             logger.error(`Error processing ${eventType}:${eventId}:`, error);
 
             // Record error metrics
@@ -284,7 +285,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                     EventMetrics.eventRetryTotal.inc({
                         service: serviceName,
                         event_type: eventType,
-                        retry_reason: (error as Error).message.substring(0, 100), // Limit length
+                        retry_reason: errorMessage.substring(0, 100), // Limit length
                         retry_count: retryCount.toString()
                     });
 
@@ -294,16 +295,24 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
 
                     if (this.options.enableDeadLetter) {
                         try {
-                            await this.moveToDeadLetterQueue(data, error as Error, retryCount);
+                            await this.moveToDeadLetterQueue(data, errorMessage, retryCount);
                             span.setTag('dead_letter.saved', true);
 
                             // Record DLQ metrics
                             EventMetrics.eventDlqTotal.inc({
                                 service: serviceName,
                                 event_type: eventType,
-                                failure_reason: (error as Error).message.substring(0, 100) // Limit length
+                                failure_reason: errorMessage.substring(0, 100) // Limit length
                             });
                         } catch (dlqError) {
+                            if ((dlqError as Error)?.name === 'ValidationError') {
+                                // Kayıt her teslimde aynı veriden kurulur; şema doğrulaması yeniden teslimle düzelmez.
+                                // Ack'lenmezse mesaj her ackWait'te süresiz yeniden teslim edilir, bu yüzden hata loglanıp ack'lenir.
+                                logger.error(`Dead letter record failed schema validation and can never be saved, acking without a DLQ record: ${eventType}:${eventId}`, dlqError);
+                                span.setTag('dead_letter.invalid', true);
+                                msg.ack();
+                                return;
+                            }
                             logger.error('Failed to save to dead letter queue, NATS will redeliver:', dlqError);
                             span.setTag('dead_letter.error', (dlqError as Error).message);
                             // msg.ack() YOK - DLQ kaydı yokken ack'lemek mesajı kalıcı kaybeder (issue #648 K-3)
@@ -358,14 +367,15 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     }
 
     /**
-     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez.
+     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez
+     * (kalıcı olan şema doğrulaması hatası hariç: o durumda hata loglanıp mesaj ack'lenir).
      *
      * Deneme bütçesi (issue #648 K-2): `retryCount` bu olayın toplam başarısız deneme sayısıdır (Redis sayacı),
      * `maxRetries` ise NATS denemeleri + DLQ oynatmaları toplamıdır. Sayaç yalnız başarıda sıfırlandığı için
      * DLQ'dan oynatılan mesaj yine başarısız olursa sayaç büyümeye devam eder; bütçe dolunca kayıt `failed`
      * yazılır ve bir daha oynatılmaz. Böylece hiç işlenemeyen bir mesaj DLQ → NATS döngüsüne girmez.
      */
-    private async moveToDeadLetterQueue(data: T['data'], error: Error, retryCount: number): Promise<void> {
+    private async moveToDeadLetterQueue(data: T['data'], errorMessage: string, retryCount: number): Promise<void> {
         // Mikroservis özelinde bağlantı durumunu kontrol et
         if (this.connection.readyState !== 1) {
             throw new Error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
@@ -381,7 +391,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             subject: this.subject,
             eventId: eventId,
             data: data,
-            error: error.message,
+            error: errorMessage,
             retryCount: retryCount,
             maxRetries: attemptBudget,
             status: replayable ? 'pending' : 'failed',
@@ -566,6 +576,15 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             console.error('Error while analyzing error type:', analyzeError);
             return false;
         }
+    }
+
+    /**
+     * Hatanın metnini döndürür. Mesajsız Error ya da Error olmayan bir throw için de boş olmayan metin üretir:
+     * DeadLetter şemasında `error` zorunlu alandır ve boş metin kaydı geçersiz kılar.
+     */
+    private describeError(error: unknown): string {
+        const message = (error as { message?: unknown } | null | undefined)?.message;
+        return (typeof message === 'string' && message) || String(error) || 'Unknown error';
     }
 
     /**

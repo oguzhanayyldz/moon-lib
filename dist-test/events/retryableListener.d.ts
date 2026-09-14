@@ -40,7 +40,8 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      */
     private processWithImmediateRetries;
     /**
-     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez.
+     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez
+     * (kalıcı olan şema doğrulaması hatası hariç: o durumda hata loglanıp mesaj ack'lenir).
      *
      * Deneme bütçesi (issue #648 K-2): `retryCount` bu olayın toplam başarısız deneme sayısıdır (Redis sayacı),
      * `maxRetries` ise NATS denemeleri + DLQ oynatmaları toplamıdır. Sayaç yalnız başarıda sıfırlandığı için
@@ -70,6 +71,11 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
  * Geçici hatalar için retry yapılmalı, kalıcı hatalar için yapılmamalı
  */
     protected isTransientError(error: any): boolean;
+    /**
+     * Hatanın metnini döndürür. Mesajsız Error ya da Error olmayan bir throw için de boş olmayan metin üretir:
+     * DeadLetter şemasında `error` zorunlu alandır ve boş metin kaydı geçersiz kılar.
+     */
+    private describeError;
     /**
      * MongoDB duplicate key hatası olup olmadığını kontrol eder
      */
