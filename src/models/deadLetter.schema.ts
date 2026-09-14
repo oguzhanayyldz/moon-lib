@@ -1,6 +1,13 @@
 import mongoose from 'mongoose';
 import createBaseSchema, { BaseAttrs, BaseDoc, BaseModel } from './base/base.schema';
 
+// Kayıt durumları:
+// - queued / replaying: hedefli oynatma (issue #648 DLQ-H). Kaydı yazan listener bu süreçte oynatır.
+// - pending / processing: DLQ-H öncesi, subject'e yayınla oynatılan kayıtlar. DLQ-H işlemcisi bunları seçmez;
+//   eski sürüm işlemci de queued/replaying seçmediği için karma sürümde ve geri almada kayıt yayınlanmaz.
+// - completed / failed: son durumlar.
+export type DeadLetterStatus = 'pending' | 'processing' | 'queued' | 'replaying' | 'completed' | 'failed';
+
 // Dead Letter dokümanları için Arayüz
 export interface DeadLetterAttrs extends BaseAttrs {
     subject: string;
@@ -13,7 +20,9 @@ export interface DeadLetterAttrs extends BaseAttrs {
     environment?: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
-    status?: 'pending' | 'processing' | 'completed' | 'failed';
+    status?: DeadLetterStatus;
+    listenerKey?: string;
+    queueGroupName?: string;
     processorId?: string;
     processingStartedAt?: Date;
     completedAt?: Date;
@@ -35,7 +44,9 @@ export interface DeadLetterDoc extends BaseDoc {
     environment: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
-    status: 'pending' | 'processing' | 'completed' | 'failed';
+    status: DeadLetterStatus;
+    listenerKey?: string;
+    queueGroupName?: string;
     processorId?: string;
     processingStartedAt?: Date;
     completedAt?: Date;
@@ -89,8 +100,15 @@ const deadLetterSchemaDefination = {
     },
     status: {
         type: String,
-        enum: ['pending', 'processing', 'completed', 'failed'],
+        enum: ['pending', 'processing', 'queued', 'replaying', 'completed', 'failed'],
         default: 'pending'
+    },
+    // Kaydı yazan listener: "<subject>|<queueGroupName>" (issue #648 DLQ-H). Yalnız bu listener'ı başlatmış süreç oynatır.
+    listenerKey: {
+        type: String,
+    },
+    queueGroupName: {
+        type: String,
     },
     processorId: {
         type: String,
@@ -109,10 +127,11 @@ const deadLetterSchema = createBaseSchema(deadLetterSchemaDefination);
 // Issue #648 öncesindeki sorgu biçimi için: { status: 'pending', environment, retryCount: { $lt: 5 } }.
 // Mevcut veritabanlarında kurulu olduğu için tanımda bırakıldı.
 deadLetterSchema.index({ status: 1, environment: 1, retryCount: 1, nextRetryAt: 1 });
-// Issue #648 K-2: DeadLetterProcessorJob sorgusu { status: 'pending', environment, nextRetryAt: { $lte: now } }
-// ve sıralaması { nextRetryAt: 1 }. Bütçe koşulu ($expr: retryCount < maxRetries) index kullanamaz;
-// yalnız bu index'in daralttığı, zamanı gelmiş pending kayıtlar üzerinde değerlendirilir.
-deadLetterSchema.index({ status: 1, environment: 1, nextRetryAt: 1 });
+// Issue #648 DLQ-H: DeadLetterProcessorJob sorgusu { status: 'queued', environment, listenerKey: { $in: <kayıtlı anahtarlar> },
+// nextRetryAt: { $lte: now } } ve sıralaması { nextRetryAt: 1 }. Bütçe koşulu ($expr: retryCount < maxRetries) index kullanamaz;
+// yalnız bu index'in daralttığı, zamanı gelmiş kayıtlar üzerinde değerlendirilir. Oynatıcısı olmayan kayıt sayımı
+// ({ status: 'queued', environment, listenerKey: { $nin } }) aynı index'in önekini kullanır.
+deadLetterSchema.index({ status: 1, environment: 1, listenerKey: 1, nextRetryAt: 1 });
 
 export function createDeadLetterModel(connection: mongoose.Connection) {
     try {

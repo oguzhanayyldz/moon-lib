@@ -45,6 +45,14 @@ export function createFakeMessage(data: object, sequence = 1): Message {
     } as unknown as Message;
 }
 
+function createSubscriptionOptionsChain(): Record<string, jest.Mock> {
+    const chain: Record<string, jest.Mock> = {};
+    for (const setter of ['setStartWithLastReceived', 'setDeliverAllAvailable', 'setManualAckMode', 'setAckWait', 'setDurableName']) {
+        chain[setter] = jest.fn(() => chain);
+    }
+    return chain;
+}
+
 export function createFakeStan() {
     let publishFails = false;
     const messageHandlers: Array<(msg: Message) => void> = [];
@@ -54,10 +62,7 @@ export function createFakeStan() {
         return 'guid';
     });
 
-    const subscriptionOptionsChain: Record<string, jest.Mock> = {};
-    for (const setter of ['setStartWithLastReceived', 'setDeliverAllAvailable', 'setManualAckMode', 'setAckWait', 'setDurableName']) {
-        subscriptionOptionsChain[setter] = jest.fn(() => subscriptionOptionsChain);
-    }
+    const subscriptionOptionsChain = createSubscriptionOptionsChain();
 
     const client = {
         publish,
@@ -78,6 +83,55 @@ export function createFakeStan() {
         /** Delivers a message the way NATS Streaming does: synchronously to every handler. */
         deliver(msg: Message) {
             messageHandlers.forEach(handler => handler(msg));
+        },
+    };
+}
+
+/**
+ * NATS Streaming bus shared by several services, with queue groups.
+ *
+ * base-listener subscribes with `subject` + `queueGroupName` (common/events/base-listener.ts:25-29): a published
+ * message is delivered once to every queue group subscribed to its subject, and within a group to one member only.
+ * `createFakeStan` delivers to every handler and cannot tell groups apart. Each `connect()` returns the client of
+ * one service; all clients publish to and subscribe on the same bus.
+ */
+export function createFakeStanBus() {
+    const subscribersBySubject = new Map<string, Map<string, Array<(msg: Message) => void>>>();
+    let sequence = 0;
+
+    const publish = jest.fn((subject: string, data: string, callback: (err?: Error) => void) => {
+        const groups = subscribersBySubject.get(subject) ?? new Map<string, Array<(msg: Message) => void>>();
+        groups.forEach(members => {
+            sequence++;
+            members[0](createFakeMessage(JSON.parse(data), sequence));
+        });
+        callback(undefined);
+        return 'guid';
+    });
+
+    const subscribe = (subject: string, queueGroupName: string) => ({
+        on: (event: string, handler: (msg: Message) => void) => {
+            if (event !== 'message') return;
+            const groups = subscribersBySubject.get(subject) ?? new Map<string, Array<(msg: Message) => void>>();
+            groups.set(queueGroupName, [...(groups.get(queueGroupName) ?? []), handler]);
+            subscribersBySubject.set(subject, groups);
+        },
+    });
+
+    return {
+        publish,
+        /** Returns the NATS client of one service. */
+        connect(): Stan {
+            const subscriptionOptionsChain = createSubscriptionOptionsChain();
+            return {
+                publish,
+                subscriptionOptions: jest.fn(() => subscriptionOptionsChain),
+                subscribe: jest.fn(subscribe),
+            } as unknown as Stan;
+        },
+        /** Queue groups subscribed to a subject, in subscription order. */
+        queueGroups(subject: string): string[] {
+            return [...(subscribersBySubject.get(subject)?.keys() ?? [])];
         },
     };
 }
@@ -123,6 +177,7 @@ export function createDeadLetterStore(options: { readyState?: number; saveError?
         findOneAndUpdate: collection.findOneAndUpdate.bind(collection),
         updateOne: collection.updateOne.bind(collection),
         updateMany: collection.updateMany.bind(collection),
+        countDocuments: collection.countDocuments.bind(collection),
     };
 
     const connection = { readyState: options.readyState ?? 1, model: () => model } as unknown as mongoose.Connection;
