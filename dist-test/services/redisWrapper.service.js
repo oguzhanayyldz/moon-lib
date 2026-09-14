@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.redisWrapper = void 0;
 const redis_1 = require("redis");
 const logger_service_1 = require("./logger.service");
+const logSafety_util_1 = require("../utils/logSafety.util");
 class RedisWrapper {
     get client() {
         if (!this._client) {
@@ -11,13 +12,15 @@ class RedisWrapper {
         return this._client;
     }
     async connect(url, timeoutMs = 30000) {
+        // URL parolayı taşır; yalnızca maskelenmiş biçimi loglanır.
+        const safeUrl = (0, logSafety_util_1.maskConnectionUriSecret)(url);
         try {
             // URL için önceden oluşturulmuş bir instance var mı kontrol et
             const existingClient = RedisWrapper.instances.get(url);
             if (existingClient) {
                 this._client = existingClient;
                 this._url = url;
-                logger_service_1.logger.info(`Reusing existing Redis connection to ${url}`);
+                logger_service_1.logger.info(`Reusing existing Redis connection to ${safeUrl}`);
                 // Mevcut bağlantının hala çalıştığını doğrula
                 try {
                     await existingClient.ping();
@@ -33,7 +36,7 @@ class RedisWrapper {
                 }
                 return;
             }
-            logger_service_1.logger.info(`Connecting to Redis at ${url} with ${timeoutMs}ms timeout...`);
+            logger_service_1.logger.info(`Connecting to Redis at ${safeUrl} with ${timeoutMs}ms timeout...`);
             // Connection error handling flag
             let connectionFailed = false;
             let connectionError = null;
@@ -57,9 +60,9 @@ class RedisWrapper {
                     }
                 }
             })
-                .on('connect', () => logger_service_1.logger.info(`✅ Redis Client Connected to ${url}`))
+                .on('connect', () => logger_service_1.logger.info(`✅ Redis Client Connected to ${safeUrl}`))
                 .on('error', (err) => {
-                logger_service_1.logger.error('❌ Redis Client Error:', err);
+                logger_service_1.logger.error('❌ Redis Client Error:', (0, logSafety_util_1.sanitizeConnectionError)(err));
                 connectionError = err;
                 connectionFailed = true;
             })
@@ -79,7 +82,7 @@ class RedisWrapper {
                 this._client = client;
                 this._url = url;
                 RedisWrapper.instances.set(url, client);
-                logger_service_1.logger.info(`✅ Successfully connected to Redis at ${url}`);
+                logger_service_1.logger.info(`✅ Successfully connected to Redis at ${safeUrl}`);
             }
             catch (connectError) {
                 // Connection failed, cleanup client
@@ -90,19 +93,20 @@ class RedisWrapper {
                     }
                 }
                 catch (quitError) {
-                    logger_service_1.logger.warn('Failed to quit client during cleanup:', quitError);
+                    logger_service_1.logger.warn('Failed to quit client during cleanup:', (0, logSafety_util_1.sanitizeConnectionError)(quitError));
                 }
                 throw connectError;
             }
             // Check if async error occurred during connection
             if (connectionFailed && connectionError) {
-                logger_service_1.logger.error('❌ Async connection error detected:', connectionError);
+                logger_service_1.logger.error('❌ Async connection error detected:', (0, logSafety_util_1.sanitizeConnectionError)(connectionError));
                 throw connectionError;
             }
         }
         catch (error) {
-            logger_service_1.logger.error('❌ Failed to connect to Redis:', error);
-            throw error;
+            const safeError = (0, logSafety_util_1.sanitizeConnectionError)(error);
+            logger_service_1.logger.error('❌ Failed to connect to Redis:', safeError);
+            throw (0, logSafety_util_1.toSafeError)(safeError);
         }
     }
     // Order işlemleri için metodlar
@@ -202,7 +206,7 @@ class RedisWrapper {
     getConnectionStats() {
         return {
             totalInstances: RedisWrapper.instances.size,
-            currentUrl: this._url,
+            currentUrl: (0, logSafety_util_1.maskConnectionUriSecret)(this._url),
             isConnected: !!this._client
         };
     }
@@ -211,7 +215,7 @@ class RedisWrapper {
     }
     // Tüm instance'ları listele (debugging için)
     static getInstanceUrls() {
-        return Array.from(RedisWrapper.instances.keys());
+        return Array.from(RedisWrapper.instances.keys()).map((url) => (0, logSafety_util_1.maskConnectionUriSecret)(url));
     }
 }
 RedisWrapper.instances = new Map();

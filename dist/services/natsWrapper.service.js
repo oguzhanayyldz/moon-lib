@@ -16,6 +16,7 @@ exports.createNatsWrapper = exports.NatsWrapper = void 0;
 const node_nats_streaming_1 = __importDefault(require("node-nats-streaming"));
 const uuid_1 = require("uuid");
 const logger_service_1 = require("./logger.service");
+const logSafety_util_1 = require("../utils/logSafety.util");
 class NatsWrapper {
     constructor() {
         this._isConnected = false;
@@ -48,11 +49,13 @@ class NatsWrapper {
                 });
                 return new Promise((resolve, reject) => {
                     this.client.on('connect', () => resolve());
-                    this.client.on('error', (err) => reject(err));
+                    // The raw error carries the address (ERR_INVALID_URL etc.); never reject with it directly.
+                    this.client.on('error', (err) => reject((0, logSafety_util_1.toSafeError)((0, logSafety_util_1.sanitizeConnectionError)(err))));
                 });
             }
             catch (error) {
-                logger_service_1.logger.error('Failed to connect to NATS:', error);
+                // An invalid URL error (ERR_INVALID_URL) carries the address in `input`; never log the raw error.
+                logger_service_1.logger.error('Failed to connect to NATS:', (0, logSafety_util_1.sanitizeConnectionError)(error));
                 this.attemptReconnect(clusterId, clientId, url);
             }
         });
@@ -74,7 +77,7 @@ class NatsWrapper {
                 logger_service_1.logger.info('✅ NATS reconnection successful');
             })
                 .catch(err => {
-                logger_service_1.logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, err);
+                logger_service_1.logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, (0, logSafety_util_1.sanitizeConnectionError)(err));
                 // attemptReconnect will be called again from connect() error handler if needed
             });
         }, backoffTime);

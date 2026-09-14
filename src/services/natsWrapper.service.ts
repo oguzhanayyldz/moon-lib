@@ -1,6 +1,7 @@
 import nats, { Stan, Subscription } from 'node-nats-streaming';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './logger.service';
+import { sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
 
 export class NatsWrapper {
     private _client?: Stan;
@@ -38,10 +39,12 @@ export class NatsWrapper {
 
             return new Promise<void>((resolve, reject) => {
                 this.client!.on('connect', () => resolve());
-                this.client!.on('error', (err) => reject(err));
+                // The raw error carries the address (ERR_INVALID_URL etc.); never reject with it directly.
+                this.client!.on('error', (err) => reject(toSafeError(sanitizeConnectionError(err))));
             });
         } catch (error) {
-            logger.error('Failed to connect to NATS:', error);
+            // An invalid URL error (ERR_INVALID_URL) carries the address in `input`; never log the raw error.
+            logger.error('Failed to connect to NATS:', sanitizeConnectionError(error));
             this.attemptReconnect(clusterId, clientId, url);
         }
     }
@@ -66,7 +69,7 @@ export class NatsWrapper {
                     logger.info('✅ NATS reconnection successful');
                 })
                 .catch(err => {
-                    logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, err);
+                    logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, sanitizeConnectionError(err));
                     // attemptReconnect will be called again from connect() error handler if needed
                 });
         }, backoffTime);
