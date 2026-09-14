@@ -1,0 +1,286 @@
+/**
+ * Issue #648 · 648-G1 reproduction — dead-letter queue paths. Line numbers refer to moon-lib 11677f7 (before 648-G3).
+ *
+ * K-2: RetryableListener writes the DLQ record with the exhausted retry count
+ *      (events/retryableListener.ts:366-376, retryCount >= 5), while
+ *      DeadLetterProcessorJob only picks `retryCount < 5` (jobs/deadLetterProcessor.job.ts:83-87).
+ *      The `maxRetries` option is logged but never reaches RetryManager
+ *      (retryableListener.ts:48, services/retryManager.ts:20-23,60-63), so the limit is always 5.
+ * K-3: when Mongo is not ready (retryableListener.ts:358-361) or the DLQ save throws
+ *      (:301-304), the exhausted message is still acked (:307).
+ *
+ * Tests marked "K-2:" / "K-3:" failed on 11677f7 and pass with the 648-G3 fix; tests marked "G3:"
+ * pin the safety properties of that fix (bounded replay, no automatic replay of old records, capped back-off).
+ * RetryableListener, RetryManager, DeadLetterProcessorJob and the DeadLetter schema run
+ * as production code; only Redis, Mongo and NATS are in-memory fakes.
+ */
+import { Message } from 'node-nats-streaming';
+import { RetryableListener } from '../events/retryableListener';
+import { DeadLetterProcessorJob } from '../jobs/deadLetterProcessor.job';
+import { Event, Subjects } from '../common';
+import { redisWrapper } from '../services/redisWrapper.service';
+import { InMemoryRedis } from '../test/fakes/inMemoryRedis';
+import {
+    NOT_LOST,
+    createDeadLetterStore,
+    createFakeMessage,
+    createFakeStan,
+    deliveryOutcome,
+    useFakeClock,
+    wasAcked,
+} from '../test/fakes/eventDeliveryHarness';
+
+jest.mock('../services/redisWrapper.service', () => {
+    const { InMemoryRedis: Redis } = jest.requireActual('../test/fakes/inMemoryRedis');
+    return { redisWrapper: { client: new Redis() } };
+});
+
+jest.mock('../services/logger.service', () => ({
+    logger: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+    }
+}));
+
+jest.mock('../metrics/EventMetrics', () => ({
+    EventMetrics: {
+        eventProcessingDuration: { observe: jest.fn() },
+        eventProcessingTotal: { inc: jest.fn() },
+        eventRetryTotal: { inc: jest.fn() },
+        eventDlqTotal: { inc: jest.fn() },
+    }
+}));
+
+const DEFAULT_RETRY_LIMIT = 5;
+
+interface StockCopyEvent extends Event {
+    subject: Subjects.StockUpdated;
+    data: { id: string; user: string; quantity: number; version: number };
+}
+
+class FailingStockCopyListener extends RetryableListener<StockCopyEvent> {
+    subject: Subjects.StockUpdated = Subjects.StockUpdated;
+    queueGroupName = 'event-loss-test';
+
+    // Always fails, so a message of this listener is never processed.
+    protected async processEvent(): Promise<void> {
+        throw new Error('ECONNRESET: socket hang up while writing stock copy');
+    }
+
+    protected getEventId(data: StockCopyEvent['data']): string {
+        return `stock-${data.id}`;
+    }
+}
+
+type DeadLetterProcessorInternals = { processPendingEvents(): Promise<void> };
+
+const payload: StockCopyEvent['data'] = { id: 'stock-1', user: 'user-1', quantity: 4, version: 3 };
+
+/** NATS Streaming redelivers an un-acked message after ackWait; the test replays that sequence. */
+async function redeliver(listener: FailingStockCopyListener, msg: Message, deliveries: number) {
+    for (let delivery = 1; delivery <= deliveries && !wasAcked(msg); delivery++) {
+        await listener.onMessage(payload, msg);
+    }
+}
+
+describe('#648 K-2 — DeadLetterProcessorJob never replays records written by RetryableListener', () => {
+    let nats: ReturnType<typeof createFakeStan>;
+    let clock: ReturnType<typeof useFakeClock>;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (redisWrapper.client as unknown as InMemoryRedis).flushAll();
+        clock = useFakeClock();
+        nats = createFakeStan();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it('control: a pending dead-letter record with retryCount 0 is republished to NATS', async () => {
+        const deadLetters = createDeadLetterStore();
+        const record = deadLetters.seed({
+            subject: Subjects.StockUpdated,
+            eventId: 'stock-1',
+            data: payload,
+            error: 'manual seed',
+            retryCount: 0,
+            maxRetries: DEFAULT_RETRY_LIMIT,
+            service: 'inventory',
+            nextRetryAt: new Date(Date.now() - 1000),
+            timestamp: new Date(),
+        });
+        const processor = new DeadLetterProcessorJob(nats.client, deadLetters.connection) as unknown as DeadLetterProcessorInternals;
+
+        await processor.processPendingEvents();
+
+        expect(nats.publish).toHaveBeenCalledWith(Subjects.StockUpdated, JSON.stringify(payload), expect.any(Function));
+        expect(record.status).toBe('completed');
+    });
+
+    it('K-2: a record dead-lettered by the listener after exhausting retries must be republished by the processor', async () => {
+        const deadLetters = createDeadLetterStore();
+        const listener = new FailingStockCopyListener(nats.client, {}, deadLetters.connection);
+        const msg = createFakeMessage(payload);
+
+        await redeliver(listener, msg, DEFAULT_RETRY_LIMIT);
+        // Precondition: the listener dead-lettered and acked the message exactly as in production.
+        expect(msg.ack).toHaveBeenCalledTimes(1);
+        expect(deadLetters.collection.docs).toHaveLength(1);
+        const [record] = deadLetters.collection.docs;
+        expect(record).toMatchObject({ subject: Subjects.StockUpdated, status: 'pending', retryCount: DEFAULT_RETRY_LIMIT });
+
+        // The listener schedules the replay one minute later; run the processor well after that.
+        await clock.advance(2 * 60_000);
+        const processor = new DeadLetterProcessorJob(nats.client, deadLetters.connection) as unknown as DeadLetterProcessorInternals;
+        await processor.processPendingEvents();
+
+        expect(nats.publish).toHaveBeenCalledWith(Subjects.StockUpdated, JSON.stringify(payload), expect.any(Function));
+        expect(record.status).toBe('completed');
+    });
+
+    it('K-2: the maxRetries option must bound the attempts before the message is dead-lettered', async () => {
+        const maxRetries = 3;
+        const deadLetters = createDeadLetterStore();
+        const listener = new FailingStockCopyListener(nats.client, { maxRetries }, deadLetters.connection);
+        const msg = createFakeMessage(payload);
+
+        await redeliver(listener, msg, maxRetries);
+
+        expect({ acked: wasAcked(msg), deadLetterRecords: deadLetters.collection.docs.length })
+            .toEqual({ acked: true, deadLetterRecords: 1 });
+    });
+
+    it('G3: a message that keeps failing is replayed deadLetterMaxRetries times, then marked failed instead of looping', async () => {
+        const deadLetterMaxRetries = 5;
+        const deadLetters = createDeadLetterStore();
+        const listener = new FailingStockCopyListener(nats.client, { deadLetterMaxRetries }, deadLetters.connection);
+        const processor = new DeadLetterProcessorJob(nats.client, deadLetters.connection) as unknown as DeadLetterProcessorInternals;
+        await redeliver(listener, createFakeMessage(payload), DEFAULT_RETRY_LIMIT);
+
+        // Each replay is published to NATS and delivered to the still failing listener, which dead-letters it again.
+        for (let cycle = 0; cycle < 3 * deadLetterMaxRetries; cycle++) {
+            await clock.advance(31 * 60_000);
+            const publishedBefore = nats.publish.mock.calls.length;
+            await processor.processPendingEvents();
+            if (nats.publish.mock.calls.length === publishedBefore) break;
+
+            const replayed = createFakeMessage(payload);
+            await listener.onMessage(payload, replayed);
+            expect(wasAcked(replayed)).toBe(true);
+        }
+
+        expect(nats.publish).toHaveBeenCalledTimes(deadLetterMaxRetries);
+        const records = deadLetters.collection.docs;
+        expect(records).toHaveLength(1 + deadLetterMaxRetries);
+        expect(records.slice(0, -1).every(record => record.status === 'completed')).toBe(true);
+        expect(records[records.length - 1]).toMatchObject({
+            status: 'failed',
+            retryCount: DEFAULT_RETRY_LIMIT + deadLetterMaxRetries,
+            maxRetries: DEFAULT_RETRY_LIMIT + deadLetterMaxRetries,
+        });
+    });
+
+    it('G3: a pending record written before the fix (retryCount >= maxRetries) is not replayed automatically', async () => {
+        const deadLetters = createDeadLetterStore();
+        const record = deadLetters.seed({
+            subject: Subjects.StockUpdated,
+            eventId: 'stock-1',
+            data: payload,
+            error: 'written by the listener before 648-G3',
+            retryCount: DEFAULT_RETRY_LIMIT,
+            maxRetries: DEFAULT_RETRY_LIMIT,
+            service: 'inventory',
+            nextRetryAt: new Date(Date.now() - 1000),
+            timestamp: new Date(),
+        });
+        const processor = new DeadLetterProcessorJob(nats.client, deadLetters.connection) as unknown as DeadLetterProcessorInternals;
+
+        await processor.processPendingEvents();
+
+        expect(nats.publish).not.toHaveBeenCalled();
+        expect(record.status).toBe('pending');
+    });
+
+    it('G3: a replay whose publish fails is retried within 30 minutes and fails once the budget is used up', async () => {
+        const deadLetters = createDeadLetterStore();
+        const record = deadLetters.seed({
+            subject: Subjects.StockUpdated,
+            eventId: 'stock-1',
+            data: payload,
+            error: 'ECONNRESET',
+            retryCount: 8,
+            maxRetries: 10,
+            service: 'inventory',
+            nextRetryAt: new Date(Date.now() - 1000),
+            timestamp: new Date(),
+        });
+        const processor = new DeadLetterProcessorJob(nats.client, deadLetters.connection) as unknown as DeadLetterProcessorInternals;
+        nats.setPublishFails(true);
+
+        await processor.processPendingEvents();
+        expect(record).toMatchObject({ status: 'pending', retryCount: 9 });
+        expect(record.nextRetryAt.getTime() - Date.now()).toBeLessThanOrEqual(30 * 60_000);
+
+        await clock.advance(30 * 60_000);
+        await processor.processPendingEvents();
+        expect(record).toMatchObject({ status: 'failed', retryCount: 10 });
+        expect(nats.publish).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('#648 K-3 — exhausted message is acked even when the dead-letter record is not written', () => {
+    let nats: ReturnType<typeof createFakeStan>;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (redisWrapper.client as unknown as InMemoryRedis).flushAll();
+        nats = createFakeStan();
+    });
+
+    it('control: with Mongo ready, the exhausted message is acked only after the dead-letter record is written', async () => {
+        const deadLetters = createDeadLetterStore();
+        const listener = new FailingStockCopyListener(nats.client, {}, deadLetters.connection);
+        const msg = createFakeMessage(payload);
+
+        await redeliver(listener, msg, DEFAULT_RETRY_LIMIT);
+
+        expect(deliveryOutcome({
+            acked: wasAcked(msg),
+            processed: false,
+            deadLettered: deadLetters.collection.docs.length > 0,
+        })).toBe(NOT_LOST);
+        expect(wasAcked(msg)).toBe(true);
+    });
+
+    it('K-3: when the Mongo connection is not ready the exhausted message must not be acked without a dead-letter record', async () => {
+        const deadLetters = createDeadLetterStore({ readyState: 0 });
+        const listener = new FailingStockCopyListener(nats.client, {}, deadLetters.connection);
+        const msg = createFakeMessage(payload);
+
+        await redeliver(listener, msg, DEFAULT_RETRY_LIMIT);
+
+        expect(deliveryOutcome({
+            acked: wasAcked(msg),
+            processed: false,
+            deadLettered: deadLetters.collection.docs.length > 0,
+        })).toBe(NOT_LOST);
+    });
+
+    it('K-3: when saving the dead-letter record throws the exhausted message must not be acked', async () => {
+        const deadLetters = createDeadLetterStore({ saveError: new Error('MongoNetworkError: connection 3 to mongo:27017 closed') });
+        const listener = new FailingStockCopyListener(nats.client, {}, deadLetters.connection);
+        const msg = createFakeMessage(payload);
+
+        await redeliver(listener, msg, DEFAULT_RETRY_LIMIT);
+
+        expect(deliveryOutcome({
+            acked: wasAcked(msg),
+            processed: false,
+            deadLettered: deadLetters.collection.docs.length > 0,
+        })).toBe(NOT_LOST);
+    });
+});

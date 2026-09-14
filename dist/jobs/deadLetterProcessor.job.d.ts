@@ -4,6 +4,7 @@ export declare class DeadLetterProcessorJob {
     private natsClient;
     private connection;
     private static readonly PROCESSOR_INTERVAL;
+    private static readonly MAX_RETRY_DELAY;
     private intervalId;
     private stuckCheckIntervalId;
     private readonly deadLetterModel;

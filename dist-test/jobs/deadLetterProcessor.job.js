@@ -69,11 +69,14 @@ class DeadLetterProcessorJob {
             const event = await this.deadLetterModel.findOneAndUpdate({
                 environment: currentEnvironment,
                 $or: [
-                    // Pending durumundaki event'ler
+                    // Pending durumundaki ve deneme bütçesi dolmamış event'ler (issue #648 K-2).
+                    // RetryableListener retryCount'a toplam deneme sayısını, maxRetries'a toplam bütçeyi yazar.
+                    // Bu düzeltmeden önce yazılmış kayıtlar (retryCount >= maxRetries) bilinçli olarak
+                    // dışarıda kalır: birikmiş kayıtların yeniden oynatılması ayrı ve onaylı bir operasyondur.
                     {
                         status: 'pending',
                         nextRetryAt: { $lte: new Date() },
-                        retryCount: { $lt: 5 }
+                        $expr: { $lt: ['$retryCount', '$maxRetries'] }
                     },
                     // Takılı kalmış processing event'ler
                     {
@@ -139,7 +142,7 @@ class DeadLetterProcessorJob {
             }, {
                 $set: {
                     status: 'pending',
-                    nextRetryAt: new Date(Date.now() + Math.pow(2, event.retryCount + 1) * 60000)
+                    nextRetryAt: new Date(Date.now() + Math.min(Math.pow(2, event.retryCount + 1) * 60000, DeadLetterProcessorJob.MAX_RETRY_DELAY))
                 },
                 $inc: { retryCount: 1 },
                 $unset: { processorId: 1, processingStartedAt: 1 }
@@ -186,4 +189,5 @@ class DeadLetterProcessorJob {
 }
 exports.DeadLetterProcessorJob = DeadLetterProcessorJob;
 DeadLetterProcessorJob.PROCESSOR_INTERVAL = 60000; // Her 1 dakikada bir çalış
+DeadLetterProcessorJob.MAX_RETRY_DELAY = 30 * 60000; // Yayın hatasından sonra en fazla 30 dakika bekle
 //# sourceMappingURL=deadLetterProcessor.job.js.map

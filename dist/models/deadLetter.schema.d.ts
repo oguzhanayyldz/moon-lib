@@ -11,6 +11,7 @@ export interface DeadLetterAttrs extends BaseAttrs {
     environment?: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
+    status?: 'pending' | 'processing' | 'completed' | 'failed';
     processorId?: string;
     processingStartedAt?: Date;
     completedAt?: Date;

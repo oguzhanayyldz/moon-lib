@@ -1,7 +1,7 @@
-import mongoose from 'mongoose';
+import mongoose, { FilterQuery } from 'mongoose';
 import { Stan } from 'node-nats-streaming';
 import { Subjects, ServiceName } from '../common/';
-import { createOutboxModel, OutboxModel } from '../models/outbox.schema';
+import { createOutboxModel, OutboxDoc, OutboxModel } from '../models/outbox.schema';
 import { ProductCreatedPublisher } from '../events/publishers/productCreated.publisher';
 import { ProductUpdatedPublisher } from '../events/publishers/productUpdated.publisher';
 // Combination/PPL/RPL publisher import'ları kaldırıldı (issue #507)
@@ -80,6 +80,11 @@ export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
     private static readonly VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
+    // Issue #648 K-1: bir kaydın job seviyesindeki yayın denemesi üst sınırı. Hakkı kalan başarısız kayıt
+    // bekleme süresi dolunca yeniden kuyruğa alınır (30 sn → 60 → 120 → 240 sn); son denemede kalıcı failed olur.
+    private static readonly MAX_PUBLISH_ATTEMPTS = 5;
+    private static readonly PUBLISH_RETRY_BASE_DELAY = 30000; // 30 saniye
+    private static readonly PUBLISH_RETRY_MAX_DELAY = 240000; // 4 dakika
     private static readonly MAX_JITTER = 500; // 0-500ms random jitter
     private static readonly PRIORITY_TRANSITION_DELAY = 5000; // 5 saniye - priority geçişlerinde bekleme
     private intervalId: NodeJS.Timeout | null = null;
@@ -220,7 +225,7 @@ export class EventPublisherJob {
             const systemEvents = await this.outboxModel.find({
                 status: 'pending',
                 environment: currentEnvironment,
-                retryCount: { $lt: 5 },
+                retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                 eventType: { $ne: Subjects.EntityVersionUpdated },
                 $or: [
                     { userId: '_system_' },
@@ -241,7 +246,7 @@ export class EventPublisherJob {
             const usersWithPendingEvents = await this.outboxModel.distinct('userId', {
                 status: 'pending',
                 environment: currentEnvironment,
-                retryCount: { $lt: 5 },
+                retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                 eventType: { $ne: Subjects.EntityVersionUpdated },
                 userId: { $nin: ['_system_', null] }
             });
@@ -256,7 +261,7 @@ export class EventPublisherJob {
                 const sortedEvents = await this.outboxModel.find({
                     status: 'pending',
                     environment: currentEnvironment,
-                    retryCount: { $lt: 5 },
+                    retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                     eventType: { $ne: Subjects.EntityVersionUpdated },
                     userId: userId
                 })
@@ -353,7 +358,14 @@ export class EventPublisherJob {
                 return;
             }
 
-            await this.publishEvent(event);
+            // Deneme hakkını yalnız yayın hatası tüketir; Mongo durum güncellemesi hataları aşağıdaki catch'e düşer
+            try {
+                await this.publishEvent(event);
+            } catch (error) {
+                await this.markPublishFailed({ _id: event.id }, event.retryCount);
+                logger.error(`Failed to publish event ${event.id}:`, error);
+                return;
+            }
 
             // Başarılı olarak işaretle
             await this.outboxModel.updateOne(
@@ -363,15 +375,47 @@ export class EventPublisherJob {
 
             logger.info(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
         } catch (error) {
-            await this.outboxModel.updateOne(
-                { _id: event.id, status: 'processing' },
-                {
-                    $set: { status: 'failed', lastAttempt: new Date() },
-                    $inc: { retryCount: 1 }
-                }
-            );
-            logger.error(`Failed to publish event ${event.id}:`, error);
+            logger.error(`Failed to update outbox state of event ${event.id}:`, error);
         }
+    }
+
+    /**
+     * Yayını başarısız olan kayıtları işaretle (issue #648 K-1).
+     * Deneme hakkı kalan kayıt `failed` + `nextAttemptAt` alır ve monitorFailedEvents süre dolunca onu
+     * `pending`'e geri çevirir. Hakkı biten kayıt kalıcı `failed` kalır ve ALERT sayımına girer.
+     * Filtre claim anındaki `retryCount`'u içerir; retryCount durum değişikliğiyle aynı güncellemede arttığı için
+     * kaydı eski bir okumayla yeniden claim eden ya da ikinci kez sayan başka bir pod olamaz.
+     */
+    private async markPublishFailed(filter: FilterQuery<OutboxDoc>, retryCount: number): Promise<void> {
+        const attempts = retryCount + 1;
+        const exhausted = attempts >= EventPublisherJob.MAX_PUBLISH_ATTEMPTS;
+        const now = new Date();
+
+        const result = await this.outboxModel.updateMany(
+            { ...filter, status: 'processing', retryCount },
+            {
+                $set: exhausted
+                    ? { status: 'failed', lastAttempt: now }
+                    : { status: 'failed', lastAttempt: now, nextAttemptAt: new Date(now.getTime() + this.getPublishRetryDelay(attempts)) },
+                $inc: { retryCount: 1 }
+            }
+        );
+
+        if (exhausted && result.modifiedCount > 0) {
+            logger.error(`${result.modifiedCount} outbox event(s) permanently failed after ${attempts} publish attempts`, filter);
+        }
+    }
+
+    /**
+     * Başarısız denemeden sonraki bekleme: 30 sn, 60 sn, 120 sn, 240 sn (üst sınır 4 dk).
+     * Beklemeler toplam 7,5 dk; publisher'ların kendi iç denemeleriyle (~10 sn × 5) kayıt ~8 dk'lık
+     * NATS kesintisinden sonra kalıcı failed olur.
+     */
+    private getPublishRetryDelay(attempts: number): number {
+        return Math.min(
+            EventPublisherJob.PUBLISH_RETRY_BASE_DELAY * Math.pow(2, attempts - 1),
+            EventPublisherJob.PUBLISH_RETRY_MAX_DELAY
+        );
     }
 
 
@@ -388,7 +432,7 @@ export class EventPublisherJob {
             const versionEvents = await this.outboxModel.find({
                 status: 'pending',
                 environment: currentEnvironment,
-                retryCount: { $lt: 5 },
+                retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                 eventType: Subjects.EntityVersionUpdated
             })
                 .sort({ creationDate: 1 })
@@ -443,14 +487,16 @@ export class EventPublisherJob {
 
                 logger.info(`✅ Bulk published ${versionEvents.length} EntityVersionUpdated events (batch: ${batchId})`);
             } catch (error) {
-                // Hata durumunda tümünü 'failed' yap (retry için)
-                await this.outboxModel.updateMany(
-                    { _id: { $in: eventIds }, status: 'processing' },
-                    { 
-                        $set: { status: 'failed', lastAttempt: new Date() },
-                        $inc: { retryCount: 1 }
-                    }
-                );
+                // Hata durumunda tümünü 'failed' yap; bekleme ve kalıcı başarısızlık kaydın kendi retryCount'una göre belirlenir
+                const idsByRetryCount = new Map<number, string[]>();
+                for (const versionEvent of versionEvents) {
+                    const ids = idsByRetryCount.get(versionEvent.retryCount) ?? [];
+                    ids.push(versionEvent.id);
+                    idsByRetryCount.set(versionEvent.retryCount, ids);
+                }
+                for (const [retryCount, ids] of idsByRetryCount) {
+                    await this.markPublishFailed({ _id: { $in: ids } }, retryCount);
+                }
                 logger.error('❌ Failed to publish bulk EntityVersionUpdated events:', error);
             }
         } catch (error) {
@@ -482,10 +528,30 @@ export class EventPublisherJob {
                 }
             }
             
+            // Deneme hakkı kalan failed kayıtları bekleme süresi dolunca yeniden kuyruğa al (issue #648 K-1).
+            // nextAttemptAt'i olmayan eski failed kayıtlar bilinçli olarak dışarıda kalır: birikmiş kayıtların
+            // yeniden yayınlanması ayrı ve onaylı bir operasyondur.
+            const requeued = await this.outboxModel.updateMany(
+                {
+                    status: 'failed',
+                    environment: process.env.NODE_ENV || 'production',
+                    retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
+                    nextAttemptAt: { $lte: new Date() }
+                },
+                {
+                    $set: { status: 'pending' },
+                    $unset: { nextAttemptAt: 1 }
+                }
+            );
+
+            if (requeued.modifiedCount > 0) {
+                logger.warn(`Requeued ${requeued.modifiedCount} failed events for another publish attempt`);
+            }
+
             // Diğer mevcut monitoring kodları...
             const failedEvents = await this.outboxModel.countDocuments({
                 status: 'failed',
-                retryCount: { $gte: 5 }
+                retryCount: { $gte: EventPublisherJob.MAX_PUBLISH_ATTEMPTS }
             });
 
             if (failedEvents >= EventPublisherJob.ALERT_THRESHOLD) {

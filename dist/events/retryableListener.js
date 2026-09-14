@@ -30,7 +30,7 @@ class RetryableListener extends common_1.Listener {
         this.options = Object.assign(Object.assign({}, RetryableListener.DEFAULT_OPTIONS), options);
         // ackWait'i override et (base class'ta 5s, burada options'dan alıyoruz)
         this.ackWait = this.options.ackWaitSec * 1000;
-        this.retryManager = new retryManager_1.RetryManager();
+        this.retryManager = new retryManager_1.RetryManager({ maxRetries: this.options.maxRetries });
         this.connection = connection;
     }
     /**
@@ -266,8 +266,10 @@ class RetryableListener extends common_1.Listener {
                                 });
                             }
                             catch (dlqError) {
-                                logger_service_1.logger.error('Failed to save to dead letter queue:', dlqError);
+                                logger_service_1.logger.error('Failed to save to dead letter queue, NATS will redeliver:', dlqError);
                                 span.setTag('dead_letter.error', dlqError.message);
+                                // msg.ack() YOK - DLQ kaydı yokken ack'lemek mesajı kalıcı kaybeder (issue #648 K-3)
+                                return;
                             }
                         }
                         msg.ack();
@@ -316,30 +318,49 @@ class RetryableListener extends common_1.Listener {
         });
     }
     /**
-     * İşlenemeyen olayı Dead Letter kuyruğuna taşı
+     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez.
+     *
+     * Deneme bütçesi (issue #648 K-2): `retryCount` bu olayın toplam başarısız deneme sayısıdır (Redis sayacı),
+     * `maxRetries` ise NATS denemeleri + DLQ oynatmaları toplamıdır. Sayaç yalnız başarıda sıfırlandığı için
+     * DLQ'dan oynatılan mesaj yine başarısız olursa sayaç büyümeye devam eder; bütçe dolunca kayıt `failed`
+     * yazılır ve bir daha oynatılmaz. Böylece hiç işlenemeyen bir mesaj DLQ → NATS döngüsüne girmez.
      */
     moveToDeadLetterQueue(data, error, retryCount) {
         return __awaiter(this, void 0, void 0, function* () {
             // Mikroservis özelinde bağlantı durumunu kontrol et
             if (this.connection.readyState !== 1) {
-                logger_service_1.logger.error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
-                return;
+                throw new Error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
             }
             const deadLetterModel = (0, deadLetter_schema_1.createDeadLetterModel)(this.connection);
             const eventId = this.getEventId(data);
+            const attemptBudget = this.options.maxRetries + this.options.deadLetterMaxRetries;
+            const replayable = retryCount < attemptBudget;
+            const replaysSoFar = Math.max(retryCount - this.options.maxRetries, 0);
             yield deadLetterModel.build({
                 subject: this.subject,
                 eventId: eventId,
                 data: data,
                 error: error.message,
                 retryCount: retryCount,
-                maxRetries: this.options.deadLetterMaxRetries,
+                maxRetries: attemptBudget,
+                status: replayable ? 'pending' : 'failed',
                 service: process.env.SERVICE_NAME || 'unknown',
-                nextRetryAt: new Date(Date.now() + 60000), // 1 dakika sonra yeniden dene
+                nextRetryAt: new Date(Date.now() + this.getDeadLetterReplayDelay(replaysSoFar)),
                 timestamp: new Date()
             }).save();
-            logger_service_1.logger.info(`Event moved to DLQ: ${this.subject}:${eventId}`);
+            if (replayable) {
+                logger_service_1.logger.info(`Event moved to DLQ: ${this.subject}:${eventId} (attempt ${retryCount}/${attemptBudget})`);
+            }
+            else {
+                logger_service_1.logger.error(`Event permanently failed, DLQ record will not be replayed: ${this.subject}:${eventId} (attempt ${retryCount}/${attemptBudget})`);
+            }
         });
+    }
+    /**
+     * DLQ oynatmaları arasındaki bekleme: 1, 2, 4, 8, 16 dk ... (üst sınır 30 dk)
+     */
+    getDeadLetterReplayDelay(replaysSoFar) {
+        return Math.min(60000 * Math.pow(2, replaysSoFar), 30 * 60000);
     }
     /**
      * Olaydan benzersiz bir ID çıkar

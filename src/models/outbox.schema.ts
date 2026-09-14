@@ -157,6 +157,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount?: number;
     lastAttempt?: Date;
+    nextAttemptAt?: Date; // failed kaydın yeniden kuyruğa alınacağı an (issue #648 K-1)
     error?: string;
     result?: any;
     processedAt?: Date;
@@ -172,6 +173,7 @@ export interface OutboxDoc extends BaseDoc {
     status: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount: number;
     lastAttempt?: Date;
+    nextAttemptAt?: Date; // failed kaydın yeniden kuyruğa alınacağı an (issue #648 K-1)
     error?: string;
     result?: any;
     processedAt?: Date;
@@ -201,6 +203,7 @@ const outboxSchemaDefination = {
     },
     retryCount: { type: Number, default: 0 },
     lastAttempt: Date,
+    nextAttemptAt: Date,
     error: {
         type: String
     },

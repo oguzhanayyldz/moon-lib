@@ -29,6 +29,7 @@ const outboxSchemaDefination = {
     },
     retryCount: { type: Number, default: 0 },
     lastAttempt: Date,
+    nextAttemptAt: Date,
     error: {
         type: String
     },

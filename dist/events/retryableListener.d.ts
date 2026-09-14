@@ -40,9 +40,18 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      */
     private processWithImmediateRetries;
     /**
-     * İşlenemeyen olayı Dead Letter kuyruğuna taşı
+     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez.
+     *
+     * Deneme bütçesi (issue #648 K-2): `retryCount` bu olayın toplam başarısız deneme sayısıdır (Redis sayacı),
+     * `maxRetries` ise NATS denemeleri + DLQ oynatmaları toplamıdır. Sayaç yalnız başarıda sıfırlandığı için
+     * DLQ'dan oynatılan mesaj yine başarısız olursa sayaç büyümeye devam eder; bütçe dolunca kayıt `failed`
+     * yazılır ve bir daha oynatılmaz. Böylece hiç işlenemeyen bir mesaj DLQ → NATS döngüsüne girmez.
      */
     private moveToDeadLetterQueue;
+    /**
+     * DLQ oynatmaları arasındaki bekleme: 1, 2, 4, 8, 16 dk ... (üst sınır 30 dk)
+     */
+    private getDeadLetterReplayDelay;
     /**
      * Olaydan benzersiz bir ID çıkar
      * Alt sınıflar tarafından override edilebilir

@@ -46,7 +46,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         };
         // ackWait'i override et (base class'ta 5s, burada options'dan alıyoruz)
         this.ackWait = this.options.ackWaitSec * 1000;
-        this.retryManager = new RetryManager();
+        this.retryManager = new RetryManager({ maxRetries: this.options.maxRetries });
         this.connection = connection;
     }
 
@@ -304,8 +304,10 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                                 failure_reason: (error as Error).message.substring(0, 100) // Limit length
                             });
                         } catch (dlqError) {
-                            logger.error('Failed to save to dead letter queue:', dlqError);
+                            logger.error('Failed to save to dead letter queue, NATS will redeliver:', dlqError);
                             span.setTag('dead_letter.error', (dlqError as Error).message);
+                            // msg.ack() YOK - DLQ kaydı yokken ack'lemek mesajı kalıcı kaybeder (issue #648 K-3)
+                            return;
                         }
                     }
 
@@ -356,17 +358,24 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     }
 
     /**
-     * İşlenemeyen olayı Dead Letter kuyruğuna taşı
+     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez.
+     *
+     * Deneme bütçesi (issue #648 K-2): `retryCount` bu olayın toplam başarısız deneme sayısıdır (Redis sayacı),
+     * `maxRetries` ise NATS denemeleri + DLQ oynatmaları toplamıdır. Sayaç yalnız başarıda sıfırlandığı için
+     * DLQ'dan oynatılan mesaj yine başarısız olursa sayaç büyümeye devam eder; bütçe dolunca kayıt `failed`
+     * yazılır ve bir daha oynatılmaz. Böylece hiç işlenemeyen bir mesaj DLQ → NATS döngüsüne girmez.
      */
     private async moveToDeadLetterQueue(data: T['data'], error: Error, retryCount: number): Promise<void> {
         // Mikroservis özelinde bağlantı durumunu kontrol et
         if (this.connection.readyState !== 1) {
-            logger.error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
-            return;
+            throw new Error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
         }
 
         const deadLetterModel = createDeadLetterModel(this.connection);
         const eventId = this.getEventId(data);
+        const attemptBudget = this.options.maxRetries + this.options.deadLetterMaxRetries;
+        const replayable = retryCount < attemptBudget;
+        const replaysSoFar = Math.max(retryCount - this.options.maxRetries, 0);
 
         await deadLetterModel.build({
             subject: this.subject,
@@ -374,13 +383,25 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             data: data,
             error: error.message,
             retryCount: retryCount,
-            maxRetries: this.options.deadLetterMaxRetries,
+            maxRetries: attemptBudget,
+            status: replayable ? 'pending' : 'failed',
             service: process.env.SERVICE_NAME || 'unknown',
-            nextRetryAt: new Date(Date.now() + 60000), // 1 dakika sonra yeniden dene
+            nextRetryAt: new Date(Date.now() + this.getDeadLetterReplayDelay(replaysSoFar)),
             timestamp: new Date()
         }).save();
 
-        logger.info(`Event moved to DLQ: ${this.subject}:${eventId}`);
+        if (replayable) {
+            logger.info(`Event moved to DLQ: ${this.subject}:${eventId} (attempt ${retryCount}/${attemptBudget})`);
+        } else {
+            logger.error(`Event permanently failed, DLQ record will not be replayed: ${this.subject}:${eventId} (attempt ${retryCount}/${attemptBudget})`);
+        }
+    }
+
+    /**
+     * DLQ oynatmaları arasındaki bekleme: 1, 2, 4, 8, 16 dk ... (üst sınır 30 dk)
+     */
+    private getDeadLetterReplayDelay(replaysSoFar: number): number {
+        return Math.min(60000 * Math.pow(2, replaysSoFar), 30 * 60000);
     }
 
     /**
