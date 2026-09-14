@@ -8,7 +8,7 @@ import { deadLetterReplayRegistry, DeadLetterReplayResult, DeadLetterReplayTarge
 export class DeadLetterProcessorJob {
     private static readonly PROCESSOR_INTERVAL = 60000; // Her 1 dakikada bir çalış
     private static readonly MAX_RETRY_DELAY = 30 * 60000; // Başarısız oynatmadan sonra en fazla 30 dakika bekle
-    private static readonly BUSY_RETRY_DELAY = 60000; // Olay kilitliyse 1 dakika sonra yeniden dene
+    private static readonly BUSY_RETRY_DELAY = 60000; // Olay kilitliyse ya da oynatma zaman sınırını aştıysa 1 dakika sonra yeniden dene
     private static readonly MAX_REPLAYS_PER_CYCLE = 50; // Bir turda en fazla bu kadar kayıt oynatılır
     private static readonly PROCESSING_TIMEOUT = 10 * 60 * 1000; // Bu süreden uzun süren oynatma takılı sayılır ve beklenmez
     private intervalId: NodeJS.Timeout | null = null;
@@ -208,7 +208,7 @@ export class DeadLetterProcessorJob {
         }
 
         if (result === 'busy') {
-            // Olay başka bir teslimde işleniyor: deneme bütçesi tüketilmez
+            // Olay kilitli ya da oynatma zaman sınırını aştı (replayWithinTimeout): deneme bütçesi tüketilmez
             await this.requeue(event, DeadLetterProcessorJob.BUSY_RETRY_DELAY);
             return;
         }
@@ -218,8 +218,13 @@ export class DeadLetterProcessorJob {
 
     /**
      * Oynatmayı PROCESSING_TIMEOUT ile sınırlar: dönmeyen bir handler bu işlemcinin turunu süresiz durdurmasın.
-     * Süre dolunca handler iptal edilemez, arka planda sürer ve geç gelen sonucu yazılmaz; kayıt `busy` sayılır ve
-     * deneme bütçesi tüketilmeden geri bırakılır. Süre, takılı kaydın başka işleyiciye geçtiği süreyle aynıdır.
+     * Süre dolunca handler iptal edilemez, arka planda sürer ve geç gelen sonucu yazılmaz; kayıt deneme bütçesi
+     * tüketilmeden geri bırakılır. Süre, takılı kaydın başka işleyiciye geçtiği süreyle aynıdır; kayıt bu arada
+     * devralındıysa geri bırakma yazılmaz (claimedBy).
+     * Zaman aşımı `busy` döner, oysa handler başlamıştır: sonuç ve metrik etiketi kilitli olayın `busy`'siyle ortaktır,
+     * yalnız warn logu ayırt eder. Bütçe tüketilmediği için hep dönmeyen bir handler ~11 dk'da bir yeniden oynatılır,
+     * her denemede bir yürütme arka planda kalır ve kayıt `failed` olmaz; olay kilidi dolduğu için tek pod'da da aynı
+     * olay eşzamanlı işlenebilir. Ardışık zaman aşımına sınır yoktur.
      */
     private async replayWithinTimeout(event: DeadLetterDoc, target: DeadLetterReplayTarget): Promise<DeadLetterReplayResult> {
         let timer: NodeJS.Timeout | undefined;

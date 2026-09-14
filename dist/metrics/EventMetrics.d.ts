@@ -69,7 +69,9 @@ export declare class EventMetrics {
      * DLQ oynatmaları (Counter)
      *
      * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
-     * processed (record completed), failed (one attempt of the budget used), busy (event locked, retried later).
+     * processed (record completed), failed (one attempt of the budget used), busy (no attempt used, retried a minute later):
+     * the event was locked, or the replay exceeded the 10 minute limit and its handler still runs in the background.
+     * Both busy cases share the label; only the processor's warning log tells a timeout apart.
      * Includes labels: service, event_type, queue_group, result
      */
     static readonly eventDlqReplayTotal: Counter<"result" | "service" | "event_type" | "queue_group">;

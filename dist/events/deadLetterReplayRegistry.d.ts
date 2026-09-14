@@ -2,7 +2,8 @@
  * Result of replaying one dead-letter record:
  * - processed: the event was processed (the record is completed)
  * - failed: processing threw (one attempt of the budget is used)
- * - busy: processing could not start, e.g. the event lock is held (no attempt is used)
+ * - busy: no attempt is used. From replayDeadLetter: processing could not start, e.g. the event lock is held.
+ *   DeadLetterProcessorJob also reports a replay that exceeds its time limit as busy, although processing started.
  */
 export type DeadLetterReplayResult = 'processed' | 'failed' | 'busy';
 /** A started listener that can replay its own dead-letter records inside this process. */

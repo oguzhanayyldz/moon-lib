@@ -50,7 +50,8 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      * DLQ kaydını bu süreçte, bu listener'ın işleme yoluyla bir kez daha işler (issue #648 DLQ-H).
      * NATS'e yayın yapmaz, mesaj ack'lemez ve yeni DLQ kaydı yazmaz; kaydı DeadLetterProcessorJob günceller.
      * - `processed`: işlendi. Duplicate key hatası da canlı yoldaki gibi işlenmiş sayılır.
-     * - `busy`: işleme başlayamadı (olay kilitli ya da kilit alınamadı); deneme bütçesi tüketilmez.
+     * - `busy`: işleme başlayamadı (olay kilitli ya da kilit alınamadı); deneme bütçesi tüketilmez. DeadLetterProcessorJob
+     *   zaman sınırını aşan oynatmayı da, işleme başlamış olsa bile, `busy` sayar.
      * - `failed`: işleme hata verdi; bütçeden bir deneme düşülür.
      */
     replayDeadLetter(data: T['data']): Promise<DeadLetterReplayResult>;

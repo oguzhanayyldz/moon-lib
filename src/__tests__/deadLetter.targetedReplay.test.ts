@@ -405,6 +405,48 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
         expect({ status: record.status, retryCount: record.retryCount }).toEqual({ status: 'completed', retryCount: DEFAULT_RETRY_LIMIT });
     });
 
+    it('DLQ-H5: a processor whose replay times out after the record was taken over does not put the claim of the other processor back to queued', async () => {
+        const svcA = createServiceA();
+        const listener = new FailFirstGatedListener(svcA.client, {}, svcA.deadLetters.connection);
+        listener.failing = false;
+        listener.listen();
+        const record = seedQueued(svcA.deadLetters);
+        const takeoverProcessor = svcA.createProcessor();
+
+        let timedOutCycleDone = false;
+        const timedOutCycle = svcA.processor.processPendingEvents().then(() => {
+            timedOutCycleDone = true;
+        });
+        await waitUntil(() => listener.started === 1);
+        const firstClaim = record.processorId;
+        // 9.5 minutes in, the replay time limit of the first processor has not passed. Pod clocks differ: to the other pod
+        // the replay started more than 10 minutes ago, so it takes the record over and replays it again.
+        await clock.advance(9.5 * 60_000);
+        record.processingStartedAt = new Date(Date.now() - 11 * 60_000);
+        const takeoverCycle = takeoverProcessor.processPendingEvents();
+        await waitUntil(() => listener.started === 2);
+        const takeoverClaim = record.processorId;
+
+        // The time limit of the first processor passes while the other processor is still replaying: the first processor
+        // releases its replay as busy and ends its cycle.
+        await clock.advance(30_000);
+        await waitUntil(() => timedOutCycleDone);
+        const afterTimeout = { status: record.status, processorId: record.processorId, retryCount: record.retryCount };
+        listener.release();
+        await Promise.all([timedOutCycle, takeoverCycle]);
+
+        expect(takeoverClaim).not.toBe(firstClaim);
+        expect(logger.warn).toHaveBeenCalledWith(
+            `Dead letter replay of ${record.id} did not finish within 10 minutes, releasing the record without using the attempt budget: ${SVC_A_KEY}`
+        );
+        // Putting the record back to queued here would drop the result of the other processor and let a third replay start.
+        expect(afterTimeout).toEqual({ status: 'replaying', processorId: takeoverClaim, retryCount: DEFAULT_RETRY_LIMIT });
+        const labels = { service: 'svc-a', event_type: Subjects.StockUpdated, queue_group: 'svc-a-stock-copy' };
+        expect((EventMetrics.eventDlqReplayTotal.inc as jest.Mock).mock.calls).toEqual([[{ ...labels, result: 'busy' }], [{ ...labels, result: 'processed' }]]);
+        expect({ status: record.status, retryCount: record.retryCount, started: listener.started })
+            .toEqual({ status: 'completed', retryCount: DEFAULT_RETRY_LIMIT, started: 2 });
+    });
+
     it('DLQ-H6: a replay that finds the event locked is retried a minute later without using the attempt budget', async () => {
         const svcA = createServiceA();
         const listener = new FailingStockCopyListener(svcA.client, {}, svcA.deadLetters.connection);

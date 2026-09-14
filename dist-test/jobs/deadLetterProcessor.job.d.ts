@@ -41,8 +41,13 @@ export declare class DeadLetterProcessorJob {
     private processEvent;
     /**
      * Oynatmayı PROCESSING_TIMEOUT ile sınırlar: dönmeyen bir handler bu işlemcinin turunu süresiz durdurmasın.
-     * Süre dolunca handler iptal edilemez, arka planda sürer ve geç gelen sonucu yazılmaz; kayıt `busy` sayılır ve
-     * deneme bütçesi tüketilmeden geri bırakılır. Süre, takılı kaydın başka işleyiciye geçtiği süreyle aynıdır.
+     * Süre dolunca handler iptal edilemez, arka planda sürer ve geç gelen sonucu yazılmaz; kayıt deneme bütçesi
+     * tüketilmeden geri bırakılır. Süre, takılı kaydın başka işleyiciye geçtiği süreyle aynıdır; kayıt bu arada
+     * devralındıysa geri bırakma yazılmaz (claimedBy).
+     * Zaman aşımı `busy` döner, oysa handler başlamıştır: sonuç ve metrik etiketi kilitli olayın `busy`'siyle ortaktır,
+     * yalnız warn logu ayırt eder. Bütçe tüketilmediği için hep dönmeyen bir handler ~11 dk'da bir yeniden oynatılır,
+     * her denemede bir yürütme arka planda kalır ve kayıt `failed` olmaz; olay kilidi dolduğu için tek pod'da da aynı
+     * olay eşzamanlı işlenebilir. Ardışık zaman aşımına sınır yoktur.
      */
     private replayWithinTimeout;
     /**
