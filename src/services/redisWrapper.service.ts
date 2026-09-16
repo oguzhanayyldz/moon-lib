@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from 'redis';
 import { logger } from './logger.service';
+import { maskConnectionUriSecret, sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
 
 
 class RedisWrapper {
@@ -15,13 +16,15 @@ class RedisWrapper {
     }
 
     async connect(url: string, timeoutMs: number = 30000): Promise<void> {
+        // URL parolayı taşır; yalnızca maskelenmiş biçimi loglanır.
+        const safeUrl = maskConnectionUriSecret(url);
         try {
             // URL için önceden oluşturulmuş bir instance var mı kontrol et
             const existingClient = RedisWrapper.instances.get(url);
             if (existingClient) {
                 this._client = existingClient;
                 this._url = url;
-                logger.info(`Reusing existing Redis connection to ${url}`);
+                logger.info(`Reusing existing Redis connection to ${safeUrl}`);
                 // Mevcut bağlantının hala çalıştığını doğrula
                 try {
                     await existingClient.ping();
@@ -37,7 +40,7 @@ class RedisWrapper {
                 return;
             }
 
-            logger.info(`Connecting to Redis at ${url} with ${timeoutMs}ms timeout...`);
+            logger.info(`Connecting to Redis at ${safeUrl} with ${timeoutMs}ms timeout...`);
 
             // Connection error handling flag
             let connectionFailed = false;
@@ -63,9 +66,9 @@ class RedisWrapper {
                     }
                 }
             })
-                .on('connect', () => logger.info(`✅ Redis Client Connected to ${url}`))
+                .on('connect', () => logger.info(`✅ Redis Client Connected to ${safeUrl}`))
                 .on('error', (err) => {
-                    logger.error('❌ Redis Client Error:', err);
+                    logger.error('❌ Redis Client Error:', sanitizeConnectionError(err));
                     connectionError = err as Error;
                     connectionFailed = true;
                 })
@@ -90,7 +93,7 @@ class RedisWrapper {
                 this._client = client;
                 this._url = url;
                 RedisWrapper.instances.set(url, client);
-                logger.info(`✅ Successfully connected to Redis at ${url}`);
+                logger.info(`✅ Successfully connected to Redis at ${safeUrl}`);
 
             } catch (connectError) {
                 // Connection failed, cleanup client
@@ -100,20 +103,21 @@ class RedisWrapper {
                         await client.quit();
                     }
                 } catch (quitError) {
-                    logger.warn('Failed to quit client during cleanup:', quitError);
+                    logger.warn('Failed to quit client during cleanup:', sanitizeConnectionError(quitError));
                 }
                 throw connectError;
             }
 
             // Check if async error occurred during connection
             if (connectionFailed && connectionError) {
-                logger.error('❌ Async connection error detected:', connectionError);
+                logger.error('❌ Async connection error detected:', sanitizeConnectionError(connectionError));
                 throw connectionError;
             }
 
         } catch (error) {
-            logger.error('❌ Failed to connect to Redis:', error);
-            throw error;
+            const safeError = sanitizeConnectionError(error);
+            logger.error('❌ Failed to connect to Redis:', safeError);
+            throw toSafeError(safeError);
         }
     }
 
@@ -225,7 +229,7 @@ class RedisWrapper {
     getConnectionStats() {
         return {
             totalInstances: RedisWrapper.instances.size,
-            currentUrl: this._url,
+            currentUrl: maskConnectionUriSecret(this._url),
             isConnected: !!this._client
         };
     }
@@ -236,7 +240,7 @@ class RedisWrapper {
 
     // Tüm instance'ları listele (debugging için)
     static getInstanceUrls(): string[] {
-        return Array.from(RedisWrapper.instances.keys());
+        return Array.from(RedisWrapper.instances.keys()).map((url) => maskConnectionUriSecret(url) as string);
     }
 }
 

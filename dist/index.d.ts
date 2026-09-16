@@ -61,6 +61,7 @@ export * from './utils/userContext.util';
 export * from './utils/encryption.util';
 export * from './utils/costSource.util';
 export * from './utils/authFailureTracker.util';
+export * from './utils/logSafety.util';
 export * from './database';
 export * from './middleware';
 export * from './jobs/eventPublisher.job';

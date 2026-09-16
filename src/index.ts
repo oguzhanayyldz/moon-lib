@@ -91,6 +91,7 @@ export * from './utils/userContext.util';
 export * from './utils/encryption.util';
 export * from './utils/costSource.util';
 export * from './utils/authFailureTracker.util';
+export * from './utils/logSafety.util';
 
 // Database - MongoDB Atlas Native Transactions
 export * from './database';
