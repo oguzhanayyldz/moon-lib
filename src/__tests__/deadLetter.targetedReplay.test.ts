@@ -24,6 +24,7 @@ import { DeadLetterAttrs } from '../models/deadLetter.schema';
 import { logger } from '../services/logger.service';
 import { redisWrapper } from '../services/redisWrapper.service';
 import { InMemoryRedis } from '../test/fakes/inMemoryRedis';
+import { envScopedKey } from '../utils/redisEnvScope.util';
 import {
     createDeadLetterStore,
     createFakeMessage,
@@ -454,7 +455,7 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
         listener.listen();
         const record = seedQueued(svcA.deadLetters);
         // A live delivery of the same event holds the lock in another pod.
-        await redisWrapper.client.set(`lock:${Subjects.StockUpdated}:${record.eventId}`, 'another-pod', { NX: true, EX: 30 });
+        await redisWrapper.client.set(envScopedKey(`lock:${Subjects.StockUpdated}:${record.eventId}`), 'another-pod', { NX: true, EX: 30 });
 
         await svcA.processor.processPendingEvents();
 
@@ -770,8 +771,8 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
 });
 
 describe('#648 DLQ-H — RetryableListener.replayDeadLetter', () => {
-    const retryKey = `event:retry:${Subjects.StockUpdated}:svc-a-stock-${stockV3.id}-v${stockV3.version}`;
-    const lockKey = `lock:${Subjects.StockUpdated}:svc-a-stock-${stockV3.id}-v${stockV3.version}`;
+    const retryKey = envScopedKey(`event:retry:${Subjects.StockUpdated}:svc-a-stock-${stockV3.id}-v${stockV3.version}`);
+    const lockKey = envScopedKey(`lock:${Subjects.StockUpdated}:svc-a-stock-${stockV3.id}-v${stockV3.version}`);
     let bus: ReturnType<typeof createFakeStanBus>;
 
     beforeEach(() => {
@@ -865,7 +866,7 @@ describe('#648 DLQ-H — RetryableListener.replayDeadLetter', () => {
 
         const result = await listener.replayDeadLetter(stockV3);
 
-        expect({ result, applied: listener.applied.length, lockCalls: setSpy.mock.calls.filter(([key]) => String(key).startsWith('lock:')).length })
+        expect({ result, applied: listener.applied.length, lockCalls: setSpy.mock.calls.filter(([key]) => String(key).startsWith(envScopedKey('lock:'))).length })
             .toEqual({ result: 'processed', applied: 1, lockCalls: 0 });
     });
 
