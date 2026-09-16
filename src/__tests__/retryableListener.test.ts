@@ -280,6 +280,86 @@ describe('RetryableListener', () => {
         });
     });
 
+    describe('Environment-scoped lock key (ENV-ISO)', () => {
+        const testData: TestEvent['data'] = {
+            list: [{ id: 'test-123', user: 'user-456' }]
+        };
+        const unscopedLockKey = `lock:${Subjects.UserIntegrationSettings}:test-event-test-123`;
+        const originalNodeEnv = process.env.NODE_ENV;
+        const originalRedisKeyEnv = process.env.REDIS_KEY_ENV;
+
+        beforeEach(() => {
+            delete process.env.REDIS_KEY_ENV;
+        });
+
+        afterEach(() => {
+            if (originalNodeEnv === undefined) {
+                delete process.env.NODE_ENV;
+            } else {
+                process.env.NODE_ENV = originalNodeEnv;
+            }
+            if (originalRedisKeyEnv === undefined) {
+                delete process.env.REDIS_KEY_ENV;
+            } else {
+                process.env.REDIS_KEY_ENV = originalRedisKeyEnv;
+            }
+        });
+
+        it('keeps the historical lock key name with REDIS_KEY_ENV=production although NODE_ENV=development (invoice/shipment in production)', async () => {
+            process.env.NODE_ENV = 'development';
+            process.env.REDIS_KEY_ENV = 'production';
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue('OK');
+
+            await listener.onMessage(testData, mockMessage);
+
+            expect((redisWrapper.client.set as jest.Mock).mock.calls[0][0]).toBe(unscopedLockKey);
+            expect((redisWrapper.client.eval as jest.Mock).mock.calls[0][1].keys).toEqual([unscopedLockKey]);
+        });
+
+        it('keeps the historical lock key name in production (acquire and release)', async () => {
+            process.env.NODE_ENV = 'production';
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue('OK');
+
+            await listener.onMessage(testData, mockMessage);
+
+            expect((redisWrapper.client.set as jest.Mock).mock.calls[0][0]).toBe(unscopedLockKey);
+            expect((redisWrapper.client.eval as jest.Mock).mock.calls[0][1].keys).toEqual([unscopedLockKey]);
+        });
+
+        it('acquires and releases the lock under the development namespace', async () => {
+            process.env.NODE_ENV = 'development';
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue('OK');
+
+            await listener.onMessage(testData, mockMessage);
+
+            expect((redisWrapper.client.set as jest.Mock).mock.calls[0][0]).toBe(`development:${unscopedLockKey}`);
+            expect((redisWrapper.client.eval as jest.Mock).mock.calls[0][1].keys).toEqual([`development:${unscopedLockKey}`]);
+        });
+
+        it('checks the TTL of the same scoped key on a lock conflict', async () => {
+            process.env.NODE_ENV = 'development';
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue(null);
+            (redisWrapper.client.ttl as jest.Mock).mockResolvedValue(25);
+
+            await listener.onMessage(testData, mockMessage);
+
+            expect((redisWrapper.client.set as jest.Mock).mock.calls[0][0]).toBe(`development:${unscopedLockKey}`);
+            expect(redisWrapper.client.ttl).toHaveBeenCalledWith(`development:${unscopedLockKey}`);
+        });
+
+        it('checks the TTL of the historical lock key on a conflict with REDIS_KEY_ENV=production although NODE_ENV=development', async () => {
+            process.env.NODE_ENV = 'development';
+            process.env.REDIS_KEY_ENV = 'production';
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue(null);
+            (redisWrapper.client.ttl as jest.Mock).mockResolvedValue(25);
+
+            await listener.onMessage(testData, mockMessage);
+
+            expect((redisWrapper.client.set as jest.Mock).mock.calls[0][0]).toBe(unscopedLockKey);
+            expect(redisWrapper.client.ttl).toHaveBeenCalledWith(unscopedLockKey);
+        });
+    });
+
     describe('ackWait vs lockTimeoutSec relationship', () => {
         it('default ackWait (60s) should be greater than lockTimeoutSec (30s)', () => {
             const options = listener.getOptions();

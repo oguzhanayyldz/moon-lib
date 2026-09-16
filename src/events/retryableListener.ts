@@ -1,6 +1,7 @@
 import { Message, Stan } from 'node-nats-streaming';
 import { Event, Listener } from '../common';
 import { RetryManager } from '../services/retryManager';
+import { envScopedKey } from '../utils/redisEnvScope.util';
 import { createDeadLetterModel } from '../models/deadLetter.schema';
 import mongoose from 'mongoose';
 import { redisWrapper } from '../services/redisWrapper.service';
@@ -56,7 +57,11 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         eventId: string,
         callback: () => Promise<R>
     ): Promise<R> {
-        const lockKey = `lock:${this.subject}:${eventId}`;
+        // Ortam kapsamlı kilit (ENV-ISO): ad yalnız çözülen ortam 'production' ise aynı kalır
+        // (REDIS_KEY_ENV || NODE_ENV || 'production'). invoice ve shipment prod'da NODE_ENV=development
+        // koşar; REDIS_KEY_ENV=production verilmezse orada da `development:` öneki alır.
+        // Farklı ortamlar aynı eventId için birbirinin kilidini tutup mesajı düşürtemez.
+        const lockKey = envScopedKey(`lock:${this.subject}:${eventId}`);
         const lockValue = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
 
         // Log ekleniyor
@@ -167,7 +172,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                 } catch (lockError: any) {
                     if (lockError.message?.includes('Lock acquisition failed')) {
                         // Lock alınamadı — kısa jitter ile return, blocking sleep YAPMA
-                        const lockKey = `lock:${this.subject}:${eventId}`;
+                        const lockKey = envScopedKey(`lock:${this.subject}:${eventId}`);
 
                         try {
                             const ttl = await redisWrapper.client.ttl(lockKey);

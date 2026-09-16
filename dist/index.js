@@ -91,6 +91,7 @@ __exportStar(require("./utils/performanceMonitor.util"), exports);
 __exportStar(require("./utils/audit-helper"), exports);
 __exportStar(require("./utils/batchOperationHelpers.util"), exports);
 __exportStar(require("./utils/redisFailoverManager"), exports);
+__exportStar(require("./utils/redisEnvScope.util"), exports);
 __exportStar(require("./utils/userContext.util"), exports);
 __exportStar(require("./utils/encryption.util"), exports);
 __exportStar(require("./utils/costSource.util"), exports);
