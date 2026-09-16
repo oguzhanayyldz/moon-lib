@@ -78,6 +78,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount?: number;
     lastAttempt?: Date;
+    nextAttemptAt?: Date;
     error?: string;
     result?: any;
     processedAt?: Date;
@@ -92,6 +93,7 @@ export interface OutboxDoc extends BaseDoc {
     status: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
     retryCount: number;
     lastAttempt?: Date;
+    nextAttemptAt?: Date;
     error?: string;
     result?: any;
     processedAt?: Date;

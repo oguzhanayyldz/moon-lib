@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { BaseAttrs, BaseDoc, BaseModel } from './base/base.schema';
+export type DeadLetterStatus = 'pending' | 'processing' | 'queued' | 'replaying' | 'completed' | 'failed';
 export interface DeadLetterAttrs extends BaseAttrs {
     subject: string;
     eventId: string;
@@ -11,6 +12,9 @@ export interface DeadLetterAttrs extends BaseAttrs {
     environment?: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
+    status?: DeadLetterStatus;
+    listenerKey?: string;
+    queueGroupName?: string;
     processorId?: string;
     processingStartedAt?: Date;
     completedAt?: Date;
@@ -28,7 +32,9 @@ export interface DeadLetterDoc extends BaseDoc {
     environment: 'production' | 'development' | 'test';
     nextRetryAt: Date;
     timestamp: Date;
-    status: 'pending' | 'processing' | 'completed' | 'failed';
+    status: DeadLetterStatus;
+    listenerKey?: string;
+    queueGroupName?: string;
     processorId?: string;
     processingStartedAt?: Date;
     completedAt?: Date;

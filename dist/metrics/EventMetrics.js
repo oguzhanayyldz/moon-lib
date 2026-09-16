@@ -69,6 +69,8 @@ class EventMetrics {
         EventMetrics.eventProcessingTotal.reset();
         EventMetrics.eventRetryTotal.reset();
         EventMetrics.eventDlqTotal.reset();
+        EventMetrics.eventDlqWriteErrorTotal.reset();
+        EventMetrics.eventDlqReplayTotal.reset();
         // Note: Gauge values will remain until explicitly set again
         // Clear registry and re-register all metrics
         EventMetrics.registry.clear();
@@ -76,6 +78,8 @@ class EventMetrics {
         EventMetrics.registry.registerMetric(EventMetrics.eventProcessingTotal);
         EventMetrics.registry.registerMetric(EventMetrics.eventRetryTotal);
         EventMetrics.registry.registerMetric(EventMetrics.eventDlqTotal);
+        EventMetrics.registry.registerMetric(EventMetrics.eventDlqWriteErrorTotal);
+        EventMetrics.registry.registerMetric(EventMetrics.eventDlqReplayTotal);
         EventMetrics.registry.registerMetric(EventMetrics.circuitBreakerState);
     }
 }
@@ -129,6 +133,35 @@ EventMetrics.eventDlqTotal = new prom_client_1.Counter({
     name: 'event_dlq_total',
     help: 'Total number of events sent to dead letter queue',
     labelNames: ['service', 'event_type', 'failure_reason'],
+    registers: [EventMetrics.registry]
+});
+/**
+ * DLQ kaydı yazılamayan event'ler (Counter)
+ *
+ * Counts events whose dead-letter record could not be written after max retries (issue #648).
+ * reason=invalid: the record fails schema validation; the message is acked without a record.
+ * reason=unavailable: the write failed (e.g. Mongo not ready); the message is not acked and NATS redelivers it.
+ * Includes labels: service, event_type, reason
+ */
+EventMetrics.eventDlqWriteErrorTotal = new prom_client_1.Counter({
+    name: 'event_dlq_write_error_total',
+    help: 'Total number of dead letter records that could not be written',
+    labelNames: ['service', 'event_type', 'reason'],
+    registers: [EventMetrics.registry]
+});
+/**
+ * DLQ oynatmaları (Counter)
+ *
+ * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
+ * processed (record completed), failed (one attempt of the budget used), busy (no attempt used, retried a minute later):
+ * the event was locked, or the replay exceeded the 10 minute limit and its handler still runs in the background.
+ * Both busy cases share the label; only the processor's warning log tells a timeout apart.
+ * Includes labels: service, event_type, queue_group, result
+ */
+EventMetrics.eventDlqReplayTotal = new prom_client_1.Counter({
+    name: 'event_dlq_replay_total',
+    help: 'Total number of dead letter replays by result',
+    labelNames: ['service', 'event_type', 'queue_group', 'result'],
     registers: [EventMetrics.registry]
 });
 /**

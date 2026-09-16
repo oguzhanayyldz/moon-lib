@@ -54,8 +54,15 @@ const deadLetterSchemaDefination = {
     },
     status: {
         type: String,
-        enum: ['pending', 'processing', 'completed', 'failed'],
+        enum: ['pending', 'processing', 'queued', 'replaying', 'completed', 'failed'],
         default: 'pending'
+    },
+    // Kaydı yazan listener: "<subject>|<queueGroupName>" (issue #648 DLQ-H). Yalnız bu listener'ı başlatmış süreç oynatır.
+    listenerKey: {
+        type: String,
+    },
+    queueGroupName: {
+        type: String,
     },
     processorId: {
         type: String,
@@ -69,8 +76,14 @@ const deadLetterSchemaDefination = {
 };
 const deadLetterSchema = (0, base_schema_1.default)(deadLetterSchemaDefination);
 // Compound index for optimal query performance
-// Optimizes: { status: 'pending', environment: 'production', retryCount: { $lt: maxRetries } }
+// Issue #648 öncesindeki sorgu biçimi için: { status: 'pending', environment, retryCount: { $lt: 5 } }.
+// Mevcut veritabanlarında kurulu olduğu için tanımda bırakıldı.
 deadLetterSchema.index({ status: 1, environment: 1, retryCount: 1, nextRetryAt: 1 });
+// Issue #648 DLQ-H: DeadLetterProcessorJob sorgusu { status: 'queued', environment, listenerKey: { $in: <kayıtlı anahtarlar> },
+// nextRetryAt: { $lte: now } } ve sıralaması { nextRetryAt: 1 }. Bütçe koşulu ($expr: retryCount < maxRetries) index kullanamaz;
+// yalnız bu index'in daralttığı, zamanı gelmiş kayıtlar üzerinde değerlendirilir. Oynatıcısı olmayan kayıt sayımı
+// ({ status: 'queued', environment, listenerKey: { $nin } }) aynı index'in önekini kullanır.
+deadLetterSchema.index({ status: 1, environment: 1, listenerKey: 1, nextRetryAt: 1 });
 function createDeadLetterModel(connection) {
     try {
         return connection.model('DeadLetter');

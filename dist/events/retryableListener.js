@@ -21,6 +21,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const redisWrapper_service_1 = require("../services/redisWrapper.service");
 const logger_service_1 = require("../services/logger.service");
 const EventMetrics_1 = require("../metrics/EventMetrics");
+const deadLetterReplayRegistry_1 = require("./deadLetterReplayRegistry");
 /**
  * Retry özellikli temel listener sınıfı
  */
@@ -30,8 +31,16 @@ class RetryableListener extends common_1.Listener {
         this.options = Object.assign(Object.assign({}, RetryableListener.DEFAULT_OPTIONS), options);
         // ackWait'i override et (base class'ta 5s, burada options'dan alıyoruz)
         this.ackWait = this.options.ackWaitSec * 1000;
-        this.retryManager = new retryManager_1.RetryManager();
+        this.retryManager = new retryManager_1.RetryManager({ maxRetries: this.options.maxRetries });
         this.connection = connection;
+    }
+    /**
+     * Aboneliği başlatır ve listener'ı süreç içi DLQ oynatma defterine kaydeder (issue #648 DLQ-H).
+     * DeadLetterProcessorJob yalnız bu süreçte kayıtlı ve oynatması açık listener'ların DLQ kayıtlarını oynatır.
+     */
+    listen() {
+        super.listen();
+        deadLetterReplayRegistry_1.deadLetterReplayRegistry.register(this, this.options.deadLetterReplay);
     }
     /**
      * Distributed lock ile işlem yapmak için yardımcı metod
@@ -208,8 +217,9 @@ class RetryableListener extends common_1.Listener {
             }
             catch (error) {
                 // Mevcut hata işleme kodu...
+                const errorMessage = this.describeError(error);
                 span.setTag('error', true);
-                span.setTag('error.message', error.message);
+                span.setTag('error.message', errorMessage);
                 logger_service_1.logger.error(`Error processing ${eventType}:${eventId}:`, error);
                 // Record error metrics
                 const duration = (Date.now() - startTime) / 1000;
@@ -247,7 +257,7 @@ class RetryableListener extends common_1.Listener {
                         EventMetrics_1.EventMetrics.eventRetryTotal.inc({
                             service: serviceName,
                             event_type: eventType,
-                            retry_reason: error.message.substring(0, 100), // Limit length
+                            retry_reason: errorMessage.substring(0, 100), // Limit length
                             retry_count: retryCount.toString()
                         });
                         // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
@@ -256,18 +266,38 @@ class RetryableListener extends common_1.Listener {
                         logger_service_1.logger.info(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
                         if (this.options.enableDeadLetter) {
                             try {
-                                yield this.moveToDeadLetterQueue(data, error, retryCount);
+                                yield this.moveToDeadLetterQueue(data, errorMessage, retryCount);
                                 span.setTag('dead_letter.saved', true);
                                 // Record DLQ metrics
                                 EventMetrics_1.EventMetrics.eventDlqTotal.inc({
                                     service: serviceName,
                                     event_type: eventType,
-                                    failure_reason: error.message.substring(0, 100) // Limit length
+                                    failure_reason: errorMessage.substring(0, 100) // Limit length
                                 });
                             }
                             catch (dlqError) {
-                                logger_service_1.logger.error('Failed to save to dead letter queue:', dlqError);
+                                if ((dlqError === null || dlqError === void 0 ? void 0 : dlqError.name) === 'ValidationError') {
+                                    // Kayıt her teslimde aynı veriden kurulur; şema doğrulaması yeniden teslimle düzelmez.
+                                    // Ack'lenmezse mesaj her ackWait'te süresiz yeniden teslim edilir, bu yüzden hata loglanıp ack'lenir.
+                                    logger_service_1.logger.error(`Dead letter record failed schema validation and can never be saved, acking without a DLQ record: ${eventType}:${eventId}`, dlqError);
+                                    span.setTag('dead_letter.invalid', true);
+                                    EventMetrics_1.EventMetrics.eventDlqWriteErrorTotal.inc({
+                                        service: serviceName,
+                                        event_type: eventType,
+                                        reason: 'invalid'
+                                    });
+                                    msg.ack();
+                                    return;
+                                }
+                                logger_service_1.logger.error('Failed to save to dead letter queue, NATS will redeliver:', dlqError);
                                 span.setTag('dead_letter.error', dlqError.message);
+                                EventMetrics_1.EventMetrics.eventDlqWriteErrorTotal.inc({
+                                    service: serviceName,
+                                    event_type: eventType,
+                                    reason: 'unavailable'
+                                });
+                                // msg.ack() YOK - DLQ kaydı yokken ack'lemek mesajı kalıcı kaybeder (issue #648 K-3)
+                                return;
                             }
                         }
                         msg.ack();
@@ -316,30 +346,101 @@ class RetryableListener extends common_1.Listener {
         });
     }
     /**
-     * İşlenemeyen olayı Dead Letter kuyruğuna taşı
+     * DLQ kaydını bu süreçte, bu listener'ın işleme yoluyla bir kez daha işler (issue #648 DLQ-H).
+     * NATS'e yayın yapmaz, mesaj ack'lemez ve yeni DLQ kaydı yazmaz; kaydı DeadLetterProcessorJob günceller.
+     * - `processed`: işlendi. Duplicate key hatası da canlı yoldaki gibi işlenmiş sayılır.
+     * - `busy`: işleme başlayamadı (olay kilitli ya da kilit alınamadı); deneme bütçesi tüketilmez. DeadLetterProcessorJob
+     *   zaman sınırını aşan oynatmayı da, işleme başlamış olsa bile, `busy` sayar.
+     * - `failed`: işleme hata verdi; bütçeden bir deneme düşülür.
      */
-    moveToDeadLetterQueue(data, error, retryCount) {
+    replayDeadLetter(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const eventType = this.subject;
+            const eventId = this.getEventId(data);
+            let started = false;
+            const run = () => __awaiter(this, void 0, void 0, function* () {
+                started = true;
+                yield this.processEvent(data);
+            });
+            try {
+                if (this.options.enableLock) {
+                    yield this.processWithLock(eventId, run);
+                }
+                else {
+                    yield run();
+                }
+            }
+            catch (error) {
+                if (!started) {
+                    logger_service_1.logger.info(`Dead letter replay postponed, processing could not start: ${eventType}:${eventId}: ${this.describeError(error)}`);
+                    return 'busy';
+                }
+                if (this.isDuplicateKeyError(error)) {
+                    logger_service_1.logger.info(`Dead letter replay treated as processed - duplicate key: ${eventType}:${eventId}`);
+                    return 'processed';
+                }
+                logger_service_1.logger.error(`Dead letter replay failed: ${eventType}:${eventId}:`, error);
+                return 'failed';
+            }
+            try {
+                yield this.retryManager.resetRetryCount(eventType, eventId);
+            }
+            catch (resetError) {
+                // Olay işlendi; sayaç sıfırlanamazsa Redis TTL'i dolunca silinir
+                logger_service_1.logger.warn(`Failed to reset retry count after dead letter replay: ${eventType}:${eventId}`, resetError);
+            }
+            logger_service_1.logger.info(`Dead letter replay processed: ${eventType}:${eventId}`);
+            return 'processed';
+        });
+    }
+    /**
+     * İşlenemeyen olayı Dead Letter kuyruğuna taşı. Kayıt yazılamazsa hata fırlatır; çağıran mesajı ack'lemez
+     * (kalıcı olan şema doğrulaması hatası hariç: o durumda hata loglanıp mesaj ack'lenir).
+     *
+     * Deneme bütçesi (issue #648 K-2): `retryCount` bu olayın toplam başarısız deneme sayısıdır (Redis sayacı),
+     * `maxRetries` ise NATS denemeleri + DLQ oynatmaları toplamıdır. Bütçe dolmuşsa kayıt `failed` yazılır ve oynatılmaz.
+     * Oynatılacak kayıt `queued` yazılır ve kaydı yazan listener'ın anahtarını taşır (issue #648 DLQ-H): başarısız bir
+     * oynatma yeni kayıt yazmaz, DeadLetterProcessorJob aynı kaydın `retryCount`'unu artırır.
+     */
+    moveToDeadLetterQueue(data, errorMessage, retryCount) {
         return __awaiter(this, void 0, void 0, function* () {
             // Mikroservis özelinde bağlantı durumunu kontrol et
             if (this.connection.readyState !== 1) {
-                logger_service_1.logger.error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
-                return;
+                throw new Error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
             }
             const deadLetterModel = (0, deadLetter_schema_1.createDeadLetterModel)(this.connection);
             const eventId = this.getEventId(data);
+            const attemptBudget = this.options.maxRetries + this.options.deadLetterMaxRetries;
+            const replayable = retryCount < attemptBudget;
             yield deadLetterModel.build({
                 subject: this.subject,
                 eventId: eventId,
                 data: data,
-                error: error.message,
+                error: errorMessage,
                 retryCount: retryCount,
-                maxRetries: this.options.deadLetterMaxRetries,
+                maxRetries: attemptBudget,
+                status: replayable ? 'queued' : 'failed',
+                listenerKey: (0, deadLetterReplayRegistry_1.buildListenerKey)(this.subject, this.queueGroupName),
+                queueGroupName: this.queueGroupName,
                 service: process.env.SERVICE_NAME || 'unknown',
-                nextRetryAt: new Date(Date.now() + 60000), // 1 dakika sonra yeniden dene
+                nextRetryAt: new Date(Date.now() + this.getDeadLetterReplayDelay(retryCount)),
                 timestamp: new Date()
             }).save();
-            logger_service_1.logger.info(`Event moved to DLQ: ${this.subject}:${eventId}`);
+            if (replayable) {
+                logger_service_1.logger.info(`Event moved to DLQ: ${this.subject}:${eventId} (attempt ${retryCount}/${attemptBudget})`);
+            }
+            else {
+                logger_service_1.logger.error(`Event permanently failed, DLQ record will not be replayed: ${this.subject}:${eventId} (attempt ${retryCount}/${attemptBudget})`);
+            }
         });
+    }
+    /**
+     * DLQ oynatmaları arasındaki bekleme: 1, 2, 4, 8, 16 dk ... (üst sınır 30 dk).
+     * `retryCount` olayın toplam başarısız deneme sayısıdır; ilk `maxRetries` deneme NATS teslimidir, gerisi oynatmadır.
+     */
+    getDeadLetterReplayDelay(retryCount) {
+        const replaysSoFar = Math.max(retryCount - this.options.maxRetries, 0);
+        return Math.min(60000 * Math.pow(2, replaysSoFar), 30 * 60000);
     }
     /**
      * Olaydan benzersiz bir ID çıkar
@@ -478,6 +579,14 @@ class RetryableListener extends common_1.Listener {
         }
     }
     /**
+     * Hatanın metnini döndürür. Mesajsız Error ya da Error olmayan bir throw için de boş olmayan metin üretir:
+     * DeadLetter şemasında `error` zorunlu alandır ve boş metin kaydı geçersiz kılar.
+     */
+    describeError(error) {
+        const message = error === null || error === void 0 ? void 0 : error.message;
+        return (typeof message === 'string' && message) || String(error) || 'Unknown error';
+    }
+    /**
      * MongoDB duplicate key hatası olup olmadığını kontrol eder
      */
     isDuplicateKeyError(error) {
@@ -507,5 +616,6 @@ RetryableListener.DEFAULT_OPTIONS = {
     deadLetterMaxRetries: 5, // Ölü mektup kuyruğu için maksimum deneme
     lockTimeoutSec: 30, // Lock için varsayılan timeout süresi (saniye)
     enableLock: true, // Varsayılan olarak lock etkin
-    ackWaitSec: 60 // NATS ack timeout - lock TTL'inden büyük olmalı
+    ackWaitSec: 60, // NATS ack timeout - lock TTL'inden büyük olmalı
+    deadLetterReplay: true // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
 };

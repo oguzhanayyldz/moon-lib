@@ -57,6 +57,25 @@ export declare class EventMetrics {
      */
     static readonly eventDlqTotal: Counter<"service" | "event_type" | "failure_reason">;
     /**
+     * DLQ kaydı yazılamayan event'ler (Counter)
+     *
+     * Counts events whose dead-letter record could not be written after max retries (issue #648).
+     * reason=invalid: the record fails schema validation; the message is acked without a record.
+     * reason=unavailable: the write failed (e.g. Mongo not ready); the message is not acked and NATS redelivers it.
+     * Includes labels: service, event_type, reason
+     */
+    static readonly eventDlqWriteErrorTotal: Counter<"reason" | "service" | "event_type">;
+    /**
+     * DLQ oynatmaları (Counter)
+     *
+     * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
+     * processed (record completed), failed (one attempt of the budget used), busy (no attempt used, retried a minute later):
+     * the event was locked, or the replay exceeded the 10 minute limit and its handler still runs in the background.
+     * Both busy cases share the label; only the processor's warning log tells a timeout apart.
+     * Includes labels: service, event_type, queue_group, result
+     */
+    static readonly eventDlqReplayTotal: Counter<"result" | "service" | "event_type" | "queue_group">;
+    /**
      * Circuit breaker durumu (Gauge)
      *
      * Tracks circuit breaker state per service and listener.
