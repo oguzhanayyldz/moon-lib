@@ -234,7 +234,7 @@ export declare class OptimisticLockingUtil {
     static getStats(req?: Request): {
         hasSession: boolean;
         inTransaction: boolean;
-        sessionId: import("mongodb").ServerSessionId | null | undefined;
+        sessionId: ClientSession['id'] | null;
         features: {
             sessionAware: boolean;
             contextAware: boolean;

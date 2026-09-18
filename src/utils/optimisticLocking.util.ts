@@ -558,7 +558,18 @@ export class OptimisticLockingUtil {
     * @param {Request} [req] - Express Request object
     * @return {object} Statistics object
     */
-    static getStats(req?: Request) {
+    static getStats(req?: Request): {
+        hasSession: boolean;
+        inTransaction: boolean;
+        sessionId: ClientSession['id'] | null;
+        features: {
+            sessionAware: boolean;
+            contextAware: boolean;
+            bulkOperations: boolean;
+            optimisticLocking: boolean;
+            transactionSupport: boolean;
+        };
+    } {
         const session = this.getSessionFromRequest(req);
         return {
             hasSession: !!session,
