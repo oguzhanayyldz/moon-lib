@@ -1,11 +1,12 @@
 # Moon-lib Base Image
 # Built once, used by all services as moon-lib-builder stage
-# dist/ is pre-built in the repo, only need npm install for runtime node_modules
+# dist/ is pre-built in the repo, only need dependency install for runtime node_modules
 
 FROM node:18-alpine
 
-# Fix npm 10.8.2 "Tracker idealTree already exists" bug in BuildKit
-RUN npm install -g npm@9.9.3
+# pnpm surumu package.json'daki `packageManager` pini ve 30 servisin Dockerfile'lari ile AYNI.
+# (Corepack yerine acik surum: node:18-alpine ile uyumlu son 10.x)
+RUN npm i -g pnpm@10.34.5
 
 WORKDIR /moon-lib
 
@@ -13,8 +14,16 @@ WORKDIR /moon-lib
 COPY dist ./dist
 
 # Copy package files and install runtime dependencies only
-COPY package.json ./
+COPY package.json pnpm-lock.yaml ./
 COPY tsconfig.json ./
-RUN npm install --omit=dev
+
+# --frozen-lockfile: lock yoksa/uyusmazsa HATA verir. Onceki hal pinsiz `npm install`di
+# ve moon-lib'de package-lock.json HIC yoktu -> her build semver'den en yenisini cekiyordu.
+# --ignore-workspace: Docker context yalniz libs/moon-lib; kokteki pnpm ayarlari aranmasin.
+# --node-linker=hoisted: npm'in duz node_modules duzenini KORUR. Bu dizin oldugu gibi
+# servislerin DEV imajlarina kopyalaniyor (`COPY --from=moon-lib-builder /moon-lib/node_modules`),
+# duzen degisirse 31 servisin tamami etkilenir. Servis Dockerfile'lari da hoisted kullaniyor.
+# --prod: devDependencies haric (onceki `npm install --omit=dev` ile ayni kapsam).
+RUN pnpm install --frozen-lockfile --ignore-workspace --node-linker=hoisted --prod
 
 # Result: /moon-lib/dist, /moon-lib/package.json, /moon-lib/tsconfig.json, /moon-lib/node_modules
