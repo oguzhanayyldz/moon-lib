@@ -317,15 +317,26 @@ class BaseApiClient {
                 });
             }
             // Handle custom error processing
+            // handleCustomError bir SINIFLANDIRMA kancasidir, log kancasi degil: firlattigi tipli
+            // hata cagirana ULASMALIDIR. Eskiden burada yutuluyordu; entegrasyonlarin hata
+            // taksonomisi (ornegin HepsiJetApiError) olu kalir ve basarisiz her istek sahte bir
+            // "Custom error handler failed" warn'i uretirdi.
+            let errorToThrow = error;
             if (this.handleCustomError) {
                 try {
                     this.handleCustomError(error);
                 }
                 catch (customErrorHandlingError) {
-                    logger_service_1.logger.warn('Custom error handler failed', {
-                        error: customErrorHandlingError.message,
-                        integrationName: this.integrationName
-                    });
+                    // Kanca orijinal hatayi yeniden firlattiysa zincir yok (kendini cause yapmaz).
+                    // `cause` ES2022 lib'inde tanimli; bu paketin target'i daha eski oldugu icin
+                    // tsconfig'e dokunmadan yapisal bir tip uzerinden erisiyoruz.
+                    const chainable = customErrorHandlingError;
+                    if (customErrorHandlingError !== error &&
+                        customErrorHandlingError instanceof Error &&
+                        chainable.cause === undefined) {
+                        chainable.cause = error;
+                    }
+                    errorToThrow = customErrorHandlingError;
                 }
             }
             logger_service_1.logger.error('API request failed', {
@@ -336,7 +347,7 @@ class BaseApiClient {
                 duration,
                 integrationName: this.integrationName
             });
-            throw error;
+            throw errorToThrow;
         }
     }
     async executeRequest(requestConfig) {

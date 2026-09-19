@@ -113,7 +113,10 @@ export abstract class BaseApiClient implements IApiClient {
   abstract handleRateLimitError(error: AxiosError): Promise<void>;
   abstract shouldRetry(error: AxiosError): boolean;
 
-  // Optional abstract method for custom error handling
+  // Optional abstract method for custom error handling.
+  // SOZLESME: bu bir siniflandirma kancasidir. Firlattigi hata cagirana aynen ulasir;
+  // yeni bir hata firlatilirsa orijinal axios hatasi `cause` olarak zincirlenir.
+  // Firlatmazsa orijinal hata firlatilir.
   protected handleCustomError?(error: AxiosError): void;
 
   // Public API methods
@@ -447,14 +450,27 @@ export abstract class BaseApiClient implements IApiClient {
       }
 
       // Handle custom error processing
+      // handleCustomError bir SINIFLANDIRMA kancasidir, log kancasi degil: firlattigi tipli
+      // hata cagirana ULASMALIDIR. Eskiden burada yutuluyordu; entegrasyonlarin hata
+      // taksonomisi (ornegin HepsiJetApiError) olu kalir ve basarisiz her istek sahte bir
+      // "Custom error handler failed" warn'i uretirdi.
+      let errorToThrow: unknown = error;
       if (this.handleCustomError) {
         try {
           this.handleCustomError(error as AxiosError);
         } catch (customErrorHandlingError: any) {
-          logger.warn('Custom error handler failed', {
-            error: customErrorHandlingError.message,
-            integrationName: this.integrationName
-          });
+          // Kanca orijinal hatayi yeniden firlattiysa zincir yok (kendini cause yapmaz).
+          // `cause` ES2022 lib'inde tanimli; bu paketin target'i daha eski oldugu icin
+          // tsconfig'e dokunmadan yapisal bir tip uzerinden erisiyoruz.
+          const chainable = customErrorHandlingError as { cause?: unknown };
+          if (
+            customErrorHandlingError !== error &&
+            customErrorHandlingError instanceof Error &&
+            chainable.cause === undefined
+          ) {
+            chainable.cause = error;
+          }
+          errorToThrow = customErrorHandlingError;
         }
       }
 
@@ -467,7 +483,7 @@ export abstract class BaseApiClient implements IApiClient {
         integrationName: this.integrationName
       });
 
-      throw error;
+      throw errorToThrow;
     }
   }
 
