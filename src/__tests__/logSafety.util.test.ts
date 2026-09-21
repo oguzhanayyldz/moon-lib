@@ -1,5 +1,15 @@
 import { inspect } from 'util';
-import { maskConnectionUriSecret, maskConnectionUrisInText, maskSensitiveValues, sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
+import {
+    isSensitiveFieldName,
+    maskConnectionUriSecret,
+    maskConnectionUrisInText,
+    maskSensitiveValues,
+    REDACTED_FIELD_MASK,
+    redactSensitiveFields,
+    redactSensitiveText,
+    sanitizeConnectionError,
+    toSafeError
+} from '../utils/logSafety.util';
 
 // Fake values. They appear in source as `${...}` templates; the plaintext credential K0 gate
 // (scripts/gates/lint_plaintext_credentials.py) treats them as placeholders.
@@ -407,5 +417,137 @@ describe('maskSensitiveValues', () => {
         const result = maskSensitiveValues({ [longKey]: FAKE_SECRET }) as Record<string, unknown>;
 
         expect(Object.keys(result)[0]).toHaveLength(64);
+    });
+});
+
+describe('isSensitiveFieldName', () => {
+    it.each([
+        // Ticimax / Mikro / Sürat / PTT (planned integrations)
+        'UyeKodu', 'Sifre', 'ŞİFRE', 'şifre', 'WebServisSifre', 'ApiKey', 'KullaniciKodu',
+        'KULLANICI_KODU', 'FirmaKodu', 'KullaniciAdi',
+        // current integrations: headers, bodies and responses
+        'appkey', 'appsecret', 'X-Auth-Token', 'x-api-key', 'Api-Key', 'API_KEY', 'Authorization', 'set-cookie',
+        'secretKey', 'restrictedDataToken', 'oauth_consumer_key', 'client_secret', 'clientSecret', 'refreshToken',
+        'x-ibm-client-secret', 'wsPassword', 'wsUserName', 'UserName', 'CustomerCode', 'pass', 'credentials',
+        // the whole normalized name is `key`: masked as before
+        'key'
+    ])('%s is a credential name', (name) => {
+        expect(isSensitiveFieldName(name)).toBe(true);
+    });
+
+    it.each([
+        // measured on the integrations' payloads — non-secret, kept readable
+        'metaKeywords', 'searchKeywords', 'SeoKeywords', 'keyword', 'cargoKey', 'CargoKey', 'nextPageToken', 'NextToken',
+        'sortKey',
+        // identifiers that are not half of a login pair
+        'supplierId', 'merchantId', 'sellerId', 'clientId', 'userId', 'CalismaYili', 'user', 'passive'
+    ])('%s is not a credential name', (name) => {
+        expect(isSensitiveFieldName(name)).toBe(false);
+    });
+
+    it('still masks a credential part that sits next to a known non-secret part', () => {
+        expect(isSensitiveFieldName('keywordSecret')).toBe(true);
+        expect(isSensitiveFieldName('cargoKeyToken')).toBe(true);
+    });
+
+    it('masks an unknown name that merely contains `key` (accepted false positive, fail-closed)', () => {
+        expect(isSensitiveFieldName('monkey')).toBe(true);
+        expect(isSensitiveFieldName('idempotencyKey')).toBe(true);
+    });
+});
+
+describe('redactSensitiveFields', () => {
+    it('masks a credential-named value whatever its type and keeps the others', () => {
+        const result = redactSensitiveFields({
+            credentials: { user: 'u', note: FAKE_SECRET },
+            apiKey: 12345,
+            items: [{ Sifre: FAKE_PASSWORD, Adet: 2 }],
+            active: true
+        });
+
+        expect(result).toEqual({
+            credentials: REDACTED_FIELD_MASK,
+            apiKey: REDACTED_FIELD_MASK,
+            items: [{ Sifre: REDACTED_FIELD_MASK, Adet: 2 }],
+            active: true
+        });
+    });
+
+    it('keeps a `__proto__` key from the payload as a plain field', () => {
+        const payload = JSON.parse(`{"__proto__": {"token": "${FAKE_TOKEN}"}}`);
+
+        const result = redactSensitiveFields(payload) as Record<string, unknown>;
+
+        expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+        expect(JSON.stringify(result)).toBe(`{"__proto__":{"token":"${REDACTED_FIELD_MASK}"}}`);
+    });
+});
+
+describe('redactSensitiveText', () => {
+    it('masks a whole credential object inside a JSON text (structural path, not only name/value pairs)', () => {
+        const text = JSON.stringify({ credentials: { note: FAKE_SECRET }, orderNumber: '1001' });
+
+        expect(redactSensitiveText(text)).toBe(`{"credentials":"${REDACTED_FIELD_MASK}","orderNumber":"1001"}`);
+    });
+
+    it('returns a JSON text without credentials unchanged, formatting included', () => {
+        const text = '{\n  "orderNumber": "1001",\n  "items": [1, 2]\n}';
+
+        expect(redactSensitiveText(text)).toBe(text);
+    });
+
+    it('leaves a self-closing `<Password xsi:nil="true"/>` alone and does not swallow the rest of the document', () => {
+        const text = `<Login><Password xsi:nil="true"/><Token>${FAKE_TOKEN}</Token><Adet>1</Adet></Login>`;
+
+        expect(redactSensitiveText(text)).toBe(`<Login><Password xsi:nil="true"/><Token>${REDACTED_FIELD_MASK}</Token><Adet>1</Adet></Login>`);
+    });
+
+    it('masks everything after a credential element that is never closed (fail-closed)', () => {
+        const text = `<Login><Sifre>${FAKE_PASSWORD}<Adet>1</Adet>`;
+
+        expect(redactSensitiveText(text)).toBe(`<Login><Sifre>${REDACTED_FIELD_MASK}`);
+    });
+
+    it('masks a credential element holding CDATA', () => {
+        const text = `<UyeKodu><![CDATA[${FAKE_SECRET}]]></UyeKodu>`;
+
+        expect(redactSensitiveText(text)).toBe(`<UyeKodu>${REDACTED_FIELD_MASK}</UyeKodu>`);
+    });
+
+    it('masks the whole element when a credential element wraps other elements', () => {
+        const text = `<Credentials><Kod>${FAKE_SECRET}</Kod></Credentials><Adet>1</Adet>`;
+
+        expect(redactSensitiveText(text)).toBe(`<Credentials>${REDACTED_FIELD_MASK}</Credentials><Adet>1</Adet>`);
+    });
+
+    it('masks `"name": value` pairs of a JSON fragment inside plain text', () => {
+        const text = `[AUTH] Unauthorized - {"ApiKey":"${FAKE_SECRET}","code":401,"FirmaKodu":123`;
+
+        expect(redactSensitiveText(text)).toBe(
+            `[AUTH] Unauthorized - {"ApiKey":"${REDACTED_FIELD_MASK}","code":401,"FirmaKodu":"${REDACTED_FIELD_MASK}"`
+        );
+    });
+
+    it('masks form pairs and stops the value at `&`, whitespace, quotes and angle brackets', () => {
+        const text = `grant_type=refresh_token&refresh_token=${FAKE_TOKEN}&client_secret=${FAKE_SECRET}`;
+
+        expect(redactSensitiveText(text)).toBe(
+            `grant_type=refresh_token&refresh_token=${REDACTED_FIELD_MASK}&client_secret=${REDACTED_FIELD_MASK}`
+        );
+        expect(redactSensitiveText(`<Url>https://x.test/cb?token=${FAKE_TOKEN}</Url>`)).toBe(
+            `<Url>https://x.test/cb?token=${REDACTED_FIELD_MASK}</Url>`
+        );
+        expect(redactSensitiveText(`pass=${FAKE_PASSWORD} expired`)).toBe(`pass=${REDACTED_FIELD_MASK} expired`);
+    });
+
+    it('does not let the value of a harmless form pair swallow the credential pair after it', () => {
+        expect(redactSensitiveText(`scope=read,client_secret=${FAKE_SECRET}`)).toBe(`scope=read,client_secret=${REDACTED_FIELD_MASK}`);
+        expect(redactSensitiveText(`redirect=https://x.test/cb?token=${FAKE_TOKEN}&state=1`)).toBe(
+            `redirect=https://x.test/cb?token=${REDACTED_FIELD_MASK}&state=1`
+        );
+    });
+
+    it('masks a credential value that contains a comma entirely', () => {
+        expect(redactSensitiveText(`password=${FAKE_PASSWORD},tail&a=1`)).toBe(`password=${REDACTED_FIELD_MASK}&a=1`);
     });
 });

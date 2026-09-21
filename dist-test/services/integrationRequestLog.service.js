@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.IntegrationRequestLogService = void 0;
 const interpreter_factory_1 = require("./response-interpreters/interpreter.factory");
 const logger_service_1 = require("./logger.service");
+const logSafety_util_1 = require("../utils/logSafety.util");
 class IntegrationRequestLogService {
     constructor(connection) {
         this.connection = connection;
@@ -533,14 +534,14 @@ class IntegrationRequestLogService {
         }
     }
     /**
-     * Request header'larındaki hassas bilgileri temizler
+     * Header'lardaki kimlik bilgilerini temizler (n11 `appkey`/`appsecret`, HepsiJet `X-Auth-Token`,
+     * `Authorization`, `Set-Cookie` …). Ad kuralı gövdeyle aynıdır: `isSensitiveFieldName`.
      */
     static sanitizeHeaders(headers) {
         const sanitized = Object.assign({}, headers);
-        const sensitiveKeys = ['authorization', 'x-shopify-access-token', 'api-key', 'x-api-key', 'x-amz-access-token'];
         Object.keys(sanitized).forEach(headerKey => {
-            if (sensitiveKeys.includes(headerKey.toLowerCase())) {
-                sanitized[headerKey] = '***REDACTED***';
+            if ((0, logSafety_util_1.isSensitiveFieldName)(headerKey)) {
+                sanitized[headerKey] = logSafety_util_1.REDACTED_FIELD_MASK;
             }
         });
         return sanitized;
@@ -576,88 +577,34 @@ class IntegrationRequestLogService {
         return body;
     }
     /**
-     * Request body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * Request body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
      * MongoDB'de string olarak saklanır
      */
     static sanitizeRequestBody(body) {
-        if (!body)
-            return this.formatBodyForStorage(body);
-        // String body: XML veya URL-encoded olabilir
-        if (typeof body === 'string') {
-            return this.formatBodyForStorage(this.sanitizeStringBody(body));
-        }
-        if (typeof body !== 'object')
-            return this.formatBodyForStorage(body);
-        const sanitized = JSON.parse(JSON.stringify(body));
-        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret', 'bearer'];
-        this.recursiveSanitize(sanitized, sensitiveKeys);
-        // Pretty-print format
-        return this.formatBodyForStorage(sanitized);
+        return this.formatBodyForStorage(this.redactBody(body));
     }
     /**
-     * Response body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * Response body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
      * MongoDB'de string olarak saklanır
      */
     static sanitizeResponseBody(body) {
+        return this.formatBodyForStorage(this.redactBody(body));
+    }
+    /**
+     * Gövdedeki kimlik alanlarını maskeler (kural: `logSafety.util` → `isSensitiveFieldName`).
+     *
+     * - Nesne: kimlik adlı alanın değeri (tipi ne olursa olsun) maskelenir; diğer string değerler
+     *   de taranır — `{ body: "pass=..." }` ya da `{ data: "<json>" }` gibi sarılı gövdeler için.
+     * - String: JSON, XML/SOAP (`<tem:UyeKodu>` dahil) ya da URL-encoded olabilir; üçü de taranır.
+     */
+    static redactBody(body) {
         if (!body)
-            return this.formatBodyForStorage(body);
-        // String body: XML veya URL-encoded olabilir
-        if (typeof body === 'string') {
-            return this.formatBodyForStorage(this.sanitizeStringBody(body));
-        }
+            return body;
+        if (typeof body === 'string')
+            return (0, logSafety_util_1.redactSensitiveText)(body);
         if (typeof body !== 'object')
-            return this.formatBodyForStorage(body);
-        const sanitized = JSON.parse(JSON.stringify(body));
-        const sensitiveKeys = ['password', 'token', 'secret', 'key', 'access_token', 'refresh_token', 'client_secret', 'bearer'];
-        this.recursiveSanitize(sanitized, sensitiveKeys);
-        // Pretty-print format
-        return this.formatBodyForStorage(sanitized);
-    }
-    /**
-     * Nested objelerde hassas bilgileri temizler.
-     *
-     * **KRITIK:** String değerler de kontrol edilmeli — bazı entegrasyonlarda body
-     * `{body: "pass=...&token=..."}` gibi wrap'lı string olarak gelir. Bu durumda
-     * `body` key sensitive değil ama içindeki STRING URL-encoded form data ve
-     * hassas bilgi içeriyor. `sanitizeStringBody` ile string içi pattern temizlenir.
-     *
-     * Örnek log (önceki bug): `{body: "pass=Oguz.1996"}` — şifre AÇIK görünüyordu.
-     */
-    static recursiveSanitize(obj, sensitiveKeys) {
-        if (typeof obj !== 'object' || obj === null)
-            return;
-        for (const key in obj) {
-            if (sensitiveKeys.includes(key.toLowerCase())) {
-                obj[key] = '***REDACTED***';
-            }
-            else if (typeof obj[key] === 'string') {
-                // String değer — içinde URL-encoded form data veya XML olabilir,
-                // sensitive pattern (pass=, password=, token=, vb.) varsa maskele
-                obj[key] = this.sanitizeStringBody(obj[key]);
-            }
-            else if (typeof obj[key] === 'object') {
-                this.recursiveSanitize(obj[key], sensitiveKeys);
-            }
-        }
-    }
-    /**
-     * String body'lerdeki hassas bilgileri temizler (XML, URL-encoded)
-     */
-    static sanitizeStringBody(body) {
-        let sanitized = body;
-        // XML tag'lerindeki hassas bilgileri maskele (Aras, Yurtici SOAP)
-        const xmlSensitiveTags = ['Password', 'UserName', 'wsPassword', 'wsUserName', 'CustomerCode', 'password', 'userName'];
-        xmlSensitiveTags.forEach(tag => {
-            const regex = new RegExp(`(<${tag}>)(.*?)(</${tag}>)`, 'gi');
-            sanitized = sanitized.replace(regex, `$1***REDACTED***$3`);
-        });
-        // URL-encoded body'deki hassas bilgileri maskele (Amazon LWA, T-Soft rest1 `pass=`)
-        const urlSensitiveKeys = ['client_secret', 'refresh_token', 'password', 'access_token', 'token', 'secret', 'pass', 'bearer'];
-        urlSensitiveKeys.forEach(key => {
-            const regex = new RegExp(`(${key}=)([^&]*)`, 'gi');
-            sanitized = sanitized.replace(regex, `$1***REDACTED***`);
-        });
-        return sanitized;
+            return body;
+        return (0, logSafety_util_1.redactSensitiveFields)(JSON.parse(JSON.stringify(body)));
     }
 }
 exports.IntegrationRequestLogService = IntegrationRequestLogService;

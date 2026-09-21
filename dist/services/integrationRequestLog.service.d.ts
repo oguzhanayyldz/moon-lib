@@ -142,7 +142,8 @@ export declare class IntegrationRequestLogService {
         todayLogsCount: number;
     }>;
     /**
-     * Request header'larındaki hassas bilgileri temizler
+     * Header'lardaki kimlik bilgilerini temizler (n11 `appkey`/`appsecret`, HepsiJet `X-Auth-Token`,
+     * `Authorization`, `Set-Cookie` …). Ad kuralı gövdeyle aynıdır: `isSensitiveFieldName`.
      */
     private static sanitizeHeaders;
     /**
@@ -152,28 +153,21 @@ export declare class IntegrationRequestLogService {
      */
     private static formatBodyForStorage;
     /**
-     * Request body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * Request body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeRequestBody;
     /**
-     * Response body'deki hassas bilgileri temizler ve pretty-print formatına dönüştürür
+     * Response body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeResponseBody;
     /**
-     * Nested objelerde hassas bilgileri temizler.
+     * Gövdedeki kimlik alanlarını maskeler (kural: `logSafety.util` → `isSensitiveFieldName`).
      *
-     * **KRITIK:** String değerler de kontrol edilmeli — bazı entegrasyonlarda body
-     * `{body: "pass=...&token=..."}` gibi wrap'lı string olarak gelir. Bu durumda
-     * `body` key sensitive değil ama içindeki STRING URL-encoded form data ve
-     * hassas bilgi içeriyor. `sanitizeStringBody` ile string içi pattern temizlenir.
-     *
-     * Örnek log (önceki bug): `{body: "pass=Oguz.1996"}` — şifre AÇIK görünüyordu.
+     * - Nesne: kimlik adlı alanın değeri (tipi ne olursa olsun) maskelenir; diğer string değerler
+     *   de taranır — `{ body: "pass=..." }` ya da `{ data: "<json>" }` gibi sarılı gövdeler için.
+     * - String: JSON, XML/SOAP (`<tem:UyeKodu>` dahil) ya da URL-encoded olabilir; üçü de taranır.
      */
-    private static recursiveSanitize;
-    /**
-     * String body'lerdeki hassas bilgileri temizler (XML, URL-encoded)
-     */
-    private static sanitizeStringBody;
+    private static redactBody;
 }
