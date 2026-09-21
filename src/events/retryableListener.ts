@@ -523,6 +523,42 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     protected abstract processEvent(data: T['data']): Promise<void>;
 
     /**
+     * Hata nesnesinden HTTP durum kodunu çıkarır. Kod bulunamazsa 0 döner.
+     *
+     * Aday sırası kasıtlıdır:
+     * - `response.status`: axios ve fetch benzeri istemcilerde HTTP kodunun TEK güvenilir yeri.
+     * - `statusCode`: moon `CustomError` ailesi (`BadRequestError` 400, `ConflictError` 409,
+     *   `LockedError` 423, `RateLimit` 429, `DatabaseConnectionError` 500 …) ve Node http.
+     * - `status`: axios'a yalnız 1.8'de eklendi; depodaki semver aralıkları `^1.6.0`'a kadar
+     *   iniyor, bu yüzden tek başına güvenilmez — yedek adaydır.
+     *
+     * `error.code` KASITLI OLARAK okunmaz: axios'ta STRING bir tanımlayıcıdır
+     * (`'ERR_BAD_REQUEST'`, `'ECONNREFUSED'`), MongoDB'de ise HTTP dışı bir sayıdır (11000).
+     * Eskiden durum kodu adayıydı ve string değeri sayısal karşılaştırmalara sokuluyordu;
+     * JS'te `'ERR_BAD_REQUEST' >= 200` daima `false` ürettiği için bu sessizce yanlış sonuç
+     * veriyordu. Yalnız 100-599 aralığındaki tam sayılar HTTP kodu sayılır.
+     */
+    private extractHttpStatusCode(error: any): number {
+        const candidates = [
+            error?.response?.status,
+            error?.statusCode,
+            error?.status
+        ];
+
+        for (const candidate of candidates) {
+            const value = typeof candidate === 'number'
+                ? candidate
+                : (typeof candidate === 'string' && /^\d+$/.test(candidate) ? Number(candidate) : NaN);
+
+            if (Number.isInteger(value) && value >= 100 && value <= 599) {
+                return value;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
  * Hatanın geçici mi kalıcı mı olduğunu belirler
  * Geçici hatalar için retry yapılmalı, kalıcı hatalar için yapılmamalı
  */
@@ -531,31 +567,53 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             // Hata mesajı içeriği
             const errorMessage = (error?.message || '').toLowerCase();
 
+            // 0. İptal edilmiş istek: çağıran vazgeçti, yeniden denemek yanlış.
+            // Durum kodu taşımaz, bu yüzden aşağıdaki desen katmanından ÖNCE ele alınır;
+            // aksi halde axios'un bazı iptal metinleri 'aborted' desenine takılıp geçici sayılır.
+            if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
+                return false;
+            }
+
             // HTTP durum kodu (varsa)
-            const statusCode = error?.statusCode || error?.status || error?.code || 0;
+            const statusCode = this.extractHttpStatusCode(error);
 
-            // 1. İstisnai durum kontrolü: İşlemin başarılı olduğu durumlar
-            if (statusCode >= 200 && statusCode < 300) {
-                return false; // Başarılı durum kodları için retry yapma
+            // 1. Durum kodu BİLİNİYORSA karar yalnız ona göre verilir.
+            //
+            // HTTP sözleşmesi deterministiktir; hata metnine bakmak ancak kod yokken anlamlıdır.
+            // Eski sırada desen eşleme bu kuraldan ÖNCE koşuyordu ve axios'un varsayılan metni
+            // ("Request failed with status code 404") geçici desen listesindeki 'request failed'
+            // ile eşleştiği için 4xx → kalıcı kuralı axios hataları için ÖLÜ KODdu: her 400/401/
+            // 403/404/409/422 üç kez yeniden deneniyordu (gerçek axios ile ölçüldü, 6/14 yanlış).
+            if (statusCode > 0) {
+                // 5xx: sunucu tarafı, geçici
+                if (statusCode >= 500) {
+                    return true;
+                }
+                // 429 (hız sınırı) ve 408 (istek zaman aşımı): 4xx olsa da yeniden denenebilir
+                if (statusCode === 429 || statusCode === 408) {
+                    return true;
+                }
+                // Diğer tüm 4xx: kalıcı — istek düzeltilmeden sonuç değişmez
+                if (statusCode >= 400) {
+                    return false;
+                }
+                // 1xx/2xx/3xx: hata değil ya da yeniden denemenin sonucu değiştirmeyeceği durum
+                return false;
             }
 
-            // 2. Kesin geçici hata durumları (retry yapılmalı)
+            // 2. Durum kodu YOK → karar hata metnine kalıyor (NATS, Mongo, iş kuralı, ham soket)
 
-            // a) HTTP 5xx hatalarını geçici olarak değerlendir
-            if (statusCode >= 500 && statusCode < 600) {
-                return true;
-            }
-
-            // b) HTTP 429 (Too Many Requests) - Rate limit
-            if (statusCode === 429) {
-                return true;
-            }
-
-            // c) Bağlantı, timeout ve ağ hataları
+            // a) Bağlantı, timeout ve ağ hataları
+            //
+            // NOT: desenler `errorMessage` KÜÇÜK HARFE çevrildikten sonra aranır; listedeki
+            // girdiler de bu yüzden küçük harf olmalıdır. 'ETIMEDOUT' ve 'ECONNABORTED' eskiden
+            // büyük harfliydi ve hiçbir zaman eşleşmiyordu (ölü desen) — küçük harfe alındı.
+            // 'request failed' ÇIKARILDI: durum kodu artık 1. adımda doğru okunuyor, kod taşıyan
+            // hatalar buraya hiç inmiyor; desen yalnız kalıcı 4xx'leri geçici yapmaya yarıyordu.
             const transientErrorPatterns = [
                 'connection', 'timeout', 'network', 'econnrefused', 'econnreset',
-                'unavailable', 'temporarily', 'socket hang up', 'ETIMEDOUT',
-                'ECONNABORTED', 'ENOTFOUND', 'request failed', 'failed to fetch',
+                'unavailable', 'temporarily', 'socket hang up', 'etimedout',
+                'econnaborted', 'enotfound', 'failed to fetch',
                 'service unavailable', 'internal server error', 'bad gateway',
                 'gateway timeout', 'too many requests', 'request timeout',
                 'operation timed out', 'aborted', 'quota exceeded', 'try again later',
@@ -568,12 +626,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
 
             // 3. Kesin kalıcı hata durumları (retry yapılmamalı)
 
-            // a) HTTP 4xx hatalarından 429 dışında olanlar kalıcı hatadır
-            if (statusCode >= 400 && statusCode < 500 && statusCode !== 429) {
-                return false;
-            }
-
-            // b) Doğrulama ve kimlik doğrulama hataları
+            // a) Doğrulama ve kimlik doğrulama hataları
             const permanentErrorPatterns = [
                 'validation', 'invalid', 'bad request', 'not found', 'forbidden',
                 'unauthorized', 'permission', 'access denied', 'auth failed',
