@@ -84,6 +84,23 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      */
     protected abstract processEvent(data: T['data']): Promise<void>;
     /**
+     * Hata nesnesinden HTTP durum kodunu çıkarır. Kod bulunamazsa 0 döner.
+     *
+     * Aday sırası kasıtlıdır:
+     * - `response.status`: axios ve fetch benzeri istemcilerde HTTP kodunun TEK güvenilir yeri.
+     * - `statusCode`: moon `CustomError` ailesi (`BadRequestError` 400, `ConflictError` 409,
+     *   `LockedError` 423, `RateLimit` 429, `DatabaseConnectionError` 500 …) ve Node http.
+     * - `status`: axios'a yalnız 1.8'de eklendi; depodaki semver aralıkları `^1.6.0`'a kadar
+     *   iniyor, bu yüzden tek başına güvenilmez — yedek adaydır.
+     *
+     * `error.code` KASITLI OLARAK okunmaz: axios'ta STRING bir tanımlayıcıdır
+     * (`'ERR_BAD_REQUEST'`, `'ECONNREFUSED'`), MongoDB'de ise HTTP dışı bir sayıdır (11000).
+     * Eskiden durum kodu adayıydı ve string değeri sayısal karşılaştırmalara sokuluyordu;
+     * JS'te `'ERR_BAD_REQUEST' >= 200` daima `false` ürettiği için bu sessizce yanlış sonuç
+     * veriyordu. Yalnız 100-599 aralığındaki tam sayılar HTTP kodu sayılır.
+     */
+    private extractHttpStatusCode;
+    /**
  * Hatanın geçici mi kalıcı mı olduğunu belirler
  * Geçici hatalar için retry yapılmalı, kalıcı hatalar için yapılmamalı
  */
