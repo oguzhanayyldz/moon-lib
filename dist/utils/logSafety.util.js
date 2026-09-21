@@ -4,6 +4,7 @@ exports.maskConnectionUriSecret = maskConnectionUriSecret;
 exports.maskConnectionUrisInText = maskConnectionUrisInText;
 exports.sanitizeConnectionError = sanitizeConnectionError;
 exports.toSafeError = toSafeError;
+exports.maskSensitiveValues = maskSensitiveValues;
 const MASK = '****';
 // Prevents log-line forging (CR/LF injection etc.): stripped from segments carried into the output unchanged.
 const CONTROL_CHAR_PATTERN = /[\x00-\x1F\x7F]/g;
@@ -207,4 +208,60 @@ function maskQueryParam(param) {
     }
     // A valueless part or a malformed key may be the secret itself.
     return equalsIndex === -1 || !QUERY_KEY_PATTERN.test(key) ? MASK : `${key}=${MASK}`;
+}
+// --- Request shape redaction -------------------------------------------------------------------
+// Limits for `maskSensitiveValues`. They bound both the log line's size and the work done on a
+// hostile input: the value being redacted is attacker-controlled (a rejected request body).
+const MAX_SHAPE_DEPTH = 4;
+const MAX_SHAPE_KEYS = 20;
+const MAX_SHAPE_ITEMS = 5;
+const MAX_SHAPE_KEY_LENGTH = 64;
+/**
+ * Turns a request-shaped value (body, params, query) into something safe to log: the SHAPE is kept,
+ * every leaf VALUE becomes `****`.
+ *
+ * It exists for the NoSQL-injection path, where the rejected input has to be described in a log line
+ * without carrying what it contained. A rejected `/api/users/signin` body is exactly the case that
+ * matters: `{"email":{"$ne":null},"password":"<the user's password>"}` must be logged as
+ * `{"email":{"$ne":"****"},"password":"****"}` — the operator and the field stay readable, the
+ * credential does not survive.
+ *
+ * Fail-closed on values: EVERY leaf (string, number, boolean, null, undefined, function, symbol,
+ * Date, Buffer, …) becomes `****`. No value is ever considered harmless, because what is harmless
+ * depends on the route, not on the type. The diagnostic value comes from the keys.
+ *
+ * Kept visible: object keys and array structure — this is what names the operator (`$ne`) and the
+ * field it sits on. Keys come from the attacker too, so they are stripped of control characters
+ * (log-line forging, the same rule as `maskConnectionUriSecret`) and cut to `MAX_SHAPE_KEY_LENGTH`.
+ *
+ * Bounded: at most `MAX_SHAPE_KEYS` keys per object and `MAX_SHAPE_ITEMS` items per array (the rest
+ * is summarised as `…(+N)`), at most `MAX_SHAPE_DEPTH` levels deep (deeper levels become `…`). A
+ * 10 MB body therefore cannot turn into a 10 MB log line.
+ */
+function maskSensitiveValues(value, depth = 0) {
+    if (typeof value !== 'object' || value === null) {
+        return MASK;
+    }
+    if (depth >= MAX_SHAPE_DEPTH) {
+        return '…';
+    }
+    if (Array.isArray(value)) {
+        const items = value.slice(0, MAX_SHAPE_ITEMS).map((item) => maskSensitiveValues(item, depth + 1));
+        if (value.length > MAX_SHAPE_ITEMS) {
+            items.push(`…(+${value.length - MAX_SHAPE_ITEMS})`);
+        }
+        return items;
+    }
+    const entries = Object.entries(value);
+    const masked = {};
+    for (const [key, item] of entries.slice(0, MAX_SHAPE_KEYS)) {
+        masked[maskShapeKey(key)] = maskSensitiveValues(item, depth + 1);
+    }
+    if (entries.length > MAX_SHAPE_KEYS) {
+        masked['…'] = `+${entries.length - MAX_SHAPE_KEYS}`;
+    }
+    return masked;
+}
+function maskShapeKey(key) {
+    return key.replace(CONTROL_CHAR_PATTERN, '').slice(0, MAX_SHAPE_KEY_LENGTH);
 }

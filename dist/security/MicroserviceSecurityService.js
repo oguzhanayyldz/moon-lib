@@ -50,6 +50,7 @@ const BruteForceProtection_1 = require("./BruteForceProtection");
 const SecurityHeaders_1 = require("./SecurityHeaders");
 const SecurityManager_1 = require("./SecurityManager");
 const bad_request_error_1 = require("../common/errors/bad-request-error");
+const logSafety_util_1 = require("../utils/logSafety.util");
 const jwt = __importStar(require("jsonwebtoken"));
 /**
  * Merkezi Mikroservis Güvenlik Servisi
@@ -205,7 +206,7 @@ class MicroserviceSecurityService {
                 if (req.body && this.validator) {
                     // Önemli: Tehlikeli operatörler içeren istekleri reddet
                     if (this.validator.detectNoSQLInjection(req.body)) {
-                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { body: JSON.stringify(req.body) });
+                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { source: 'body', shape: (0, logSafety_util_1.maskSensitiveValues)(req.body) });
                         throw new bad_request_error_1.BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
                     }
                     req.body = this.validator.sanitizeInput(req.body);
@@ -214,7 +215,7 @@ class MicroserviceSecurityService {
                 if (req.params && this.validator) {
                     // Önemli: Tehlikeli operatörler içeren istekleri reddet
                     if (this.validator.detectNoSQLInjection(req.params)) {
-                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { params: JSON.stringify(req.params) });
+                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { source: 'params', shape: (0, logSafety_util_1.maskSensitiveValues)(req.params) });
                         throw new bad_request_error_1.BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
                     }
                     req.params = this.validator.sanitizeInput(req.params);
@@ -223,7 +224,7 @@ class MicroserviceSecurityService {
                 if (req.query && this.validator) {
                     // Önemli: Tehlikeli operatörler içeren istekleri reddet
                     if (this.validator.detectNoSQLInjection(req.query)) {
-                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { query: JSON.stringify(req.query) });
+                        index_1.logger.warn('NoSQL injection tespit edildi - istek reddedildi', { source: 'query', shape: (0, logSafety_util_1.maskSensitiveValues)(req.query) });
                         throw new bad_request_error_1.BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
                     }
                     req.query = this.validator.sanitizeInput(req.query);

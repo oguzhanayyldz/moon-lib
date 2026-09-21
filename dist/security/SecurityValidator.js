@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.securityValidator = exports.SecurityValidator = void 0;
 const logger_service_1 = require("../services/logger.service");
+const logSafety_util_1 = require("../utils/logSafety.util");
 const mongo_sanitize_1 = __importDefault(require("mongo-sanitize"));
 // Simple XSS protection function
 function sanitizeString(input) {
@@ -90,8 +91,6 @@ class SecurityValidator {
             return false;
         }
         const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin', '$exists', '$mod', '$elemMatch', '$text', '$expr', '$or', '$and', '$not', '$nor'];
-        // Input'u konsola yazdır - debug için 
-        logger_service_1.logger.debug('NoSQL Injection kontrol ediliyor, input:', JSON.stringify(input));
         // Recursive olarak objedeki tüm alanları kontrol et
         const checkObject = (obj, path = '') => {
             // Eğer array ise, her elemanını kontrol et
@@ -103,7 +102,9 @@ class SecurityValidator {
                 // 1. Tehlikeli operatörler var mı diye direkt key'leri kontrol et
                 const dangerousKey = Object.keys(obj).find(key => dangerousKeys.includes(key));
                 if (dangerousKey) {
-                    logger_service_1.logger.warn(`NoSQL Injection tespit edildi: ${path ? path + '.' : ''}${dangerousKey}`, { value: obj[dangerousKey] });
+                    // Yol saldirganin anahtarlarindan olusur: mesaj metnine degil meta alanina konur,
+                    // boylece winston'in JSON.stringify'i CR/LF'i kacirir ve sahte log satiri uretilemez.
+                    logger_service_1.logger.warn('NoSQL Injection tespit edildi', { path: `${path ? path + '.' : ''}${dangerousKey}` });
                     return true;
                 }
                 // 2. Alt nesneleri recursive olarak kontrol et
@@ -113,7 +114,7 @@ class SecurityValidator {
         };
         const result = checkObject(input);
         if (result) {
-            logger_service_1.logger.warn('NoSQL Injection tespit edildi, tam input:', { input: JSON.stringify(input) });
+            logger_service_1.logger.warn('NoSQL Injection tespit edildi, girdi sekli:', { input: (0, logSafety_util_1.maskSensitiveValues)(input) });
         }
         return result;
     }
