@@ -1,5 +1,5 @@
 import { inspect } from 'util';
-import { maskConnectionUriSecret, maskConnectionUrisInText, sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
+import { maskConnectionUriSecret, maskConnectionUrisInText, maskSensitiveValues, sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
 
 // Fake values. They appear in source as `${...}` templates; the plaintext credential K0 gate
 // (scripts/gates/lint_plaintext_credentials.py) treats them as placeholders.
@@ -339,5 +339,73 @@ describe('toSafeError', () => {
         expect(error).not.toHaveProperty('code');
         expect(error).not.toHaveProperty('input');
         expect(error).not.toHaveProperty('url');
+    });
+});
+
+describe('maskSensitiveValues', () => {
+    it('keeps the shape and masks every leaf value', () => {
+        const result = maskSensitiveValues({ email: { $ne: null }, password: FAKE_PASSWORD });
+
+        expect(result).toEqual({ email: { $ne: '****' }, password: '****' });
+        expectNoSecret(result);
+    });
+
+    it('masks a leaf of any type — no value counts as harmless', () => {
+        const result = maskSensitiveValues({
+            text: FAKE_SECRET,
+            count: 42,
+            flag: false,
+            empty: null,
+            missing: undefined
+        });
+
+        expect(result).toEqual({ text: '****', count: '****', flag: '****', empty: '****', missing: '****' });
+        expectNoSecret(result);
+    });
+
+    it('masks a non-object input as a whole', () => {
+        expect(maskSensitiveValues(FAKE_TOKEN)).toBe('****');
+        expect(maskSensitiveValues(null)).toBe('****');
+        expect(maskSensitiveValues(undefined)).toBe('****');
+    });
+
+    it('keeps array structure and summarises items past the limit', () => {
+        const result = maskSensitiveValues({ ids: [1, 2, 3, 4, 5, 6, 7] });
+
+        expect(result).toEqual({ ids: ['****', '****', '****', '****', '****', '…(+2)'] });
+    });
+
+    it('stops at the depth limit so a deep body cannot grow the log line', () => {
+        const result = maskSensitiveValues({ a: { b: { c: { d: { e: FAKE_SECRET } } } } });
+
+        expect(result).toEqual({ a: { b: { c: { d: '…' } } } });
+        expectNoSecret(result);
+    });
+
+    it('summarises keys past the limit instead of printing them all', () => {
+        const wide: Record<string, string> = {};
+        for (let index = 0; index < 25; index += 1) {
+            wide[`field${index}`] = FAKE_SECRET;
+        }
+
+        const result = maskSensitiveValues(wide) as Record<string, unknown>;
+
+        expect(Object.keys(result)).toHaveLength(21);
+        expect(result['…']).toBe('+5');
+        expectNoSecret(result);
+    });
+
+    it('strips control characters from keys so a key cannot forge a log line', () => {
+        const result = maskSensitiveValues({ 'na\nme\r': FAKE_SECRET }) as Record<string, unknown>;
+
+        expect(Object.keys(result)).toEqual(['name']);
+        expectNoSecret(result);
+    });
+
+    it('cuts an over-long key', () => {
+        const longKey = 'k'.repeat(200);
+        const result = maskSensitiveValues({ [longKey]: FAKE_SECRET }) as Record<string, unknown>;
+
+        expect(Object.keys(result)[0]).toHaveLength(64);
     });
 });

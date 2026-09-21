@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../services/logger.service';
+import { maskSensitiveValues } from '../utils/logSafety.util';
 import expressMongoSanitize from 'express-mongo-sanitize';
 import sanitize from 'mongo-sanitize';
 
@@ -144,9 +145,6 @@ export class SecurityValidator {
 
         const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin', '$exists', '$mod', '$elemMatch', '$text', '$expr', '$or', '$and', '$not', '$nor'];
         
-        // Input'u konsola yazdır - debug için 
-        logger.debug('NoSQL Injection kontrol ediliyor, input:', JSON.stringify(input));
-        
         // Recursive olarak objedeki tüm alanları kontrol et
         const checkObject = (obj: any, path = ''): boolean => {
             // Eğer array ise, her elemanını kontrol et
@@ -159,7 +157,9 @@ export class SecurityValidator {
                 // 1. Tehlikeli operatörler var mı diye direkt key'leri kontrol et
                 const dangerousKey = Object.keys(obj).find(key => dangerousKeys.includes(key));
                 if (dangerousKey) {
-                    logger.warn(`NoSQL Injection tespit edildi: ${path ? path + '.' : ''}${dangerousKey}`, { value: obj[dangerousKey] });
+                    // Yol saldirganin anahtarlarindan olusur: mesaj metnine degil meta alanina konur,
+                    // boylece winston'in JSON.stringify'i CR/LF'i kacirir ve sahte log satiri uretilemez.
+                    logger.warn('NoSQL Injection tespit edildi', { path: `${path ? path + '.' : ''}${dangerousKey}` });
                     return true;
                 }
                 
@@ -174,7 +174,7 @@ export class SecurityValidator {
         
         const result = checkObject(input);
         if (result) {
-            logger.warn('NoSQL Injection tespit edildi, tam input:', { input: JSON.stringify(input) });
+            logger.warn('NoSQL Injection tespit edildi, girdi sekli:', { input: maskSensitiveValues(input) });
         }
         return result;
     }
