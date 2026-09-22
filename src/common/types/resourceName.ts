@@ -15,4 +15,5 @@ export enum ResourceName {
     Ikas = "Ikas",
     IdeaSoft = "IdeaSoft",
     TSoft = "T-Soft",
+    Pazarama = "Pazarama",
 }

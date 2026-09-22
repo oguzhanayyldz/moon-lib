@@ -31,6 +31,7 @@ export class IntegrationRouter {
         [ResourceName.Amazon]: IntegrationType.MarketPlace,
         [ResourceName.N11]: IntegrationType.MarketPlace,
         [ResourceName.CicekSepeti]: IntegrationType.MarketPlace,
+        [ResourceName.Pazarama]: IntegrationType.MarketPlace,
         [ResourceName.Parasut]: IntegrationType.Erp,
         [ResourceName.Aras]: IntegrationType.Cargo,
         [ResourceName.Yurtici]: IntegrationType.Cargo,
