@@ -29,7 +29,7 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
     /**
      * Distributed lock ile işlem yapmak için yardımcı metod
      */
-    protected processWithLock<R>(eventId: string, callback: () => Promise<R>): Promise<R>;
+    protected processWithLock<R>(eventId: string, callback: () => Promise<R>, payloadFingerprint?: string): Promise<R>;
     /**
      * Redis'te lock almaya çalışır
      */
@@ -75,6 +75,10 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      * Alt sınıflar tarafından override edilebilir
      */
     protected getEventId(data: T['data']): string;
+    /**
+     * Olay içeriğinin parmak izi. Aynı eventId altında kopya teslimi farklı olaydan ayırmak için kilit değerine yazılır.
+     */
+    private getPayloadFingerprint;
     /**
      * İzleme için span oluştur
      */

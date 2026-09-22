@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Stan, Message } from 'node-nats-streaming';
 import mongoose from 'mongoose';
 import { RetryableListener } from '../events/retryableListener';
@@ -9,6 +10,7 @@ jest.mock('../services/redisWrapper.service', () => ({
     redisWrapper: {
         client: {
             set: jest.fn(),
+            get: jest.fn(),
             ttl: jest.fn(),
             eval: jest.fn(),
         }
@@ -211,16 +213,58 @@ describe('RetryableListener', () => {
         });
 
         describe('when TTL is greater than 5 seconds (active processing)', () => {
-            it('should ack message (another instance is actively processing)', async () => {
+            const fingerprintOf = (data: unknown) =>
+                crypto.createHash('sha1').update(JSON.stringify(data)).digest('hex');
+
+            beforeEach(() => {
                 (redisWrapper.client.ttl as jest.Mock).mockResolvedValue(25);
+            });
+
+            it('should ack message when the lock holder is processing the same payload (duplicate delivery)', async () => {
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue(`other-pod#${fingerprintOf(testData)}`);
 
                 await listener.onMessage(testData, mockMessage);
 
-                // Message should be acked - another instance is processing
+                // Message should be acked - the same event is being processed elsewhere
                 expect(mockMessage.ack).toHaveBeenCalled();
 
                 // Event should NOT have been processed by this instance
                 expect(listener.processEventCalls).toHaveLength(0);
+            });
+
+            // TASK-MUD6C7R77TT38: sürümsüz eventId'yi paylaşan farklı bir olay ack'lenirse hiç işlenmeden kaybolur
+            it('should NOT ack message when the lock is held by a different event with the same eventId', async () => {
+                const newerData: TestEvent['data'] = { list: [{ id: 'test-123', user: 'user-789' }] };
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue(`other-pod#${fingerprintOf(testData)}`);
+
+                await listener.onMessage(newerData, mockMessage);
+
+                expect(mockMessage.ack).not.toHaveBeenCalled();
+                expect(listener.processEventCalls).toHaveLength(0);
+            });
+
+            it('should NOT ack message when the lock holder value has no payload fingerprint', async () => {
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue('other-pod');
+
+                await listener.onMessage(testData, mockMessage);
+
+                expect(mockMessage.ack).not.toHaveBeenCalled();
+            });
+
+            it('should NOT ack message when the lock was released before the holder could be read', async () => {
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue(null);
+
+                await listener.onMessage(testData, mockMessage);
+
+                expect(mockMessage.ack).not.toHaveBeenCalled();
+            });
+
+            it('should NOT ack message when reading the lock holder fails', async () => {
+                (redisWrapper.client.get as jest.Mock).mockRejectedValue(new Error('Redis error'));
+
+                await listener.onMessage(testData, mockMessage);
+
+                expect(mockMessage.ack).not.toHaveBeenCalled();
             });
         });
 
@@ -256,6 +300,17 @@ describe('RetryableListener', () => {
 
             // Lock should be released
             expect(redisWrapper.client.eval).toHaveBeenCalled();
+        });
+
+        it('should store the payload fingerprint in the lock value and release with the same value', async () => {
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue('OK');
+            const fingerprint = crypto.createHash('sha1').update(JSON.stringify(testData)).digest('hex');
+
+            await listener.onMessage(testData, mockMessage);
+
+            const lockValue = (redisWrapper.client.set as jest.Mock).mock.calls[0][1];
+            expect(lockValue.endsWith(`#${fingerprint}`)).toBe(true);
+            expect((redisWrapper.client.eval as jest.Mock).mock.calls[0][1].arguments).toEqual([lockValue]);
         });
     });
 
