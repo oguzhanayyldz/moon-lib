@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { UserPayload, hasPermission } from './current-user';
+import { UserPayload, hasPermission, hasPlatformPermission } from './current-user';
 import { Permission } from '../types/permission.types';
 
 /**
@@ -77,33 +77,38 @@ export const requirePlatformPermission = (
         }
 
         // User'ın bu resource için permission'ını bul
+        // ⚠️ Joker (`'*'`) eylem de eşleşmeli — `hasPermission` onu kabul ediyor.
+        // Eskiden yalnız `includes(action)` aranıyordu: `'*'` izinli ama platformu
+        // kısıtlı bir kullanıcıda kısıt bulunamıyor ve `next()` çağrılıyordu
+        // (fail-open).
         const userPermission = currentUser.permissions?.find(
-            (p: Permission) => p.resource === resource && p.actions.includes(action)
+            (p: Permission) => p.resource === resource && (p.actions.includes(action) || p.actions.includes('*'))
         );
 
-        // Platform constraint kontrolü
-        if (userPermission?.constraints?.platforms) {
-            const allowedPlatforms = userPermission.constraints.platforms;
+        // Platform constraint kontrolü — karar `hasPlatformPermission` ile TEK
+        // kaynaktan verilir; bu middleware ile yardımcı fonksiyon ayrışmasın.
+        if (!hasPlatformPermission(currentUser, resource, action, platformId)) {
+            const allowedPlatforms: string[] = userPermission?.constraints?.platforms || [];
 
-            if (!allowedPlatforms.includes(platformId)) {
-                if (logAccess) {
-                    console.warn(
-                        `Platform permission denied: User ${currentUser.id} attempted ${action} ` +
-                        `on ${resource} for platform ${platformId}. ` +
-                        `Allowed platforms: ${allowedPlatforms.join(', ')}`
-                    );
-                }
-
-                return res.status(403).json({
-                    errors: [{
-                        message: errorMessage || `Not authorized for ${action} on ${resource} for this platform`,
-                        field: 'permissions',
-                        platform: platformId,
-                        allowedPlatforms
-                    }]
-                });
+            if (logAccess) {
+                console.warn(
+                    `Platform permission denied: User ${currentUser.id} attempted ${action} ` +
+                    `on ${resource} for platform ${platformId}. ` +
+                    `Allowed platforms: ${allowedPlatforms.join(', ')}`
+                );
             }
-        } else if (!allowNoConstraints) {
+
+            return res.status(403).json({
+                errors: [{
+                    message: errorMessage || `Not authorized for ${action} on ${resource} for this platform`,
+                    field: 'permissions',
+                    platform: platformId,
+                    allowedPlatforms
+                }]
+            });
+        }
+
+        if (!allowNoConstraints && !userPermission?.constraints?.platforms) {
             // Eğer constraint yoksa ve allowNoConstraints=false ise reddet
             if (logAccess) {
                 console.warn(
