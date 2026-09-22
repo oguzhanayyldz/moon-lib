@@ -20,6 +20,9 @@ class CircuitBreaker {
         this.failureCount = 0;
         this.successCount = 0;
         this.halfOpenCallCount = 0;
+        // Incremented on every transition into HALF_OPEN. A call carries the round it took its slot in,
+        // so a call that finishes after its round ended cannot give a slot back to a later round.
+        this.halfOpenRound = 0;
     }
     execute(fn) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -34,8 +37,8 @@ class CircuitBreaker {
                 }
             }
             // In half-open state, limit the number of calls
-            const tookHalfOpenSlot = this.state === api_client_types_1.CircuitBreakerState.HALF_OPEN;
-            if (tookHalfOpenSlot) {
+            const slotRound = this.state === api_client_types_1.CircuitBreakerState.HALF_OPEN ? this.halfOpenRound : undefined;
+            if (slotRound !== undefined) {
                 const maxCalls = this.config.halfOpenMaxCalls || 3;
                 if (this.halfOpenCallCount >= maxCalls) {
                     this.logEvent('Half-open call limit exceeded, rejecting request');
@@ -49,7 +52,7 @@ class CircuitBreaker {
                 return result;
             }
             catch (error) {
-                this.onFailure(error, tookHalfOpenSlot);
+                this.onFailure(error, slotRound);
                 throw error;
             }
         });
@@ -63,6 +66,7 @@ class CircuitBreaker {
     transitionToHalfOpen() {
         this.state = api_client_types_1.CircuitBreakerState.HALF_OPEN;
         this.halfOpenCallCount = 0;
+        this.halfOpenRound++;
         this.logEvent('Circuit breaker transitioned to HALF_OPEN');
     }
     onSuccess() {
@@ -76,7 +80,7 @@ class CircuitBreaker {
         }
         this.successCount++;
     }
-    onFailure(error, tookHalfOpenSlot) {
+    onFailure(error, slotRound) {
         this.lastFailureTime = Date.now();
         // Only count failures for expected error types
         if (this.isExpectedError(error)) {
@@ -94,10 +98,12 @@ class CircuitBreaker {
                 this.logEvent(`Circuit breaker opened due to ${this.failureCount} failures`);
             }
         }
-        else if (tookHalfOpenSlot && this.state === api_client_types_1.CircuitBreakerState.HALF_OPEN) {
+        else if (slotRound === this.halfOpenRound && this.state === api_client_types_1.CircuitBreakerState.HALF_OPEN) {
             // A non-counted failure (e.g. 4xx) neither closes nor reopens the circuit, so give the
             // slot back; otherwise such failures use up every slot and the circuit stays HALF_OPEN,
-            // rejecting all calls until the process restarts.
+            // rejecting all calls until the process restarts. Only the round that handed out the slot
+            // takes it back: a call outliving its round would otherwise free a slot it never held here.
+            // Math.max is a defensive floor only — the round check already keeps the counter >= 0.
             this.halfOpenCallCount = Math.max(0, this.halfOpenCallCount - 1);
             this.logEvent('Non-counted failure in half-open state, call slot released');
         }

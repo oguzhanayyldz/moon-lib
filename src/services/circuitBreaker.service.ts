@@ -8,7 +8,10 @@ export class CircuitBreaker {
   private lastFailureTime?: number;
   private lastSuccessTime?: number;
   private halfOpenCallCount: number = 0;
-  
+  // Incremented on every transition into HALF_OPEN. A call carries the round it took its slot in,
+  // so a call that finishes after its round ended cannot give a slot back to a later round.
+  private halfOpenRound: number = 0;
+
   constructor(
     private readonly config: CircuitBreakerConfig,
     private readonly serviceName: string
@@ -26,8 +29,8 @@ export class CircuitBreaker {
     }
 
     // In half-open state, limit the number of calls
-    const tookHalfOpenSlot = this.state === CircuitBreakerState.HALF_OPEN;
-    if (tookHalfOpenSlot) {
+    const slotRound = this.state === CircuitBreakerState.HALF_OPEN ? this.halfOpenRound : undefined;
+    if (slotRound !== undefined) {
       const maxCalls = this.config.halfOpenMaxCalls || 3;
       if (this.halfOpenCallCount >= maxCalls) {
         this.logEvent('Half-open call limit exceeded, rejecting request');
@@ -41,7 +44,7 @@ export class CircuitBreaker {
       this.onSuccess();
       return result;
     } catch (error) {
-      this.onFailure(error, tookHalfOpenSlot);
+      this.onFailure(error, slotRound);
       throw error;
     }
   }
@@ -56,6 +59,7 @@ export class CircuitBreaker {
   private transitionToHalfOpen(): void {
     this.state = CircuitBreakerState.HALF_OPEN;
     this.halfOpenCallCount = 0;
+    this.halfOpenRound++;
     this.logEvent('Circuit breaker transitioned to HALF_OPEN');
   }
 
@@ -73,7 +77,7 @@ export class CircuitBreaker {
     this.successCount++;
   }
 
-  private onFailure(error: any, tookHalfOpenSlot: boolean): void {
+  private onFailure(error: any, slotRound?: number): void {
     this.lastFailureTime = Date.now();
     
     // Only count failures for expected error types
@@ -91,10 +95,12 @@ export class CircuitBreaker {
         this.state = CircuitBreakerState.OPEN;
         this.logEvent(`Circuit breaker opened due to ${this.failureCount} failures`);
       }
-    } else if (tookHalfOpenSlot && this.state === CircuitBreakerState.HALF_OPEN) {
+    } else if (slotRound === this.halfOpenRound && this.state === CircuitBreakerState.HALF_OPEN) {
       // A non-counted failure (e.g. 4xx) neither closes nor reopens the circuit, so give the
       // slot back; otherwise such failures use up every slot and the circuit stays HALF_OPEN,
-      // rejecting all calls until the process restarts.
+      // rejecting all calls until the process restarts. Only the round that handed out the slot
+      // takes it back: a call outliving its round would otherwise free a slot it never held here.
+      // Math.max is a defensive floor only — the round check already keeps the counter >= 0.
       this.halfOpenCallCount = Math.max(0, this.halfOpenCallCount - 1);
       this.logEvent('Non-counted failure in half-open state, call slot released');
     }

@@ -5,7 +5,9 @@ import { CircuitBreakerConfig, CircuitBreakerOpenError, CircuitBreakerState } fr
 
 // A failure that is NOT an expected error (4xx, e.g. 429 once a client removes it from
 // expectedErrors) takes a half-open slot like any other call. These tests pin that the slot is
-// given back, so such failures can never leave the breaker stuck in HALF_OPEN with no calls allowed.
+// given back, so such failures can never leave the breaker stuck in HALF_OPEN with no calls allowed —
+// and that it is given back only to the half-open round that handed it out, so a call outliving its
+// round cannot let the next round run more probes than halfOpenMaxCalls.
 
 const RESET_TIMEOUT = 60_000;
 
@@ -115,7 +117,40 @@ describe('CircuitBreaker — half-open slot accounting', () => {
         expect(breaker.getCurrentState()).toBe(CircuitBreakerState.CLOSED);
     });
 
-    it('a slot released after its half-open round ended cannot raise the limit', async () => {
+    it('a stale slot release from an earlier half-open round cannot raise the current limit', async () => {
+        const breaker = makeBreaker(2);
+        await openThenWait(breaker);
+
+        // Round 1: a slow probe takes a slot and stays in flight; a second probe reopens the breaker.
+        const slow = deferred<string>();
+        const slowCall = breaker.execute(() => slow.promise);
+        await expect(breaker.execute(() => Promise.reject(httpError(503)))).rejects.toMatchObject({ response: { status: 503 } });
+        expect(breaker.getCurrentState()).toBe(CircuitBreakerState.OPEN);
+
+        // Round 2: one probe takes one of the two slots and stays in flight.
+        now += RESET_TIMEOUT + 1;
+        const probe = deferred<string>();
+        const probeCall = breaker.execute(() => probe.promise);
+        expect(breaker.getCurrentState()).toBe(CircuitBreakerState.HALF_OPEN);
+
+        // The round-1 probe now ends in a non-counted failure. Its slot belonged to a round that is
+        // over, so it must not free the slot the round-2 probe is holding.
+        slow.reject(httpError(400));
+        await expect(slowCall).rejects.toMatchObject({ response: { status: 400 } });
+
+        // Exactly one slot is left: the next probe goes through, the one after it is rejected.
+        const second = deferred<string>();
+        const secondCall = breaker.execute(() => second.promise);
+        const third = jest.fn().mockResolvedValue('third');
+        await expect(breaker.execute(third)).rejects.toBeInstanceOf(CircuitBreakerOpenError);
+        expect(third).not.toHaveBeenCalled();
+
+        probe.resolve('ok');
+        second.resolve('ok');
+        await expect(Promise.all([probeCall, secondCall])).resolves.toEqual(['ok', 'ok']);
+    });
+
+    it('a same-round release followed by a stale one still leaves the limit at halfOpenMaxCalls', async () => {
         const breaker = makeBreaker(2);
         await openThenWait(breaker);
 
