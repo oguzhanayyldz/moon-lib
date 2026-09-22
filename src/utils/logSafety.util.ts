@@ -237,7 +237,7 @@ const MAX_SHAPE_KEY_LENGTH = 64;
  *
  * It exists for the NoSQL-injection path, where the rejected input has to be described in a log line
  * without carrying what it contained. A rejected `/api/users/signin` body is exactly the case that
- * matters: `{"email":{"$ne":null},"password":"<the user's password>"}` must be logged as
+ * matters: `{"email":{"$ne":null},"password":"<value>"}` (the user's password) must be logged as
  * `{"email":{"$ne":"****"},"password":"****"}` — the operator and the field stay readable, the
  * credential does not survive.
  *
@@ -280,4 +280,193 @@ export function maskSensitiveValues(value: unknown, depth = 0): unknown {
 
 function maskShapeKey(key: string): string {
     return key.replace(CONTROL_CHAR_PATTERN, '').slice(0, MAX_SHAPE_KEY_LENGTH);
+}
+
+// --- Credential field redaction ----------------------------------------------------------------
+// Used by IntegrationRequestLogService: an integration log keeps the platform payload readable for
+// debugging, so only the values of credential-named fields are replaced. `maskSensitiveValues`
+// above masks every leaf and would make those logs useless, which is why this is a separate rule.
+
+/** Marker written in place of a credential value. Kept equal to the marker IntegrationLog always used. */
+export const REDACTED_FIELD_MASK = '***REDACTED***';
+
+const TURKISH_TO_ASCII: Record<string, string> = {
+    ç: 'c', Ç: 'c', ğ: 'g', Ğ: 'g', ı: 'i', İ: 'i', ö: 'o', Ö: 'o', ş: 's', Ş: 's', ü: 'u', Ü: 'u'
+};
+// Matched anywhere inside the normalized name: `ApiKey`, `x-ibm-client-secret`, `restrictedDataToken`, `WebServisSifre`.
+const SENSITIVE_NAME_PARTS = [
+    'password', 'passwd', 'passphrase', 'parola', 'sifre', 'secret', 'token', 'key', 'authorization',
+    'credential', 'cookie', 'bearer', 'uyekodu', 'yetkikodu'
+];
+// Matched only as the whole normalized name: too short or too common to be searched inside other names.
+// The login names are half of a username/password pair (Aras, Yurtiçi, Paraşüt, Mikro, Sürat).
+const SENSITIVE_NAMES = new Set([
+    'pass', 'pwd', 'auth', 'username', 'wsusername', 'kullaniciadi', 'kullanicikodu', 'firmakodu', 'customercode'
+]);
+// Non-secret fields that contain a part above, measured on the integrations' payloads: product SEO
+// text (`metaKeywords`, `SeoKeywords`), the cargo tracking key, pagination cursors (Trendyol
+// `nextPageToken`, Amazon `NextToken`) and the Shopify `sortKey` enum. They are cut out of the name
+// before the part check, so `keywordSecret` is still masked for its `secret`.
+const NON_SENSITIVE_NAME_PARTS = ['keyword', 'cargokey', 'sortkey', 'nexttoken', 'nextpagetoken'];
+
+const NON_ALPHANUMERIC_PATTERN = /[^a-z0-9]/g;
+// XML start tag, optionally namespace-prefixed and with attributes: `<tem:UyeKodu xsi:type="x">`.
+const XML_START_TAG_PATTERN = /<((?:[A-Za-z_][\w.-]*:)?([A-Za-z_][\w.-]*))(\s[^<>]*)?>/;
+// `"name": value` pair in text that is not parseable JSON (a JSON fragment inside an error message).
+// A pair never starts at an escaped quote (`\"`): a JSON name is never opened by one, and without the
+// lookbehind every `\"` of an escaped or double-encoded text started a match that scanned on to the
+// next real quote — quadratic time (a 1 MB text blocked the event loop for minutes). With it, every
+// quote that starts a match also ends every scan that reaches it, so the scans never overlap: linear.
+const JSON_PAIR_PATTERN = /(?<!\\)"((?:[^"\\]|\\.)*)"(\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*|true|false|null)/g;
+// `name=` of a form-urlencoded body or query string. Only a credential's value is consumed, so a
+// value is still scanned for the next name (`scope=read,client_secret=…`, `redirect=…?token=…`).
+const FORM_NAME_PATTERN = /(^|[?&;,\s"'])([^\s=&?;,"'<>]+)=/;
+// A quoted value — `name="…"`, `name='…'`, an XML attribute, or `name=\"…\"` inside a JSON string —
+// runs to the same quote sequence, whitespace and `&` included.
+const FORM_VALUE_QUOTE_PATTERN = /^\\*["']/;
+// An unquoted value stops at `&`, at angle brackets, or at a quote that closes the text around it
+// (followed by a JSON/XML delimiter or the end), so an XML or JSON text around it stays intact.
+// Whitespace and line breaks belong to the value (a passphrase, a PEM key): fail-closed.
+const FORM_VALUE_END_PATTERN = /[&<>]|["'](?=[\s,;:)}\]>/]|$)/;
+
+/**
+ * Whether a field, header, XML element or form key name holds a credential.
+ *
+ * The name is normalized first — Turkish letters folded to ASCII, lower-cased, everything except
+ * letters and digits removed — so `Api-Key`, `API_KEY`, `apiKey`, `ŞİFRE` and `x-api-key` all compare
+ * the same way. It is sensitive when the normalized name contains a `SENSITIVE_NAME_PARTS` entry
+ * (after the known non-secret parts are cut out) or equals a `SENSITIVE_NAMES` entry.
+ *
+ * Fail-closed on purpose: an unknown name that merely contains `key` or `token` is masked. A
+ * false positive costs a readable log value; a false negative writes a credential to IntegrationLog.
+ */
+export function isSensitiveFieldName(name: string): boolean {
+    const normalized = normalizeFieldName(name);
+    if (SENSITIVE_NAMES.has(normalized)) {
+        return true;
+    }
+    const withoutKnownSafeParts = NON_SENSITIVE_NAME_PARTS.reduce((rest, part) => rest.split(part).join(''), normalized);
+    return SENSITIVE_NAME_PARTS.some((part) => withoutKnownSafeParts.includes(part));
+}
+
+/**
+ * Returns a copy of a JSON-shaped value in which every credential-named field is replaced by
+ * `REDACTED_FIELD_MASK`, whatever its type (a whole `credentials` object is masked as one value).
+ * Other strings go through `redactSensitiveText`, because a string may itself be a JSON document,
+ * a SOAP envelope or a form body. Everything else is kept as it is.
+ */
+export function redactSensitiveFields<T>(value: T): T {
+    if (typeof value === 'string') {
+        return redactSensitiveText(value) as unknown as T;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => redactSensitiveFields(item)) as unknown as T;
+    }
+    if (typeof value !== 'object' || value === null) {
+        return value;
+    }
+    // fromEntries defines own properties, so a `__proto__` key coming from the payload stays a plain field.
+    return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+            key,
+            isSensitiveFieldName(key) ? REDACTED_FIELD_MASK : redactSensitiveFields(item)
+        ])
+    ) as T;
+}
+
+/**
+ * Masks credential values inside a text body.
+ *
+ * - A text that parses as a JSON object or array is redacted structurally and serialized again; it
+ *   is returned unchanged when it holds no credential field, so its original formatting stays.
+ * - Otherwise three shapes are masked in place: XML elements (namespace prefix, attributes, CDATA
+ *   and multi-line values included), `"name": value` pairs and `name=value` pairs — form bodies,
+ *   query strings and XML attributes (`<auth key="…"/>`); a quoted value is masked up to its closing
+ *   quote, an unquoted one up to the next `&`, angle bracket or closing quote, whitespace included.
+ *
+ * Fail-closed: a credential-named XML element without a closing tag, and a quoted credential value
+ * without a closing quote, are masked up to the end of the text.
+ * Every rule runs in linear time: the text may come from a tenant-controlled site.
+ * Known limit: credentials in escaped JSON pairs (`{\"Sifre\":…}` inside a string that is not itself
+ * JSON) and in attributes with whitespace around `=` (`key = "…"`) are not recognized.
+ */
+export function redactSensitiveText(text: string): string {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+            const parsed: unknown = JSON.parse(trimmed);
+            const redacted = JSON.stringify(redactSensitiveFields(parsed));
+            return redacted === JSON.stringify(parsed) ? text : redacted;
+        } catch {
+            // Not JSON after all (or a JSON fragment): fall through to the text rules.
+        }
+    }
+    return redactFormPairs(redactJsonPairs(redactXmlElements(text)));
+}
+
+function normalizeFieldName(name: string): string {
+    return name
+        .replace(/[çÇğĞıİöÖşŞüÜ]/g, (letter) => TURKISH_TO_ASCII[letter])
+        .toLowerCase()
+        .replace(NON_ALPHANUMERIC_PATTERN, '');
+}
+
+function redactXmlElements(text: string): string {
+    const startTag = new RegExp(XML_START_TAG_PATTERN.source, 'g');
+    let result = '';
+    let copiedUpTo = 0;
+    let match: RegExpExecArray | null;
+    while ((match = startTag.exec(text)) !== null) {
+        const [tag, qualifiedName, localName, attributes] = match;
+        if ((attributes ?? '').endsWith('/') || !isSensitiveFieldName(localName)) {
+            continue;
+        }
+        const contentStart = match.index + tag.length;
+        const closingTag = new RegExp(`</${escapeRegExp(qualifiedName)}\\s*>`, 'i');
+        const closing = closingTag.exec(text.slice(contentStart));
+        const contentEnd = closing ? contentStart + closing.index : text.length;
+        result += text.slice(copiedUpTo, contentStart) + REDACTED_FIELD_MASK;
+        copiedUpTo = contentEnd;
+        startTag.lastIndex = closing ? contentEnd + closing[0].length : text.length;
+    }
+    return result + text.slice(copiedUpTo);
+}
+
+function redactJsonPairs(text: string): string {
+    return text.replace(JSON_PAIR_PATTERN, (pair, name: string, separator: string) =>
+        isSensitiveFieldName(name) ? `"${name}"${separator}"${REDACTED_FIELD_MASK}"` : pair
+    );
+}
+
+function redactFormPairs(text: string): string {
+    const formName = new RegExp(FORM_NAME_PATTERN.source, 'g');
+    let result = '';
+    let copiedUpTo = 0;
+    let match: RegExpExecArray | null;
+    while ((match = formName.exec(text)) !== null) {
+        if (!isSensitiveFieldName(match[2])) {
+            continue;
+        }
+        const valueStart = match.index + match[0].length;
+        const value = text.slice(valueStart);
+        const quote = FORM_VALUE_QUOTE_PATTERN.exec(value)?.[0];
+        let valueLength: number;
+        if (quote) {
+            // Fail-closed: a quoted value that is never closed is masked up to the end of the text.
+            const closingIndex = value.indexOf(quote, quote.length);
+            valueLength = closingIndex === -1 ? value.length : closingIndex + quote.length;
+            result += text.slice(copiedUpTo, valueStart) + quote + REDACTED_FIELD_MASK + (closingIndex === -1 ? '' : quote);
+        } else {
+            const valueEnd = value.search(FORM_VALUE_END_PATTERN);
+            valueLength = valueEnd === -1 ? value.length : valueEnd;
+            result += text.slice(copiedUpTo, valueStart) + REDACTED_FIELD_MASK;
+        }
+        copiedUpTo = valueStart + valueLength;
+        formName.lastIndex = copiedUpTo;
+    }
+    return result + text.slice(copiedUpTo);
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

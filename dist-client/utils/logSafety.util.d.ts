@@ -62,3 +62,64 @@ export declare function sanitizeConnectionError(error: unknown): SafeConnectionE
  * error is never attached as `cause`, because `util.inspect` prints `cause` and would undo the masking.
  */
 export declare function toSafeError(safe: SafeConnectionError): Error;
+/**
+ * Turns a request-shaped value (body, params, query) into something safe to log: the SHAPE is kept,
+ * every leaf VALUE becomes `****`.
+ *
+ * It exists for the NoSQL-injection path, where the rejected input has to be described in a log line
+ * without carrying what it contained. A rejected `/api/users/signin` body is exactly the case that
+ * matters: `{"email":{"$ne":null},"password":"<value>"}` (the user's password) must be logged as
+ * `{"email":{"$ne":"****"},"password":"****"}` — the operator and the field stay readable, the
+ * credential does not survive.
+ *
+ * Fail-closed on values: EVERY leaf (string, number, boolean, null, undefined, function, symbol,
+ * Date, Buffer, …) becomes `****`. No value is ever considered harmless, because what is harmless
+ * depends on the route, not on the type. The diagnostic value comes from the keys.
+ *
+ * Kept visible: object keys and array structure — this is what names the operator (`$ne`) and the
+ * field it sits on. Keys come from the attacker too, so they are stripped of control characters
+ * (log-line forging, the same rule as `maskConnectionUriSecret`) and cut to `MAX_SHAPE_KEY_LENGTH`.
+ *
+ * Bounded: at most `MAX_SHAPE_KEYS` keys per object and `MAX_SHAPE_ITEMS` items per array (the rest
+ * is summarised as `…(+N)`), at most `MAX_SHAPE_DEPTH` levels deep (deeper levels become `…`). A
+ * 10 MB body therefore cannot turn into a 10 MB log line.
+ */
+export declare function maskSensitiveValues(value: unknown, depth?: number): unknown;
+/** Marker written in place of a credential value. Kept equal to the marker IntegrationLog always used. */
+export declare const REDACTED_FIELD_MASK = "***REDACTED***";
+/**
+ * Whether a field, header, XML element or form key name holds a credential.
+ *
+ * The name is normalized first — Turkish letters folded to ASCII, lower-cased, everything except
+ * letters and digits removed — so `Api-Key`, `API_KEY`, `apiKey`, `ŞİFRE` and `x-api-key` all compare
+ * the same way. It is sensitive when the normalized name contains a `SENSITIVE_NAME_PARTS` entry
+ * (after the known non-secret parts are cut out) or equals a `SENSITIVE_NAMES` entry.
+ *
+ * Fail-closed on purpose: an unknown name that merely contains `key` or `token` is masked. A
+ * false positive costs a readable log value; a false negative writes a credential to IntegrationLog.
+ */
+export declare function isSensitiveFieldName(name: string): boolean;
+/**
+ * Returns a copy of a JSON-shaped value in which every credential-named field is replaced by
+ * `REDACTED_FIELD_MASK`, whatever its type (a whole `credentials` object is masked as one value).
+ * Other strings go through `redactSensitiveText`, because a string may itself be a JSON document,
+ * a SOAP envelope or a form body. Everything else is kept as it is.
+ */
+export declare function redactSensitiveFields<T>(value: T): T;
+/**
+ * Masks credential values inside a text body.
+ *
+ * - A text that parses as a JSON object or array is redacted structurally and serialized again; it
+ *   is returned unchanged when it holds no credential field, so its original formatting stays.
+ * - Otherwise three shapes are masked in place: XML elements (namespace prefix, attributes, CDATA
+ *   and multi-line values included), `"name": value` pairs and `name=value` pairs — form bodies,
+ *   query strings and XML attributes (`<auth key="…"/>`); a quoted value is masked up to its closing
+ *   quote, an unquoted one up to the next `&`, angle bracket or closing quote, whitespace included.
+ *
+ * Fail-closed: a credential-named XML element without a closing tag, and a quoted credential value
+ * without a closing quote, are masked up to the end of the text.
+ * Every rule runs in linear time: the text may come from a tenant-controlled site.
+ * Known limit: credentials in escaped JSON pairs (`{\"Sifre\":…}` inside a string that is not itself
+ * JSON) and in attributes with whitespace around `=` (`key = "…"`) are not recognized.
+ */
+export declare function redactSensitiveText(text: string): string;
