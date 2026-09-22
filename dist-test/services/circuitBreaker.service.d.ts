@@ -8,6 +8,7 @@ export declare class CircuitBreaker {
     private lastFailureTime?;
     private lastSuccessTime?;
     private halfOpenCallCount;
+    private halfOpenRound;
     constructor(config: CircuitBreakerConfig, serviceName: string);
     execute<T>(fn: () => Promise<T>): Promise<T>;
     private shouldAttemptReset;
