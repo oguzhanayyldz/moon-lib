@@ -39,5 +39,17 @@ export interface OrderProductCostAssignedEvent {
         source: CostSource;
         /** Tuketilen katmanlarin id'leri — denetim izi ve iade icin */
         layerIds: string[];
+        /**
+         * Kalem basina MONOTON artan sira numarasi (opsiyonel, additive — MALIYET-MS2).
+         *
+         * Bir kaleme art arda birden cok KUMULATIF olay yayinlanabilir (tuketim, iade,
+         * duzeltme). Yayinci her olayda bir oncekinden buyuk bir deger tasir; tuketici
+         * bunu iki isten icin kullanir:
+         *  1. Kilit anahtarina katar — kilit surerken gelen YENI olay ack'lenip dusmez.
+         *  2. Kalemde saklar — sirasi bozuk gelen ESKI olay (sequence <= saklanan) yeniyi ezmez.
+         *
+         * Alan YOKSA (bugunku yayinci) tuketici eski davranisla calisir; sozlesme kirilmaz.
+         */
+        sequence?: number;
     };
 }

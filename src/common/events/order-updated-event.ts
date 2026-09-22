@@ -1,5 +1,6 @@
 import { CurrencyCode } from "../types/currency-code";
 import { ResourceName } from "../types/resourceName";
+import { CostSource } from "../types/cost-source";
 import { Subjects } from "./subjects";
 import { OrderStatus } from "./types/order-status";
 import { OrderStatus2 } from "./types/order-status2";
@@ -163,6 +164,22 @@ export interface OrderProductUpdatedEvent {
     commissionTotal?: number;
     costPrice?: number;
     costTotal?: number;
+    /**
+     * Maliyetin KAYNAGI ve SIRA NUMARASI (opsiyonel, additive — MALIYET-MS2 duzeltme turu 1, B1/B3).
+     *
+     * NEDEN PAYLOAD'DA: maliyet alanlari (`costPrice`/`costTotal`) bu event'le FOREIGN
+     * kopyalara tasiniyordu ama KAYNAGI tasinmiyordu. Reporting kopyasi bu yuzden
+     * kullanicinin elle yazdigi (`manual`) maliyeti hic goremiyor, `canOverrideCost`
+     * kurali orada etkisiz kaliyor ve katman maliyeti manuel degeri sessizce eziyordu
+     * (orders 70 <-> reporting 120).
+     *
+     * `costSequence` ayni sebeple tasinir: siralamasi bozuk gelen ESKI bir siparis
+     * guncellemesi, kaleme zaten uygulanmis DAHA YENI bir kumulatif maliyeti geri almasin.
+     *
+     * Alanlar YOKSA (alani doldurmayan yayinci) tuketici eski davranisla calisir; sozlesme kirilmaz.
+     */
+    costSource?: CostSource;
+    costSequence?: number;
     cancelled?: boolean;
     cancelledQuantity?: number;
     cancelledDate?: Date;
