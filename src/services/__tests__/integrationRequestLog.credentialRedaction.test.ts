@@ -1,4 +1,7 @@
 import { randomBytes } from 'crypto';
+import { createServer } from 'http';
+import { AddressInfo } from 'net';
+import { performance } from 'perf_hooks';
 import { BaseApiClient } from '../baseApiClient.service';
 import { IntegrationRequestLogService } from '../integrationRequestLog.service';
 import { ResourceName } from '../../common';
@@ -63,6 +66,18 @@ class RecordingApiClient extends BaseApiClient {
     }
     getBaseURL(): string { return 'https://api.test.local'; }
     getDefaultHeaders(): Record<string, string> { return this.defaultHeaders; }
+    async handleRateLimitError(): Promise<void> { /* noop */ }
+    shouldRetry(): boolean { return false; }
+}
+
+/** Real axios transport: requests go to `baseUrl` over HTTP. */
+class LiveApiClient extends BaseApiClient {
+    constructor(private readonly baseUrl: string, logService: IntegrationRequestLogService) {
+        super(clientConfig, 'credential-redaction-live-test', ResourceName.WooCommerce, undefined, logService);
+        this.reconfigureHttpClient();
+    }
+    getBaseURL(): string { return this.baseUrl; }
+    getDefaultHeaders(): Record<string, string> { return { Accept: 'text/plain' }; }
     async handleRateLimitError(): Promise<void> { /* noop */ }
     shouldRetry(): boolean { return false; }
 }
@@ -273,5 +288,41 @@ describe('IntegrationLog credential redaction — measured false positives stay 
         const { response } = await sendAndCapture({ reply });
 
         expect(JSON.parse(response.responseBody as string)).toEqual(reply);
+    });
+});
+
+describe('IntegrationLog credential redaction — a hostile text response does not stall the service (TASK-MUBXAY9XUFBXH B1)', () => {
+    it('logs a 200 KB escaped-quote text/plain reply from a tenant-controlled site without blocking the event loop', async () => {
+        // WooCommerce / T-Soft / IdeaSoft `siteUrl` is entered by the tenant, so the reply body is theirs.
+        // Before the fix this reply blocked the event loop for 9.5 s on the same path.
+        const reply = 'x' + '"\\'.repeat(100000);
+        const server = createServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'text/plain', Connection: 'close' });
+            res.end(reply);
+        });
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        const captured: Captured = {};
+        const client = new LiveApiClient(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, capturingLogService(captured));
+
+        let lastTick = performance.now();
+        let maxGapMs = 0;
+        const recordGap = (): void => {
+            const now = performance.now();
+            maxGapMs = Math.max(maxGapMs, now - lastTick);
+            lastTick = now;
+        };
+        const ticker = setInterval(recordGap, 5);
+        try {
+            const data = await client.get<string>('/wp-json/wc/v3/products', { skipRateLimit: true, skipCircuitBreaker: true } as any);
+            // A block right before this line is not seen by the interval, so the last gap is recorded here.
+            recordGap();
+            expect(data).toBe(reply);
+        } finally {
+            clearInterval(ticker);
+            await new Promise((resolve) => server.close(resolve));
+        }
+
+        expect(captured.response?.responseBody).toBe(reply);
+        expect(maxGapMs).toBeLessThan(200);
     });
 });

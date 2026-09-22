@@ -313,12 +313,21 @@ const NON_ALPHANUMERIC_PATTERN = /[^a-z0-9]/g;
 // XML start tag, optionally namespace-prefixed and with attributes: `<tem:UyeKodu xsi:type="x">`.
 const XML_START_TAG_PATTERN = /<((?:[A-Za-z_][\w.-]*:)?([A-Za-z_][\w.-]*))(\s[^<>]*)?>/;
 // `"name": value` pair in text that is not parseable JSON (a JSON fragment inside an error message).
-const JSON_PAIR_PATTERN = /"((?:[^"\\]|\\.)*)"(\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*|true|false|null)/g;
+// A pair never starts at an escaped quote (`\"`): a JSON name is never opened by one, and without the
+// lookbehind every `\"` of an escaped or double-encoded text started a match that scanned on to the
+// next real quote — quadratic time (a 1 MB text blocked the event loop for minutes). With it, every
+// quote that starts a match also ends every scan that reaches it, so the scans never overlap: linear.
+const JSON_PAIR_PATTERN = /(?<!\\)"((?:[^"\\]|\\.)*)"(\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*|true|false|null)/g;
 // `name=` of a form-urlencoded body or query string. Only a credential's value is consumed, so a
 // value is still scanned for the next name (`scope=read,client_secret=…`, `redirect=…?token=…`).
 const FORM_NAME_PATTERN = /(^|[?&;,\s"'])([^\s=&?;,"'<>]+)=/;
-// The value stops at `&`, whitespace, quotes or angle brackets, so an XML or JSON text around it stays intact.
-const FORM_VALUE_END_PATTERN = /[&\s"'<>]/;
+// A quoted value — `name="…"`, `name='…'`, an XML attribute, or `name=\"…\"` inside a JSON string —
+// runs to the same quote sequence, whitespace and `&` included.
+const FORM_VALUE_QUOTE_PATTERN = /^\\*["']/;
+// An unquoted value stops at `&`, at angle brackets, or at a quote that closes the text around it
+// (followed by a JSON/XML delimiter or the end), so an XML or JSON text around it stays intact.
+// Whitespace and line breaks belong to the value (a passphrase, a PEM key): fail-closed.
+const FORM_VALUE_END_PATTERN = /[&<>]|["'](?=[\s,;:)}\]>/]|$)/;
 
 /**
  * Whether a field, header, XML element or form key name holds a credential.
@@ -371,11 +380,15 @@ export function redactSensitiveFields<T>(value: T): T {
  * - A text that parses as a JSON object or array is redacted structurally and serialized again; it
  *   is returned unchanged when it holds no credential field, so its original formatting stays.
  * - Otherwise three shapes are masked in place: XML elements (namespace prefix, attributes, CDATA
- *   and multi-line values included), `"name": value` pairs and `name=value` form pairs.
+ *   and multi-line values included), `"name": value` pairs and `name=value` pairs — form bodies,
+ *   query strings and XML attributes (`<auth key="…"/>`); a quoted value is masked up to its closing
+ *   quote, an unquoted one up to the next `&`, angle bracket or closing quote, whitespace included.
  *
- * Fail-closed: a credential-named XML element without a closing tag is masked up to the end of the text.
- * Known limit: credentials carried in XML attributes (`<auth key="…"/>`) and in escaped JSON
- * (`{\"Sifre\":…}` inside a string that is not itself JSON) are not recognized.
+ * Fail-closed: a credential-named XML element without a closing tag, and a quoted credential value
+ * without a closing quote, are masked up to the end of the text.
+ * Every rule runs in linear time: the text may come from a tenant-controlled site.
+ * Known limit: credentials in escaped JSON pairs (`{\"Sifre\":…}` inside a string that is not itself
+ * JSON) and in attributes with whitespace around `=` (`key = "…"`) are not recognized.
  */
 export function redactSensitiveText(text: string): string {
     const trimmed = text.trim();
@@ -435,11 +448,21 @@ function redactFormPairs(text: string): string {
             continue;
         }
         const valueStart = match.index + match[0].length;
-        const valueLength = text.slice(valueStart).search(FORM_VALUE_END_PATTERN);
-        const valueEnd = valueLength === -1 ? text.length : valueStart + valueLength;
-        result += text.slice(copiedUpTo, valueStart) + REDACTED_FIELD_MASK;
-        copiedUpTo = valueEnd;
-        formName.lastIndex = valueEnd;
+        const value = text.slice(valueStart);
+        const quote = FORM_VALUE_QUOTE_PATTERN.exec(value)?.[0];
+        let valueLength: number;
+        if (quote) {
+            // Fail-closed: a quoted value that is never closed is masked up to the end of the text.
+            const closingIndex = value.indexOf(quote, quote.length);
+            valueLength = closingIndex === -1 ? value.length : closingIndex + quote.length;
+            result += text.slice(copiedUpTo, valueStart) + quote + REDACTED_FIELD_MASK + (closingIndex === -1 ? '' : quote);
+        } else {
+            const valueEnd = value.search(FORM_VALUE_END_PATTERN);
+            valueLength = valueEnd === -1 ? value.length : valueEnd;
+            result += text.slice(copiedUpTo, valueStart) + REDACTED_FIELD_MASK;
+        }
+        copiedUpTo = valueStart + valueLength;
+        formName.lastIndex = copiedUpTo;
     }
     return result + text.slice(copiedUpTo);
 }
