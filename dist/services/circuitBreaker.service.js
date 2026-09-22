@@ -34,7 +34,8 @@ class CircuitBreaker {
                 }
             }
             // In half-open state, limit the number of calls
-            if (this.state === api_client_types_1.CircuitBreakerState.HALF_OPEN) {
+            const tookHalfOpenSlot = this.state === api_client_types_1.CircuitBreakerState.HALF_OPEN;
+            if (tookHalfOpenSlot) {
                 const maxCalls = this.config.halfOpenMaxCalls || 3;
                 if (this.halfOpenCallCount >= maxCalls) {
                     this.logEvent('Half-open call limit exceeded, rejecting request');
@@ -48,7 +49,7 @@ class CircuitBreaker {
                 return result;
             }
             catch (error) {
-                this.onFailure(error);
+                this.onFailure(error, tookHalfOpenSlot);
                 throw error;
             }
         });
@@ -75,7 +76,7 @@ class CircuitBreaker {
         }
         this.successCount++;
     }
-    onFailure(error) {
+    onFailure(error, tookHalfOpenSlot) {
         this.lastFailureTime = Date.now();
         // Only count failures for expected error types
         if (this.isExpectedError(error)) {
@@ -92,6 +93,13 @@ class CircuitBreaker {
                 this.state = api_client_types_1.CircuitBreakerState.OPEN;
                 this.logEvent(`Circuit breaker opened due to ${this.failureCount} failures`);
             }
+        }
+        else if (tookHalfOpenSlot && this.state === api_client_types_1.CircuitBreakerState.HALF_OPEN) {
+            // A non-counted failure (e.g. 4xx) neither closes nor reopens the circuit, so give the
+            // slot back; otherwise such failures use up every slot and the circuit stays HALF_OPEN,
+            // rejecting all calls until the process restarts.
+            this.halfOpenCallCount = Math.max(0, this.halfOpenCallCount - 1);
+            this.logEvent('Non-counted failure in half-open state, call slot released');
         }
     }
     isExpectedError(error) {
