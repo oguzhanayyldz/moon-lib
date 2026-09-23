@@ -189,3 +189,28 @@ describe('IntegrationRequestLogService.getAdminLogs — arama değerleri literal
         expect(result.logs.map((l: any) => l._id)).toEqual(['5']);
     });
 });
+
+describe('IntegrationRequestLogService.getAdminLogs — success ve search birlikte uygulanır (Ö-7)', () => {
+    const docs = (): Doc[] => [
+        { _id: 'a', userId: 'u', endpoint: '/orders/fail', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-01'), responseStatus: 500 } as any,
+        { _id: 'b', userId: 'u', endpoint: '/orders/ok', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-02'), responseStatus: 200 } as any,
+        { _id: 'c', userId: 'u', endpoint: '/products/fail', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-03'), responseStatus: 500 } as any,
+        { _id: 'd', userId: 'u', endpoint: '/orders/nostatus', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-04') }
+    ];
+
+    it('success=false + search: yalnız hem başarısız hem aramaya uyan kayıtlar döner', async () => {
+        const service = new IntegrationRequestLogService(createFakeConnection(docs()));
+
+        const result = await service.getAdminLogs(undefined, 1, 50, 'requestTime', 'desc', { success: false, search: 'orders' });
+
+        expect(result.logs.map((l: any) => l._id)).toEqual(['d', 'a']);
+    });
+
+    it('success=false + search + advancedSearch üçü birlikte uygulanır', async () => {
+        const service = new IntegrationRequestLogService(createFakeConnection(docs()));
+
+        const result = await service.getAdminLogs(undefined, 1, 50, 'requestTime', 'desc', { success: false, search: 'orders', advancedSearch: 'nostatus' });
+
+        expect(result.logs.map((l: any) => l._id)).toEqual(['d']);
+    });
+});
