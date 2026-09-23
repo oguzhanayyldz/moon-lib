@@ -3,7 +3,7 @@ import { ResourceName } from '../common';
 import { OperationType } from '../enums/operation-type.enum';
 import { ResponseInterpreterFactory } from './response-interpreters/interpreter.factory';
 import { logger } from './logger.service';
-import { isSensitiveFieldName, redactSensitiveFields, redactSensitiveText, REDACTED_FIELD_MASK } from '../utils/logSafety.util';
+import { isSensitiveFieldName, redactSensitiveFields, redactSensitiveText, REDACTED_FIELD_MASK, escapeRegExp } from '../utils/logSafety.util';
 import mongoose from 'mongoose';
 
 export interface LogIntegrationRequestOptions {
@@ -199,26 +199,34 @@ export class IntegrationRequestLogService {
                 if (filters.success) {
                     query.responseStatus = { $gte: 200, $lt: 300 };
                 } else {
-                    query.$or = [
-                        { responseStatus: { $exists: false } },
-                        { responseStatus: { $lt: 200 } },
-                        { responseStatus: { $gte: 300 } }
-                    ];
+                    // $or search filtresiyle aynı anahtarı ezmemesi için $and'e itiliyor (issue #877 ek bulgu 3)
+                    query.$and = query.$and || [];
+                    query.$and.push({
+                        $or: [
+                            { responseStatus: { $exists: false } },
+                            { responseStatus: { $lt: 200 } },
+                            { responseStatus: { $gte: 300 } }
+                        ]
+                    });
                 }
             }
 
             if (filters?.search) {
-                query.$or = [
-                    { endpoint: { $regex: filters.search, $options: 'i' } },
-                    { 'metadata.description': { $regex: filters.search, $options: 'i' } }
-                ];
+                query.$and = query.$and || [];
+                const escapedSearch = escapeRegExp(filters.search);
+                query.$and.push({
+                    $or: [
+                        { endpoint: { $regex: escapedSearch, $options: 'i' } },
+                        { 'metadata.description': { $regex: escapedSearch, $options: 'i' } }
+                    ]
+                });
             }
 
             // Advanced search: requestBody ve responseBody içinde JSON arama
             if (filters?.advancedSearch) {
                 // MongoDB $where ile nested search yapmak yerine,
                 // text-based search yapalım (performans için)
-                const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                const searchRegex = { $regex: escapeRegExp(filters.advancedSearch), $options: 'i' };
                 query.$and = query.$and || [];
                 query.$and.push({
                     $or: [
@@ -427,15 +435,16 @@ export class IntegrationRequestLogService {
             }
 
             if (filters?.search) {
+                const escapedSearch = escapeRegExp(filters.search);
                 query.$or = [
-                    { endpoint: { $regex: filters.search, $options: 'i' } },
-                    { 'metadata.description': { $regex: filters.search, $options: 'i' } }
+                    { endpoint: { $regex: escapedSearch, $options: 'i' } },
+                    { 'metadata.description': { $regex: escapedSearch, $options: 'i' } }
                 ];
             }
 
             // Advanced search: requestBody ve responseBody içinde JSON arama
             if (filters?.advancedSearch) {
-                const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                const searchRegex = { $regex: escapeRegExp(filters.advancedSearch), $options: 'i' };
                 query.$and = query.$and || [];
                 query.$and.push({
                     $or: [
