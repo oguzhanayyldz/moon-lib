@@ -5,6 +5,8 @@
  * tip kontrolü yapmıyordu). Düzeltme `$switch` + `$type` ile string/object
  * ayrımını yapıp doğru operatörü ($strLenBytes / $bsonSize) seçiyor.
  *
+ * (Tur 2: sahte `$bsonSize` gerçek mongod 6.0.4 gibi array'de de fırlatır.)
+ *
  * Gerçek bir MongoDB'ye bağlanmadan, `$bsonSize`/`$strLenBytes`'ın gerçek
  * Mongo'daki tip katılığını (yanlış tipte fırlatma) taklit eden minik bir
  * aggregation değerlendiricisi kullanılır — böylece eski `$cond` deseni bu
@@ -65,8 +67,8 @@ function evalExpr(expr: any, doc: any): any {
             }
             case '$bsonSize': {
                 const v = evalExpr(val, doc);
-                if (v === null || typeof v !== 'object') {
-                    throw new Error('$bsonSize requires a document input');
+                if (v === null || typeof v !== 'object' || Array.isArray(v)) {
+                    throw new Error(`$bsonSize requires a document input, found: ${mongoType(v)}`);
                 }
                 return Buffer.byteLength(JSON.stringify(v), 'utf8') + 5;
             }
@@ -218,6 +220,33 @@ describe('IntegrationRequestLogService.getLogStatistics — $bsonSize tip güven
 
         await expect(service.getLogStatistics('u2')).resolves.toEqual(
             expect.objectContaining({ totalLogs: 1, totalSize: expect.any(Number) })
+        );
+    });
+
+    it('legacy array gövdeli kayıt istatistik sorgusunu patlatmaz (gerçek Mongo array\'de $bsonSize fırlatır)', async () => {
+        const docs: Doc[] = [
+            {
+                _id: 'legacy-array-1',
+                userId: 'u3',
+                integrationName: 'n11',
+                requestBody: [{ sku: 'A' }, { sku: 'B' }],
+                responseBody: [{ ok: true }],
+                requestTime: new Date()
+            },
+            {
+                _id: 'obj-1',
+                userId: 'u3',
+                integrationName: 'n11',
+                requestBody: { sku: 'C' },
+                responseBody: 'plain',
+                requestTime: new Date()
+            }
+        ];
+
+        const service = new IntegrationRequestLogService(createFakeConnection(docs));
+
+        await expect(service.getLogStatistics('u3')).resolves.toEqual(
+            expect.objectContaining({ totalLogs: 2, totalSize: expect.any(Number) })
         );
     });
 });

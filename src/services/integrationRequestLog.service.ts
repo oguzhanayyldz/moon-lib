@@ -621,7 +621,7 @@ export class IntegrationRequestLogService {
                                 $switch: {
                                     branches: [
                                         { case: { $eq: [{ $type: '$requestBody' }, 'string'] }, then: { $strLenBytes: '$requestBody' } },
-                                        { case: { $in: [{ $type: '$requestBody' }, ['object', 'array']] }, then: { $bsonSize: '$requestBody' } }
+                                        { case: { $in: [{ $type: '$requestBody' }, ['object']] }, then: { $bsonSize: '$requestBody' } }
                                     ],
                                     default: 0
                                 }
@@ -630,7 +630,7 @@ export class IntegrationRequestLogService {
                                 $switch: {
                                     branches: [
                                         { case: { $eq: [{ $type: '$responseBody' }, 'string'] }, then: { $strLenBytes: '$responseBody' } },
-                                        { case: { $in: [{ $type: '$responseBody' }, ['object', 'array']] }, then: { $bsonSize: '$responseBody' } }
+                                        { case: { $in: [{ $type: '$responseBody' }, ['object']] }, then: { $bsonSize: '$responseBody' } }
                                     ],
                                     default: 0
                                 }
