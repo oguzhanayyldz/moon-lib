@@ -25,7 +25,7 @@ const current_user_1 = require("./current-user");
  */
 const requirePlatformPermission = (resource, action, getPlatformId, options) => {
     return (req, res, next) => {
-        var _a, _b;
+        var _a, _b, _c;
         const { errorMessage, logAccess = true, allowNoConstraints = true } = options || {};
         // CurrentUser middleware'den user bilgilerini al
         const currentUser = req.currentUser;
@@ -57,27 +57,30 @@ const requirePlatformPermission = (resource, action, getPlatformId, options) => 
             return next();
         }
         // User'ın bu resource için permission'ını bul
-        const userPermission = (_a = currentUser.permissions) === null || _a === void 0 ? void 0 : _a.find((p) => p.resource === resource && p.actions.includes(action));
-        // Platform constraint kontrolü
-        if ((_b = userPermission === null || userPermission === void 0 ? void 0 : userPermission.constraints) === null || _b === void 0 ? void 0 : _b.platforms) {
-            const allowedPlatforms = userPermission.constraints.platforms;
-            if (!allowedPlatforms.includes(platformId)) {
-                if (logAccess) {
-                    console.warn(`Platform permission denied: User ${currentUser.id} attempted ${action} ` +
-                        `on ${resource} for platform ${platformId}. ` +
-                        `Allowed platforms: ${allowedPlatforms.join(', ')}`);
-                }
-                return res.status(403).json({
-                    errors: [{
-                            message: errorMessage || `Not authorized for ${action} on ${resource} for this platform`,
-                            field: 'permissions',
-                            platform: platformId,
-                            allowedPlatforms
-                        }]
-                });
+        // ⚠️ Joker (`'*'`) eylem de eşleşmeli — `hasPermission` onu kabul ediyor.
+        // Eskiden yalnız `includes(action)` aranıyordu: `'*'` izinli ama platformu
+        // kısıtlı bir kullanıcıda kısıt bulunamıyor ve `next()` çağrılıyordu
+        // (fail-open).
+        const userPermission = (_a = currentUser.permissions) === null || _a === void 0 ? void 0 : _a.find((p) => p.resource === resource && (p.actions.includes(action) || p.actions.includes('*')));
+        // Platform constraint kontrolü — karar `hasPlatformPermission` ile TEK
+        // kaynaktan verilir; bu middleware ile yardımcı fonksiyon ayrışmasın.
+        if (!(0, current_user_1.hasPlatformPermission)(currentUser, resource, action, platformId)) {
+            const allowedPlatforms = ((_b = userPermission === null || userPermission === void 0 ? void 0 : userPermission.constraints) === null || _b === void 0 ? void 0 : _b.platforms) || [];
+            if (logAccess) {
+                console.warn(`Platform permission denied: User ${currentUser.id} attempted ${action} ` +
+                    `on ${resource} for platform ${platformId}. ` +
+                    `Allowed platforms: ${allowedPlatforms.join(', ')}`);
             }
+            return res.status(403).json({
+                errors: [{
+                        message: errorMessage || `Not authorized for ${action} on ${resource} for this platform`,
+                        field: 'permissions',
+                        platform: platformId,
+                        allowedPlatforms
+                    }]
+            });
         }
-        else if (!allowNoConstraints) {
+        if (!allowNoConstraints && !((_c = userPermission === null || userPermission === void 0 ? void 0 : userPermission.constraints) === null || _c === void 0 ? void 0 : _c.platforms)) {
             // Eğer constraint yoksa ve allowNoConstraints=false ise reddet
             if (logAccess) {
                 console.warn(`Platform constraint required: User ${currentUser.id} attempted ${action} ` +
