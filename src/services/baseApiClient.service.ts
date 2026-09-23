@@ -119,6 +119,13 @@ export abstract class BaseApiClient implements IApiClient {
   // Firlatmazsa orijinal hata firlatilir.
   protected handleCustomError?(error: AxiosError): void;
 
+  // Issue #595: bazi entegrasyonlarda (ornegin Hepsiburada) hiz siniri asimi da 401/403
+  // statusu ile doner — bu, gercek kimlik hatasiyla ayni HTTP koduna sahip ama anlami
+  // farklidir. Bu opsiyonel kanca true dondururse, ilgili 401/403 authFailureTracker
+  // sayacina hic dokunmaz (gercek kimlik hatasi davranisi degismez). Tanimlanmazsa
+  // (varsayilan), eski davranis korunur: her 401/403 sayilir.
+  protected isRateLimitedAuthError?(error: AxiosError): boolean;
+
   // Public API methods
   async get<T>(url: string, config?: RequestConfig): Promise<T> {
     return this.makeRequest<T>({ ...config, method: 'GET', url });
@@ -429,10 +436,13 @@ export abstract class BaseApiClient implements IApiClient {
       // Auth failure tracking (issue #521, #566) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez.
       // Sayim operasyon bazinda yapilir: tek bozuk operasyon tum entegrasyonu pasife cekmez.
       const errorStatus = (error as AxiosError).response?.status;
-      if (
-        this.config.authFailureTracking &&
-        (errorStatus === 401 || errorStatus === 403)
-      ) {
+      const isAuthStatusCode = errorStatus === 401 || errorStatus === 403;
+      // Issue #595: entegrasyon isRateLimitedAuthError'i tanimladiysa ve bu hatayi hiz
+      // siniri kaynakli olarak isaretlediyse, sayaca dokunma — gercek kimlik hatasi
+      // davranisi (asagidaki blok) sadece bu kanca false/undefined dondurdugunde calisir.
+      const suspectedRateLimit =
+        isAuthStatusCode && this.isRateLimitedAuthError?.(error as AxiosError) === true;
+      if (this.config.authFailureTracking && isAuthStatusCode && !suspectedRateLimit) {
         const { userId, integrationId, integrationName, threshold, deactivationOperationThreshold } =
           this.config.authFailureTracking;
         const errorMessage = (error as Error).message?.substring(0, 500);
@@ -446,6 +456,12 @@ export abstract class BaseApiClient implements IApiClient {
             error: err.message,
             integrationName: this.integrationName
           });
+        });
+      } else if (this.config.authFailureTracking && suspectedRateLimit) {
+        logger.warn('BaseApiClient: hiz siniri supheli 401/403 authFailureTracker sayacina dokunmadan geciyor', {
+          status: errorStatus,
+          operationType,
+          integrationName: this.integrationName
         });
       }
 

@@ -177,7 +177,7 @@ class BaseApiClient {
     // Core request method
     makeRequest(requestConfig) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
             const startTime = Date.now();
             let logId;
             // Merge default headers with request headers
@@ -325,15 +325,26 @@ class BaseApiClient {
                 // Auth failure tracking (issue #521, #566) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez.
                 // Sayim operasyon bazinda yapilir: tek bozuk operasyon tum entegrasyonu pasife cekmez.
                 const errorStatus = (_g = error.response) === null || _g === void 0 ? void 0 : _g.status;
-                if (this.config.authFailureTracking &&
-                    (errorStatus === 401 || errorStatus === 403)) {
+                const isAuthStatusCode = errorStatus === 401 || errorStatus === 403;
+                // Issue #595: entegrasyon isRateLimitedAuthError'i tanimladiysa ve bu hatayi hiz
+                // siniri kaynakli olarak isaretlediyse, sayaca dokunma — gercek kimlik hatasi
+                // davranisi (asagidaki blok) sadece bu kanca false/undefined dondurdugunde calisir.
+                const suspectedRateLimit = isAuthStatusCode && ((_h = this.isRateLimitedAuthError) === null || _h === void 0 ? void 0 : _h.call(this, error)) === true;
+                if (this.config.authFailureTracking && isAuthStatusCode && !suspectedRateLimit) {
                     const { userId, integrationId, integrationName, threshold, deactivationOperationThreshold } = this.config.authFailureTracking;
-                    const errorMessage = (_h = error.message) === null || _h === void 0 ? void 0 : _h.substring(0, 500);
+                    const errorMessage = (_j = error.message) === null || _j === void 0 ? void 0 : _j.substring(0, 500);
                     authFailureTracker_util_1.AuthFailureTracker.increment({ userId, integrationId, integrationName, threshold, deactivationOperationThreshold }, errorStatus, errorMessage, operationType).catch((err) => {
                         logger_service_1.logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
                             error: err.message,
                             integrationName: this.integrationName
                         });
+                    });
+                }
+                else if (this.config.authFailureTracking && suspectedRateLimit) {
+                    logger_service_1.logger.warn('BaseApiClient: hiz siniri supheli 401/403 authFailureTracker sayacina dokunmadan geciyor', {
+                        status: errorStatus,
+                        operationType,
+                        integrationName: this.integrationName
                     });
                 }
                 // Handle custom error processing
@@ -362,7 +373,7 @@ class BaseApiClient {
                 logger_service_1.logger.error('API request failed', {
                     method: requestConfig.method,
                     url: requestConfig.url,
-                    status: (_j = error.response) === null || _j === void 0 ? void 0 : _j.status,
+                    status: (_k = error.response) === null || _k === void 0 ? void 0 : _k.status,
                     errorMessage: error.message,
                     duration,
                     integrationName: this.integrationName
