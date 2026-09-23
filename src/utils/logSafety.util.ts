@@ -467,6 +467,6 @@ function redactFormPairs(text: string): string {
     return result + text.slice(copiedUpTo);
 }
 
-function escapeRegExp(value: string): string {
+export function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

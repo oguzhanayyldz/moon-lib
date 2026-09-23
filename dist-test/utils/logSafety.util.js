@@ -9,6 +9,7 @@ exports.maskSensitiveValues = maskSensitiveValues;
 exports.isSensitiveFieldName = isSensitiveFieldName;
 exports.redactSensitiveFields = redactSensitiveFields;
 exports.redactSensitiveText = redactSensitiveText;
+exports.escapeRegExp = escapeRegExp;
 const MASK = '****';
 // Prevents log-line forging (CR/LF injection etc.): stripped from segments carried into the output unchanged.
 const CONTROL_CHAR_PATTERN = /[\x00-\x1F\x7F]/g;

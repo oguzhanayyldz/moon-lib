@@ -123,4 +123,5 @@ export declare function redactSensitiveFields<T>(value: T): T;
  * JSON) and in attributes with whitespace around `=` (`key = "…"`) are not recognized.
  */
 export declare function redactSensitiveText(text: string): string;
+export declare function escapeRegExp(value: string): string;
 //# sourceMappingURL=logSafety.util.d.ts.map

@@ -156,10 +156,11 @@ class IntegrationRequestLogService {
             }
             if (filters === null || filters === void 0 ? void 0 : filters.search) {
                 query.$and = query.$and || [];
+                const escapedSearch = (0, logSafety_util_1.escapeRegExp)(filters.search);
                 query.$and.push({
                     $or: [
-                        { endpoint: { $regex: filters.search, $options: 'i' } },
-                        { 'metadata.description': { $regex: filters.search, $options: 'i' } }
+                        { endpoint: { $regex: escapedSearch, $options: 'i' } },
+                        { 'metadata.description': { $regex: escapedSearch, $options: 'i' } }
                     ]
                 });
             }
@@ -167,7 +168,7 @@ class IntegrationRequestLogService {
             if (filters === null || filters === void 0 ? void 0 : filters.advancedSearch) {
                 // MongoDB $where ile nested search yapmak yerine,
                 // text-based search yapalım (performans için)
-                const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                const searchRegex = { $regex: (0, logSafety_util_1.escapeRegExp)(filters.advancedSearch), $options: 'i' };
                 query.$and = query.$and || [];
                 query.$and.push({
                     $or: [
@@ -335,14 +336,15 @@ class IntegrationRequestLogService {
                 }
             }
             if (filters === null || filters === void 0 ? void 0 : filters.search) {
+                const escapedSearch = (0, logSafety_util_1.escapeRegExp)(filters.search);
                 query.$or = [
-                    { endpoint: { $regex: filters.search, $options: 'i' } },
-                    { 'metadata.description': { $regex: filters.search, $options: 'i' } }
+                    { endpoint: { $regex: escapedSearch, $options: 'i' } },
+                    { 'metadata.description': { $regex: escapedSearch, $options: 'i' } }
                 ];
             }
             // Advanced search: requestBody ve responseBody içinde JSON arama
             if (filters === null || filters === void 0 ? void 0 : filters.advancedSearch) {
-                const searchRegex = { $regex: filters.advancedSearch, $options: 'i' };
+                const searchRegex = { $regex: (0, logSafety_util_1.escapeRegExp)(filters.advancedSearch), $options: 'i' };
                 query.$and = query.$and || [];
                 query.$and.push({
                     $or: [
