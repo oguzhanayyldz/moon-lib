@@ -1,12 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ITEM_SUMMARY_COMMANDS = void 0;
+exports.ITEM_SUMMARY_COMMANDS = exports.STOCK_FETCH_MODE_SKIP_REASON = void 0;
 exports.isItemSummaryCommand = isItemSummaryCommand;
 exports.isItemSummary = isItemSummary;
 exports.buildItemSummary = buildItemSummary;
 exports.countRequestUnits = countRequestUnits;
 exports.countCommandInputUnits = countCommandInputUnits;
 exports.attachItemSummary = attachItemSummary;
+/**
+ * Stok bu platformdan ÇEKİLDİĞİ için (döngüsel akış koruması) gönderilmeyen SKU'ların `skipped[].reason` değeri.
+ * Kullanıcının kendi ayarıdır ve her stok çalışmasında tekrar eder: özette `skipped` sayılır, bildirim tetiklemez.
+ */
+exports.STOCK_FETCH_MODE_SKIP_REASON = 'stock-fetch-mode';
 /** `summary` üretilen toplu komutlar */
 exports.ITEM_SUMMARY_COMMANDS = ['updatePrices', 'updateStocks'];
 function isItemSummaryCommand(command) {
@@ -40,9 +45,13 @@ function countSkipped(result) {
  * Platform sonucundan `ItemSummary` üretir. Sonuç zaten geçerli `summary` taşıyorsa onu döner.
  *
  * - `{ results: [...] }` ya da dizi sonuç satır satır sayılır; `itemCount` (pozitif tamsayı) satır ağırlığıdır.
- * - Hiçbir satır kalem kimliği ya da `itemCount` taşımıyorsa sonuç PARTİ düzeyindedir (Amazon feed):
+ * - Satırlar kalem kimliği ya da `itemCount` taşımıyorsa sonuç PARTİ düzeyindedir (Amazon feed):
  *   `inputCount` (SKU birimi, bkz. `countCommandInputUnits`) verilmişse gönderilen tüm SKU'lar partinin sonucunu paylaşır.
+ *   Boş `results` parti değildir: platform hiçbir şey göndermemiştir, hiçbir birim başarılı SAYILMAZ.
  * - `skippedCount` / `skipped[]` (ör. Hepsiburada 0 fiyat ayıklaması) `skipped`'e yazılır.
+ * - `inputCount` verilmişse hiçbir satıra ve atlanana düşmeyen birimler de `skipped`'e yazılır: platforma hiç
+ *   ulaşmamışlardır (ör. stok tarafında boş varyant grubu, döngüsel akış koruması), ret görmedikleri için `failed`
+ *   değildirler ve entegrasyon sağlığını düşürmezler.
  *
  * Sayılabilir bir şekil yoksa `undefined` döner (tekil komutlar, void sonuç).
  */
@@ -56,8 +65,8 @@ function buildItemSummary(result, options = {}) {
     if (!rows) {
         return undefined;
     }
-    const skipped = countSkipped(result);
-    const batchLevel = isCount(options.inputCount)
+    let skipped = countSkipped(result);
+    const batchLevel = isCount(options.inputCount) && rows.length > 0
         && rows.every(row => !isCount(row === null || row === void 0 ? void 0 : row.itemCount) && !ITEM_IDENTITY_KEYS.some(key => (row === null || row === void 0 ? void 0 : row[key]) !== undefined));
     let succeeded = 0;
     let failed = 0;
@@ -81,6 +90,9 @@ function buildItemSummary(result, options = {}) {
             }
         }
     }
+    if (isCount(options.inputCount)) {
+        skipped += Math.max(options.inputCount - succeeded - failed - skipped, 0);
+    }
     return { total: succeeded + failed + skipped, succeeded, failed, skipped };
 }
 /**
@@ -95,6 +107,9 @@ function countRequestUnits(update) {
 }
 /**
  * Toplu komut parametrelerinin SKU birimindeki toplamı (`priceUpdates` / `stockUpdates` üzerinden).
+ * Aynı SKU (varyantın ya da basit ürünün `externalId`'si) komutta birden fazla geçse de bir kez sayılır: dört platform
+ * da (Amazon, HB, N11, Trendyol) her SKU'yu bir kez gönderir. `externalId`'si olmayan kalem ve boş varyant grubu
+ * tekilleştirilmez, her biri bir birimdir (platformlar her birini ayrı atlar).
  * Toplu komut değilse ya da kalem dizisi yoksa `undefined`.
  */
 function countCommandInputUnits(command, params) {
@@ -102,7 +117,32 @@ function countCommandInputUnits(command, params) {
         return undefined;
     }
     const items = command === 'updatePrices' ? params === null || params === void 0 ? void 0 : params.priceUpdates : params === null || params === void 0 ? void 0 : params.stockUpdates;
-    return Array.isArray(items) ? items.reduce((total, item) => total + countRequestUnits(item), 0) : undefined;
+    if (!Array.isArray(items)) {
+        return undefined;
+    }
+    const seenSkus = new Set();
+    let units = 0;
+    const countSku = (externalId) => {
+        if (typeof externalId === 'string' && externalId) {
+            if (seenSkus.has(externalId)) {
+                return;
+            }
+            seenSkus.add(externalId);
+        }
+        units++;
+    };
+    for (const item of items) {
+        if (Array.isArray(item === null || item === void 0 ? void 0 : item.variants) && item.variants.length > 0) {
+            item.variants.forEach((variant) => countSku(variant === null || variant === void 0 ? void 0 : variant.externalId));
+        }
+        else if (Array.isArray(item === null || item === void 0 ? void 0 : item.variants)) {
+            units++;
+        }
+        else {
+            countSku(item === null || item === void 0 ? void 0 : item.externalId);
+        }
+    }
+    return units;
 }
 /**
  * Toplu komut sonucuna standart `summary` ekler (dinleyici katmanı için).

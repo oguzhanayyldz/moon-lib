@@ -1,4 +1,4 @@
-import { attachItemSummary, buildItemSummary, countCommandInputUnits, countRequestUnits, isItemSummary } from '../common/constants/command-item-summary';
+import { attachItemSummary, buildItemSummary, countCommandInputUnits, countRequestUnits, isItemSummary, STOCK_FETCH_MODE_SKIP_REASON } from '../common/constants/command-item-summary';
 
 /**
  * Fixture'lar üretici kodun GERÇEK dönüş şekillerinden kopyalandı (elle uydurma şekil yok):
@@ -180,3 +180,63 @@ describe('countRequestUnits / countCommandInputUnits', () => {
         expect(countCommandInputUnits('sendTracking', { priceUpdates: [{}] })).toBeUndefined();
     });
 });
+
+/**
+ * TASK-MUEDJI2X1EFCR (zoe §3.1–§3.3): özet gerçekte gönderilen ya da gönderilemeyen SKU sayısını yansıtır.
+ * Şekiller üreticilerden: N11/HB/Trendyol updateStocks boş grup → { success:true, results:[] };
+ * döngüsel akış koruması → { success:true, results:[], skipped:[{ reason:'stock-fetch-mode' }] }.
+ */
+describe('hiçbir şey gönderilmediyse succeeded = 0', () => {
+    it('boş results + atlanan kaydı yok: parti başarısı varsayılmaz, gönderilmeyen birim skipped', () => {
+        const params = { stockUpdates: [{ productId: 'p1', externalId: 'GROUP-1', variants: [] }] };
+        const out = attachItemSummary('updateStocks', params, { success: true, results: [] }) as any;
+        expect(out.summary).toEqual({ total: 1, succeeded: 0, failed: 0, skipped: 1 });
+    });
+
+    it('boş results + atlananlar girdiden az: kalan birimler de skipped, başarılı sayılmaz', () => {
+        const out = buildItemSummary({ success: true, results: [], skippedCount: 1 }, { inputCount: 3 });
+        expect(out).toEqual({ total: 3, succeeded: 0, failed: 0, skipped: 3 });
+    });
+
+    it('satır düzeyi sonuçta hiçbir satıra düşmeyen birim (stokta boş grup + basit ürün) skipped sayılır', () => {
+        const params = { stockUpdates: [{ externalId: 'S-1' }, { externalId: 'GROUP-1', variants: [] }] };
+        const result = { success: true, results: [{ success: true, batchRequestId: 'b-1', itemCount: 1 }] };
+        expect((attachItemSummary('updateStocks', params, result) as any).summary).toEqual({ total: 2, succeeded: 1, failed: 0, skipped: 1 });
+    });
+
+    it('satırlar girdiden fazla sayılırsa skipped uydurulmaz', () => {
+        const result = { success: true, results: [{ success: true, itemCount: 5 }] };
+        expect(buildItemSummary(result, { inputCount: 3 })).toEqual({ total: 5, succeeded: 5, failed: 0, skipped: 0 });
+    });
+
+    it('inputCount yoksa boş results boş özet verir (tüketici fallback`ı)', () => {
+        expect(buildItemSummary({ success: true, results: [] })).toEqual({ total: 0, succeeded: 0, failed: 0, skipped: 0 });
+    });
+
+    it('döngüsel akış: platform hiçbir SKU göndermez, hepsi stock-fetch-mode ile atlanan', () => {
+        const stockUpdates = [{ externalId: 'S-1' }, { externalId: 'V-1', variants: [{ externalId: 'V-1' }, { externalId: 'V-2' }] }];
+        const skipped = ['S-1', 'V-1', 'V-2'].map(externalId => ({ externalId, reason: STOCK_FETCH_MODE_SKIP_REASON }));
+        const out = attachItemSummary('updateStocks', { stockUpdates }, { success: true, results: [], skippedCount: 3, skipped }) as any;
+        expect(out.summary).toEqual({ total: 3, succeeded: 0, failed: 0, skipped: 3 });
+    });
+});
+
+describe('countCommandInputUnits — aynı SKU bir kez sayılır (Amazon grup içi tekrar, §3.3)', () => {
+    it('grup içinde iki kez gelen varyant SKU\'su tek birim; Amazon feed satırı 1 SKU başarılı der', () => {
+        const priceUpdates = [{ productId: 'p1', externalId: 'SKU-DUP', variants: [{ externalId: 'SKU-DUP', price: 100 }, { externalId: 'SKU-DUP', price: 200 }] }];
+        expect(countCommandInputUnits('updatePrices', { priceUpdates })).toBe(1);
+        const out = attachItemSummary('updatePrices', { priceUpdates }, { success: true, results: [{ feedId: 'f1', status: 'SUBMITTED' }], skippedCount: 0, skipped: [] }) as any;
+        expect(out.summary).toEqual({ total: 1, succeeded: 1, failed: 0, skipped: 0 });
+    });
+
+    it('gruplar ve basit ürün arasında tekrar eden SKU da tek birim', () => {
+        const stockUpdates = [{ externalId: 'A' }, { externalId: 'A' }, { variants: [{ externalId: 'A' }, { externalId: 'B' }] }];
+        expect(countCommandInputUnits('updateStocks', { stockUpdates })).toBe(2);
+    });
+
+    it('externalId\'siz kalem ve boş grup tekilleştirilmez (platform her birini ayrı atlar)', () => {
+        const priceUpdates = [{}, {}, { externalId: 'G', variants: [] }, { externalId: 'G', variants: [] }, { variants: [{}, {}] }];
+        expect(countCommandInputUnits('updatePrices', { priceUpdates })).toBe(6);
+    });
+});
+

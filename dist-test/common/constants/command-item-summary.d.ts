@@ -30,6 +30,11 @@ export interface CommandDispatchInfo {
     /** Gönderim öncesi ayıklananların neden → adet dağılımı (ör. { price: 3 }). */
     skipped?: Record<string, number>;
 }
+/**
+ * Stok bu platformdan ÇEKİLDİĞİ için (döngüsel akış koruması) gönderilmeyen SKU'ların `skipped[].reason` değeri.
+ * Kullanıcının kendi ayarıdır ve her stok çalışmasında tekrar eder: özette `skipped` sayılır, bildirim tetiklemez.
+ */
+export declare const STOCK_FETCH_MODE_SKIP_REASON = "stock-fetch-mode";
 /** `summary` üretilen toplu komutlar */
 export declare const ITEM_SUMMARY_COMMANDS: readonly ["updatePrices", "updateStocks"];
 export declare function isItemSummaryCommand(command: string): boolean;
@@ -38,9 +43,13 @@ export declare function isItemSummary(value: unknown): value is ItemSummary;
  * Platform sonucundan `ItemSummary` üretir. Sonuç zaten geçerli `summary` taşıyorsa onu döner.
  *
  * - `{ results: [...] }` ya da dizi sonuç satır satır sayılır; `itemCount` (pozitif tamsayı) satır ağırlığıdır.
- * - Hiçbir satır kalem kimliği ya da `itemCount` taşımıyorsa sonuç PARTİ düzeyindedir (Amazon feed):
+ * - Satırlar kalem kimliği ya da `itemCount` taşımıyorsa sonuç PARTİ düzeyindedir (Amazon feed):
  *   `inputCount` (SKU birimi, bkz. `countCommandInputUnits`) verilmişse gönderilen tüm SKU'lar partinin sonucunu paylaşır.
+ *   Boş `results` parti değildir: platform hiçbir şey göndermemiştir, hiçbir birim başarılı SAYILMAZ.
  * - `skippedCount` / `skipped[]` (ör. Hepsiburada 0 fiyat ayıklaması) `skipped`'e yazılır.
+ * - `inputCount` verilmişse hiçbir satıra ve atlanana düşmeyen birimler de `skipped`'e yazılır: platforma hiç
+ *   ulaşmamışlardır (ör. stok tarafında boş varyant grubu, döngüsel akış koruması), ret görmedikleri için `failed`
+ *   değildirler ve entegrasyon sağlığını düşürmezler.
  *
  * Sayılabilir bir şekil yoksa `undefined` döner (tekil komutlar, void sonuç).
  */
@@ -57,6 +66,9 @@ export declare function buildItemSummary(result: any, options?: {
 export declare function countRequestUnits(update: any): number;
 /**
  * Toplu komut parametrelerinin SKU birimindeki toplamı (`priceUpdates` / `stockUpdates` üzerinden).
+ * Aynı SKU (varyantın ya da basit ürünün `externalId`'si) komutta birden fazla geçse de bir kez sayılır: dört platform
+ * da (Amazon, HB, N11, Trendyol) her SKU'yu bir kez gönderir. `externalId`'si olmayan kalem ve boş varyant grubu
+ * tekilleştirilmez, her biri bir birimdir (platformlar her birini ayrı atlar).
  * Toplu komut değilse ya da kalem dizisi yoksa `undefined`.
  */
 export declare function countCommandInputUnits(command: string, params: any): number | undefined;
