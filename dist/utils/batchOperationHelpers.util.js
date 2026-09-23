@@ -394,14 +394,14 @@ class ResourceManager {
     /**
      * Calculate optimal resource allocation
      */
-    static calculateOptimalAllocation(totalItems, itemComplexity = 1) {
-        const resourceUsage = performanceMonitor_util_1.performanceMonitor.getCurrentResourceUsage();
+    static calculateOptimalAllocation(totalItems, itemComplexity = 1, resourceUsage = performanceMonitor_util_1.performanceMonitor.getCurrentResourceUsage()) {
         const availableMemory = Math.max(0, this.memoryThreshold - resourceUsage.memoryUsage);
         // Estimate memory per item (simplified)
         const memoryPerItem = 0.1 * itemComplexity; // MB per item
         const maxItemsForMemory = Math.floor(availableMemory / memoryPerItem);
-        const maxBatchSize = Math.min(maxItemsForMemory, 1000);
-        const maxConcurrency = Math.min(Math.floor(availableMemory / 50), 5); // Rough estimate
+        // Alt sınır 1: bellek baskısında bile 0 dönmek hiç işlem yapılmaması demektir
+        const maxBatchSize = Math.max(1, Math.min(maxItemsForMemory, 1000));
+        const maxConcurrency = Math.max(1, Math.min(Math.floor(availableMemory / 50), 5)); // Rough estimate
         const memoryPerBatch = maxBatchSize * memoryPerItem;
         const recommendedDelay = resourceUsage.memoryUsage > this.memoryThreshold * 0.7 ? 1000 : 100;
         return {
