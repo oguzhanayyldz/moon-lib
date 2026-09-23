@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RetryableListener = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const common_1 = require("../common");
 const retryManager_1 = require("../services/retryManager");
 const redisEnvScope_util_1 = require("../utils/redisEnvScope.util");
@@ -36,13 +37,16 @@ class RetryableListener extends common_1.Listener {
     /**
      * Distributed lock ile işlem yapmak için yardımcı metod
      */
-    async processWithLock(eventId, callback) {
+    async processWithLock(eventId, callback, payloadFingerprint) {
         // Ortam kapsamlı kilit (ENV-ISO): ad yalnız çözülen ortam 'production' ise aynı kalır
         // (REDIS_KEY_ENV || NODE_ENV || 'production'). invoice ve shipment prod'da NODE_ENV=development
         // koşar; REDIS_KEY_ENV=production verilmezse orada da `development:` öneki alır.
         // Farklı ortamlar aynı eventId için birbirinin kilidini tutup mesajı düşürtemez.
         const lockKey = (0, redisEnvScope_util_1.envScopedKey)(`lock:${this.subject}:${eventId}`);
-        const lockValue = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
+        const owner = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
+        // Parmak izi kilit değerine yazılır: çatışan teslim, kilidi aynı içeriğin mi yoksa aynı eventId'yi
+        // paylaşan başka bir olayın mı tuttuğunu buradan ayırt eder (TASK-MUD6C7R77TT38).
+        const lockValue = payloadFingerprint ? `${owner}#${payloadFingerprint}` : owner;
         // Log ekleniyor
         logger_service_1.logger.debug(`Attempting to acquire lock for ${this.subject}:${eventId}`);
         // Lock'ı almaya çalış - NX ile sadece key yoksa oluşturur
@@ -111,11 +115,12 @@ class RetryableListener extends common_1.Listener {
         try {
             // Distributed lock ile işlemi gerçekleştir (etkinse)
             if (this.options.enableLock) {
+                const fingerprint = this.getPayloadFingerprint(data);
                 try {
                     await this.processWithLock(eventId, async () => {
                         await this.processEvent(data);
                         return;
-                    });
+                    }, fingerprint);
                     // Başarılı işlemede retry sayacını sıfırla
                     await this.retryManager.resetRetryCount(eventType, eventId);
                     span.setTag('success', true);
@@ -161,11 +166,20 @@ class RetryableListener extends common_1.Listener {
                                 await new Promise(resolve => setTimeout(resolve, jitteredWait));
                                 return; // NATS redeliver edecek — re-lock denemesi yapmıyoruz (deadlock riski)
                             }
-                            // TTL > 5s — başka instance aktif olarak işliyor, güvenle ack et
-                            logger_service_1.logger.info(`Another instance actively processing (ttl: ${ttl}s): ${eventType}:${eventId}`);
-                            span.setTag('lock.active_processing', true);
-                            msg.ack();
-                            return;
+                            // TTL > 5s — kilit aktif olarak tutuluyor. eventId çoğu dinleyicide sürümsüz varlık kimliğidir
+                            // (ör. `order-batch-${list[0].id}`); aynı varlığın art arda gelen iki farklı olayı aynı kilidi ister.
+                            // Yalnız kilidi aynı içerik tutuyorsa bu teslim bir kopyadır ve ack'lenir; aksi halde ack'lemek
+                            // farklı olayı hiç işlenmeden düşürür (TASK-MUD6C7R77TT38).
+                            const holder = await redisWrapper_service_1.redisWrapper.client.get(lockKey);
+                            if (holder === null || holder === void 0 ? void 0 : holder.endsWith(`#${fingerprint}`)) {
+                                logger_service_1.logger.info(`Another instance actively processing the same payload (ttl: ${ttl}s): ${eventType}:${eventId}`);
+                                span.setTag('lock.active_processing', true);
+                                msg.ack();
+                                return;
+                            }
+                            logger_service_1.logger.warn(`Lock held by a different event with the same eventId (ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
+                            span.setTag('lock.different_payload', true);
+                            return; // msg.ack() YOK - kilit bırakıldıktan sonra NATS yeniden teslim edecek
                         }
                         catch (ttlError) {
                             // TTL kontrolü başarısız — güvenli tarafta kal, NATS redeliver etsin
@@ -344,7 +358,7 @@ class RetryableListener extends common_1.Listener {
         };
         try {
             if (this.options.enableLock) {
-                await this.processWithLock(eventId, run);
+                await this.processWithLock(eventId, run, this.getPayloadFingerprint(data));
             }
             else {
                 await run();
@@ -432,6 +446,13 @@ class RetryableListener extends common_1.Listener {
             return data.list[0].id;
         // Özel ID oluştur (hash benzeri)
         return `${this.subject}-${JSON.stringify(data).slice(0, 50).replace(/[^a-zA-Z0-9]/g, '')}-${Date.now()}`;
+    }
+    /**
+     * Olay içeriğinin parmak izi. Aynı eventId altında kopya teslimi farklı olaydan ayırmak için kilit değerine yazılır.
+     */
+    getPayloadFingerprint(data) {
+        var _a;
+        return crypto_1.default.createHash('sha1').update((_a = JSON.stringify(data)) !== null && _a !== void 0 ? _a : '').digest('hex');
     }
     /**
      * İzleme için span oluştur
