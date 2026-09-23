@@ -9,6 +9,7 @@ export interface IntegrationCommandResultEvent {
         command: string;
         success: boolean;
         error?: string | null;
+        /** Toplu komutlarda (updatePrices/updateStocks) `result.summary: ItemSummary` taşır; success anlamı "komut koştu" */
         result?: any;
         timestamp: string;
     };
