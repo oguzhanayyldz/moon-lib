@@ -20,7 +20,15 @@ class TestApiClient extends BaseApiClient {
     setHttpClient(client: any): void { (this as any).httpClient = client; }
 }
 
-function makeClient(httpRequest: jest.Mock, authTracking = false): TestApiClient {
+// Issue #595: retry-after header'i olan 401/403'u hiz siniri supheli sayan test subclass'i
+// (ornek: Hepsiburada'nin isRateLimitedAuthError override'ini simule eder).
+class RateLimitAwareTestApiClient extends TestApiClient {
+    protected isRateLimitedAuthError(error: any): boolean {
+        return error.response?.status === 403 && !!error.response?.headers?.['retry-after'];
+    }
+}
+
+function makeClient(httpRequest: jest.Mock, authTracking = false, ClientClass: typeof TestApiClient = TestApiClient): TestApiClient {
     const config: any = {
         rateLimiter: { points: 1000, duration: 1 },
         // interval: 0 -> p-queue intervalCap'i yok sayar ve interval timer'i OLUSTURMAZ
@@ -40,7 +48,7 @@ function makeClient(httpRequest: jest.Mock, authTracking = false): TestApiClient
             ? { authFailureTracking: { userId: 'u1', integrationId: 'i1', integrationName: 'test' } }
             : {})
     };
-    const client = new TestApiClient(config, 'test-service', 'Trendyol' as any);
+    const client = new ClientClass(config, 'test-service', 'Trendyol' as any);
     client.setHttpClient({ request: httpRequest });
     return client;
 }
@@ -165,5 +173,76 @@ describe('BaseApiClient — operation-aware auth tracking (#566)', () => {
         await expect(client.get('/x', { ...REQ, operationType: OperationType.FETCH_ORDERS })).rejects.toBeDefined();
 
         expect(AuthFailureTracker.increment).not.toHaveBeenCalled();
+    });
+});
+
+describe('BaseApiClient — isRateLimitedAuthError kancasi (#595)', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('hiz siniri supheli 403 (retry-after header var) authFailureTracker sayacina DOKUNMAZ', async () => {
+        const httpRequest = jest.fn(async () => {
+            throw {
+                response: { status: 403, headers: { 'retry-after': '2' } },
+                message: 'forbidden-ratelimit',
+                isAxiosError: true
+            };
+        });
+        const client = makeClient(httpRequest, true, RateLimitAwareTestApiClient);
+
+        await expect(client.get('/x', { ...REQ, operationType: OperationType.UPDATE_PRICES })).rejects.toBeDefined();
+
+        expect(AuthFailureTracker.increment).not.toHaveBeenCalled();
+    });
+
+    it('gercek kimlik hatasi 403 (retry-after header YOK) davranisi degismez — sayaca girer', async () => {
+        const httpRequest = jest.fn(async () => {
+            throw { response: { status: 403, headers: {} }, message: 'forbidden-auth', isAxiosError: true };
+        });
+        const client = makeClient(httpRequest, true, RateLimitAwareTestApiClient);
+
+        await expect(client.get('/x', { ...REQ, operationType: OperationType.UPDATE_PRICES })).rejects.toBeDefined();
+
+        expect(AuthFailureTracker.increment).toHaveBeenCalledWith(
+            expect.objectContaining({ userId: 'u1', integrationId: 'i1', integrationName: 'test' }),
+            403,
+            expect.any(String),
+            OperationType.UPDATE_PRICES
+        );
+    });
+
+    it('eszamanli birden fazla operationType hiz siniri supheli 403 alsa da hicbiri sayaca girmez (yanlis-pasiflemenin koku)', async () => {
+        const httpRequest = jest.fn(async () => {
+            throw {
+                response: { status: 403, headers: { 'retry-after': '1' } },
+                message: 'forbidden-ratelimit',
+                isAxiosError: true
+            };
+        });
+        const client = makeClient(httpRequest, true, RateLimitAwareTestApiClient);
+
+        await Promise.all([
+            expect(client.get('/prices', { ...REQ, operationType: OperationType.UPDATE_PRICES })).rejects.toBeDefined(),
+            expect(client.get('/stock', { ...REQ, operationType: OperationType.UPDATE_STOCK })).rejects.toBeDefined(),
+            expect(client.get('/orders', { ...REQ, operationType: OperationType.FETCH_ORDERS })).rejects.toBeDefined()
+        ]);
+
+        expect(AuthFailureTracker.increment).not.toHaveBeenCalled();
+    });
+
+    it('isRateLimitedAuthError tanimlanmamis ise (eski entegrasyonlar) davranis DEGISMEZ — her 401/403 sayilir', async () => {
+        const httpRequest = jest.fn(async () => {
+            throw { response: { status: 403, headers: { 'retry-after': '2' } }, message: 'forbidden', isAxiosError: true };
+        });
+        // TestApiClient (hook YOK) — eski davranis
+        const client = makeClient(httpRequest, true, TestApiClient);
+
+        await expect(client.get('/x', { ...REQ, operationType: OperationType.FETCH_ORDERS })).rejects.toBeDefined();
+
+        expect(AuthFailureTracker.increment).toHaveBeenCalledWith(
+            expect.objectContaining({ userId: 'u1', integrationId: 'i1', integrationName: 'test' }),
+            403,
+            expect.any(String),
+            OperationType.FETCH_ORDERS
+        );
     });
 });

@@ -46,6 +46,7 @@ export declare abstract class BaseApiClient implements IApiClient {
     abstract handleRateLimitError(error: AxiosError): Promise<void>;
     abstract shouldRetry(error: AxiosError): boolean;
     protected handleCustomError?(error: AxiosError): void;
+    protected isRateLimitedAuthError?(error: AxiosError): boolean;
     get<T>(url: string, config?: RequestConfig): Promise<T>;
     post<T>(url: string, data?: any, config?: RequestConfig): Promise<T>;
     put<T>(url: string, data?: any, config?: RequestConfig): Promise<T>;
