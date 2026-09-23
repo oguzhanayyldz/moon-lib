@@ -142,6 +142,12 @@ export declare class IntegrationRequestLogService {
         todayLogsCount: number;
     }>;
     /**
+     * WAF/engelleme sayfası tespiti (TASK-MUDY1TB6EDJAJ): hata durum kodu + JSON olmayan
+     * (tipik olarak HTML) bir gövde. Platform interpreter'larının "tanınmayan gövde" fallback'i
+     * koşulsuz `success:true` döndüğünden, bu şekli interpreter'a hiç göndermiyoruz.
+     */
+    private static looksLikeBlockedResponse;
+    /**
      * Header'lardaki kimlik bilgilerini temizler (n11 `appkey`/`appsecret`, HepsiJet `X-Auth-Token`,
      * `Authorization`, `Set-Cookie` …). Ad kuralı gövdeyle aynıdır: `isSensitiveFieldName`.
      */
