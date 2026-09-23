@@ -108,7 +108,7 @@ export declare class ResourceManager {
     /**
      * Calculate optimal resource allocation
      */
-    static calculateOptimalAllocation(totalItems: number, itemComplexity?: number): {
+    static calculateOptimalAllocation(totalItems: number, itemComplexity?: number, resourceUsage?: Pick<ResourceUsage, 'memoryUsage'>): {
         maxBatchSize: number;
         maxConcurrency: number;
         memoryPerBatch: number;

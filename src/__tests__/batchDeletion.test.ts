@@ -309,7 +309,7 @@ describe('Batch Deletion System', () => {
 
     describe('calculateOptimalAllocation', () => {
       it('should calculate optimal resource allocation', () => {
-        const allocation = ResourceManager.calculateOptimalAllocation(1000, 1.5);
+        const allocation = ResourceManager.calculateOptimalAllocation(1000, 1.5, { memoryUsage: 100 });
         
         expect(allocation).toHaveProperty('maxBatchSize');
         expect(allocation).toHaveProperty('maxConcurrency');
@@ -317,6 +317,25 @@ describe('Batch Deletion System', () => {
         expect(allocation).toHaveProperty('recommendedDelay');
         expect(allocation.maxBatchSize).toBeGreaterThan(0);
         expect(allocation.maxConcurrency).toBeGreaterThan(0);
+        // (512 - 100) / 0.15 = 2746 -> 1000 ile sınırlı; (512 - 100) / 50 = 8 -> 5 ile sınırlı
+        expect(allocation.maxBatchSize).toBe(1000);
+        expect(allocation.maxConcurrency).toBe(5);
+        expect(allocation.recommendedDelay).toBe(100);
+      });
+
+      it('should floor batch size and concurrency at 1 under memory pressure', () => {
+        const allocation = ResourceManager.calculateOptimalAllocation(1000, 1, { memoryUsage: 600 });
+
+        expect(allocation.maxBatchSize).toBe(1);
+        expect(allocation.maxConcurrency).toBe(1);
+        expect(allocation.recommendedDelay).toBe(1000);
+      });
+
+      it('should scale batch size by available memory', () => {
+        const allocation = ResourceManager.calculateOptimalAllocation(1000, 1, { memoryUsage: 500 });
+
+        expect(allocation.maxBatchSize).toBe(120); // 12MB / 0.1
+        expect(allocation.maxConcurrency).toBe(1);
       });
     });
 
