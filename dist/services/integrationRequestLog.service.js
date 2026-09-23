@@ -98,25 +98,49 @@ class IntegrationRequestLogService {
                 }
                 // Response interpretation: Yanıtı yorumla ve kaydet
                 if (logEntry.operationType && options.responseBody) {
-                    try {
-                        const interpreter = interpreter_factory_1.ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
-                        if (interpreter) {
-                            const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
-                            if (interpretedResponse) {
-                                updateData.interpretedResponse = interpretedResponse;
-                                logger_service_1.logger.debug('Response interpreted successfully', {
-                                    logId,
-                                    operationType: logEntry.operationType,
-                                    summary: interpretedResponse.summary
-                                });
+                    if (IntegrationRequestLogService.looksLikeBlockedResponse(options.responseStatus, options.responseBody)) {
+                        // WAF/engelleme sayfası (Cloudflare "Attention Required!" HTML vb.): platform interpreter'ları
+                        // tanınmayan gövdede koşulsuz success:true dönen bir fallback'e sahip. Interpreter'a hiç
+                        // girmeden, HTTP durumuna dayalı deterministik bir başarısızlık üret.
+                        updateData.interpretedResponse = {
+                            summary: `HTTP ${options.responseStatus}: yanıt yorumlanamadı (olası WAF/engelleme)`,
+                            success: false,
+                            successCount: 0,
+                            failureCount: 1,
+                            details: {
+                                responseStatus: options.responseStatus,
+                                // Ham gövde değil: kimlik alanları maskelenmiş sürüm (responseBody ile aynı redaksiyon)
+                                bodyPreview: String(sanitizedResponseBody).slice(0, 300)
+                            },
+                            parsedAt: new Date()
+                        };
+                        logger_service_1.logger.debug('Response marked as blocked (WAF/engelleme), skipping platform interpreter', {
+                            logId,
+                            operationType: logEntry.operationType,
+                            responseStatus: options.responseStatus
+                        });
+                    }
+                    else {
+                        try {
+                            const interpreter = interpreter_factory_1.ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
+                            if (interpreter) {
+                                const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
+                                if (interpretedResponse) {
+                                    updateData.interpretedResponse = interpretedResponse;
+                                    logger_service_1.logger.debug('Response interpreted successfully', {
+                                        logId,
+                                        operationType: logEntry.operationType,
+                                        summary: interpretedResponse.summary
+                                    });
+                                }
                             }
                         }
-                    }
-                    catch (interpretError) {
-                        logger_service_1.logger.warn('Failed to interpret response, continuing without interpretation', {
-                            logId,
-                            error: interpretError.message
-                        });
+                        catch (interpretError) {
+                            logger_service_1.logger.warn('Failed to interpret response, continuing without interpretation', {
+                                logId,
+                                error: interpretError.message
+                            });
+                        }
                     }
                 }
                 yield this.IntegrationRequestLogModel.findByIdAndUpdate(logId, updateData);
@@ -511,18 +535,22 @@ class IntegrationRequestLogService {
                         {
                             $project: {
                                 requestSize: {
-                                    $cond: [
-                                        '$requestBody',
-                                        { $bsonSize: '$requestBody' },
-                                        0
-                                    ]
+                                    $switch: {
+                                        branches: [
+                                            { case: { $eq: [{ $type: '$requestBody' }, 'string'] }, then: { $strLenBytes: '$requestBody' } },
+                                            { case: { $in: [{ $type: '$requestBody' }, ['object']] }, then: { $bsonSize: '$requestBody' } }
+                                        ],
+                                        default: 0
+                                    }
                                 },
                                 responseSize: {
-                                    $cond: [
-                                        '$responseBody',
-                                        { $bsonSize: '$responseBody' },
-                                        0
-                                    ]
+                                    $switch: {
+                                        branches: [
+                                            { case: { $eq: [{ $type: '$responseBody' }, 'string'] }, then: { $strLenBytes: '$responseBody' } },
+                                            { case: { $in: [{ $type: '$responseBody' }, ['object']] }, then: { $bsonSize: '$responseBody' } }
+                                        ],
+                                        default: 0
+                                    }
                                 }
                             }
                         },
@@ -572,6 +600,17 @@ class IntegrationRequestLogService {
                 throw error;
             }
         });
+    }
+    /**
+     * WAF/engelleme sayfası tespiti (TASK-MUDY1TB6EDJAJ): hata durum kodu + JSON olmayan
+     * (tipik olarak HTML) bir gövde. Platform interpreter'larının "tanınmayan gövde" fallback'i
+     * koşulsuz `success:true` döndüğünden, bu şekli interpreter'a hiç göndermiyoruz.
+     */
+    static looksLikeBlockedResponse(responseStatus, responseBody) {
+        if (typeof responseBody !== 'string')
+            return false;
+        // Yalnız hata durum kodunda: 2xx düz metin gövdede "cloudflare" vb. geçmesi engelleme sayılmaz.
+        return typeof responseStatus === 'number' && responseStatus >= 300;
     }
     /**
      * Header'lardaki kimlik bilgilerini temizler (n11 `appkey`/`appsecret`, HepsiJet `X-Auth-Token`,
