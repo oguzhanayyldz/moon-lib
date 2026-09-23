@@ -1,4 +1,4 @@
-import { IntegrationRequestLogAttrs, IntegrationRequestLogDoc, IntegrationRequestLogModel } from '../models/integrationRequestLog.schema';
+import { IntegrationRequestLogAttrs, IntegrationRequestLogDoc, IntegrationRequestLogModel, InterpretedResponse } from '../models/integrationRequestLog.schema';
 import { ResourceName } from '../common';
 import { OperationType } from '../enums/operation-type.enum';
 import { ResponseInterpreterFactory } from './response-interpreters/interpreter.factory';
@@ -122,24 +122,46 @@ export class IntegrationRequestLogService {
 
             // Response interpretation: Yanıtı yorumla ve kaydet
             if (logEntry.operationType && options.responseBody) {
-                try {
-                    const interpreter = ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
-                    if (interpreter) {
-                        const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
-                        if (interpretedResponse) {
-                            updateData.interpretedResponse = interpretedResponse;
-                            logger.debug('Response interpreted successfully', {
-                                logId,
-                                operationType: logEntry.operationType,
-                                summary: interpretedResponse.summary
-                            });
-                        }
-                    }
-                } catch (interpretError) {
-                    logger.warn('Failed to interpret response, continuing without interpretation', {
+                if (IntegrationRequestLogService.looksLikeBlockedResponse(options.responseStatus, options.responseBody)) {
+                    // WAF/engelleme sayfası (Cloudflare "Attention Required!" HTML vb.): platform interpreter'ları
+                    // tanınmayan gövdede koşulsuz success:true dönen bir fallback'e sahip. Interpreter'a hiç
+                    // girmeden, HTTP durumuna dayalı deterministik bir başarısızlık üret.
+                    updateData.interpretedResponse = {
+                        summary: `HTTP ${options.responseStatus}: yanıt yorumlanamadı (olası WAF/engelleme)`,
+                        success: false,
+                        successCount: 0,
+                        failureCount: 1,
+                        details: {
+                            responseStatus: options.responseStatus,
+                            bodyPreview: String(options.responseBody).slice(0, 300)
+                        },
+                        parsedAt: new Date()
+                    } as InterpretedResponse;
+                    logger.debug('Response marked as blocked (WAF/engelleme), skipping platform interpreter', {
                         logId,
-                        error: (interpretError as Error).message
+                        operationType: logEntry.operationType,
+                        responseStatus: options.responseStatus
                     });
+                } else {
+                    try {
+                        const interpreter = ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
+                        if (interpreter) {
+                            const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
+                            if (interpretedResponse) {
+                                updateData.interpretedResponse = interpretedResponse;
+                                logger.debug('Response interpreted successfully', {
+                                    logId,
+                                    operationType: logEntry.operationType,
+                                    summary: interpretedResponse.summary
+                                });
+                            }
+                        }
+                    } catch (interpretError) {
+                        logger.warn('Failed to interpret response, continuing without interpretation', {
+                            logId,
+                            error: (interpretError as Error).message
+                        });
+                    }
                 }
             }
 
@@ -682,6 +704,18 @@ export class IntegrationRequestLogService {
             logger.error('Error fetching integration log statistics:', error);
             throw error;
         }
+    }
+
+    /**
+     * WAF/engelleme sayfası tespiti (TASK-MUDY1TB6EDJAJ): hata durum kodu + JSON olmayan
+     * (tipik olarak HTML) bir gövde. Platform interpreter'larının "tanınmayan gövde" fallback'i
+     * koşulsuz `success:true` döndüğünden, bu şekli interpreter'a hiç göndermiyoruz.
+     */
+    private static looksLikeBlockedResponse(responseStatus: number | undefined, responseBody: any): boolean {
+        if (typeof responseBody !== 'string') return false;
+        const looksBlocked = /<html|cloudflare|attention required/i.test(responseBody);
+        if (looksBlocked) return true;
+        return typeof responseStatus === 'number' && responseStatus >= 300;
     }
 
     /**
