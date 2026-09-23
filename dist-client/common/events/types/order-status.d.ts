@@ -18,6 +18,12 @@ export declare enum OrderStatus {
     Returned = "returned",
     Refunded = "refunded",
     Failed = "failed",
+    /**
+     * Teslim edilemedi: kargo alıcıya ulaşamadı, mal depodan çıkmış ve dönüş yolunda.
+     * `Failed`'dan ayrıdır: ödeme/oluşturma hatası değil, kargo sonrası istisnadır.
+     * Beklenen devamı `Returned` (paket geri geldi) ya da yeniden teslimle `Delivered`.
+     */
+    Undelivered = "undelivered",
     OnHold = "onHold",
     WaitingPayment = "waitingPayment",
     WaitingStock = "waitingStock",
