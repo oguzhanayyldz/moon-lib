@@ -4,8 +4,9 @@
  * `IntegrationCommandResult.success` "komut koştu mu" anlamında KALIR; kalem düzeyindeki
  * sonuç `result.summary` içinde taşınır. `summary`'yi okumayan tüketici bugünkü davranışını korur.
  *
- * Birim: platformun sonuç satırı. HB/Trendyol/N11 başarılı bir parti için tek satır + `itemCount`,
- * reddedilen kalem için kalem başına satır döner; Amazon tek feed satırı döner (bkz. `inputCount`).
+ * Birim: SKU (platforma gerçekten giden ya da gidemeyen satılabilir birim). HB/Trendyol/N11 başarılı bir
+ * parti için tek satır + `itemCount` (gönderilen SKU sayısı), reddedilen kalem için kalem başına satır döner;
+ * Amazon tek feed satırı döner, parti SKU sayısı girdiden hesaplanır (bkz. `countCommandInputUnits`).
  * "succeeded" asenkron parti platformlarında "platforma teslim edildi" demektir, parti sonucu değildir.
  */
 export interface ItemSummary {
@@ -74,7 +75,7 @@ function countSkipped(result: any): number {
  *
  * - `{ results: [...] }` ya da dizi sonuç satır satır sayılır; `itemCount` (pozitif tamsayı) satır ağırlığıdır.
  * - Hiçbir satır kalem kimliği ya da `itemCount` taşımıyorsa sonuç PARTİ düzeyindedir (Amazon feed):
- *   `inputCount` verilmişse gönderilen tüm kalemler partinin sonucunu paylaşır.
+ *   `inputCount` (SKU birimi, bkz. `countCommandInputUnits`) verilmişse gönderilen tüm SKU'lar partinin sonucunu paylaşır.
  * - `skippedCount` / `skipped[]` (ör. Hepsiburada 0 fiyat ayıklaması) `skipped`'e yazılır.
  *
  * Sayılabilir bir şekil yoksa `undefined` döner (tekil komutlar, void sonuç).
@@ -119,6 +120,29 @@ export function buildItemSummary(result: any, options: { inputCount?: number } =
 }
 
 /**
+ * Bir fiyat/stok güncelleme isteğinin SKU birimindeki büyüklüğü.
+ * - `variants` dolu dizi → varyant sayısı (platformlar varyantları ayrı SKU olarak gönderir ve atlar).
+ * - `variants` yok → 1 (basit ürün tek SKU).
+ * - `variants` BOŞ dizi → 1: platform bu isteği tek bir `no-pushable-variant` kaydıyla atlar; 0 sayılsaydı
+ *   atlanan (1) girdiden (0) büyük çıkardı. Ürün satılabilir tek birim olarak gidemedi sayılır.
+ */
+export function countRequestUnits(update: any): number {
+    return Array.isArray(update?.variants) && update.variants.length > 0 ? update.variants.length : 1;
+}
+
+/**
+ * Toplu komut parametrelerinin SKU birimindeki toplamı (`priceUpdates` / `stockUpdates` üzerinden).
+ * Toplu komut değilse ya da kalem dizisi yoksa `undefined`.
+ */
+export function countCommandInputUnits(command: string, params: any): number | undefined {
+    if (!isItemSummaryCommand(command)) {
+        return undefined;
+    }
+    const items = command === 'updatePrices' ? params?.priceUpdates : params?.stockUpdates;
+    return Array.isArray(items) ? items.reduce((total: number, item: any) => total + countRequestUnits(item), 0) : undefined;
+}
+
+/**
  * Toplu komut sonucuna standart `summary` ekler (dinleyici katmanı için).
  * Toplu komut değilse ya da sonuç düz nesne değilse sonuç DEĞİŞMEDEN döner.
  */
@@ -126,7 +150,6 @@ export function attachItemSummary<T>(command: string, params: any, result: T): T
     if (!isItemSummaryCommand(command) || !result || typeof result !== 'object' || Array.isArray(result)) {
         return result;
     }
-    const items = command === 'updatePrices' ? params?.priceUpdates : params?.stockUpdates;
-    const summary = buildItemSummary(result, { inputCount: Array.isArray(items) ? items.length : undefined });
+    const summary = buildItemSummary(result, { inputCount: countCommandInputUnits(command, params) });
     return summary ? { ...result, summary } : result;
 }
