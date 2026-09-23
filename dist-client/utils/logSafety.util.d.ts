@@ -111,16 +111,24 @@ export declare function redactSensitiveFields<T>(value: T): T;
  *
  * - A text that parses as a JSON object or array is redacted structurally and serialized again; it
  *   is returned unchanged when it holds no credential field, so its original formatting stays.
- * - Otherwise three shapes are masked in place: XML elements (namespace prefix, attributes, CDATA
- *   and multi-line values included), `"name": value` pairs and `name=value` pairs — form bodies,
+ * - Otherwise these shapes are masked in place: XML elements (namespace prefix, attributes, CDATA
+ *   and multi-line values included), `"name": value` pairs, `name=value` pairs — form bodies,
  *   query strings and XML attributes (`<auth key="…"/>`); a quoted value is masked up to its closing
- *   quote, an unquoted one up to the next `&`, angle bracket or closing quote, whitespace included.
+ *   quote, an unquoted one up to the next `&`, angle bracket or closing quote, whitespace included —
+ *   and `Name: value` pairs: header dumps, `util.inspect` output and escaped JSON pairs (`{\"Sifre\":…}`).
+ *   A `Bearer`/`Basic` header value keeps its scheme word; any other unquoted value is masked up to the
+ *   end of the line. A value that opens with `{` or `[` is a structure, not a header value (Mongo's
+ *   `dup key: { sku: "…" }`), and is left to the other rules.
+ * - Wherever they stand, a JWT (`eyJ….….…`), the userinfo of a URL (`https://user:pass@host`) and the
+ *   token after a `Bearer` scheme word are masked too, whatever name is around them or none.
  *
  * Fail-closed: a credential-named XML element without a closing tag, and a quoted credential value
  * without a closing quote, are masked up to the end of the text.
  * Every rule runs in linear time: the text may come from a tenant-controlled site.
- * Known limit: credentials in escaped JSON pairs (`{\"Sifre\":…}` inside a string that is not itself
- * JSON) and in attributes with whitespace around `=` (`key = "…"`) are not recognized.
+ * Known limits: attributes with whitespace around `=` (`key = "…"`), a `Basic <base64>` with no name
+ * before it (in a product text it cannot be told apart from the word after a plain-English "basic";
+ * `maskErrorText` masks it in error messages), and URL userinfo holding an unescaped `/`, `?`, `#`,
+ * `"`, `<`, `>` or whitespace (an invalid URL: a parser reads it as the path) are not recognized.
  */
 export declare function redactSensitiveText(text: string): string;
 export declare function escapeRegExp(value: string): string;
