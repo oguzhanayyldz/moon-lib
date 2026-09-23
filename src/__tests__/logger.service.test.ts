@@ -325,3 +325,38 @@ describe('serializeLogMeta', () => {
         });
     });
 });
+
+describe('logger with raw axios request parts', () => {
+    it('{ config, response } of an AxiosError keeps only the request line and the status', async () => {
+        const error = await requestFailing();
+
+        const line = logLine(() => logger.error('Request failed', { config: error.config, response: error.response }));
+
+        expectNoSecret(line);
+        expect(metaOf(line)).toEqual({
+            config: { method: 'GET', url: `${baseUrl}/v1/items` },
+            response: { status: 500, method: 'GET', url: `${baseUrl}/v1/items` }
+        });
+    });
+
+    it('AxiosError.toJSON() output does not write the request config', async () => {
+        const error = await requestFailing();
+
+        const line = logLine(() => logger.error('Request failed', error.toJSON() as Record<string, unknown>));
+
+        expectNoSecret(line);
+        expect(metaOf(line).config).toEqual({ method: 'GET', url: `${baseUrl}/v1/items` });
+    });
+
+    it('drops the userinfo of the request URL', () => {
+        const error = Object.assign(new Error('Request failed'), {
+            isAxiosError: true,
+            config: { method: 'get', url: `https://merchant:${FAKE_API_KEY}@api.example.com/v1/items` }
+        });
+
+        const line = logLine(() => logger.error('Request failed:', error));
+
+        expectNoSecret(line);
+        expect(metaOf(line).url).toBe('https://****@api.example.com/v1/items');
+    });
+});

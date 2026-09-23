@@ -584,6 +584,13 @@ export function serializeLogMeta(meta: unknown, maxLength: number = MAX_LOG_META
             let result = value;
             if (isLoggableError(raw)) {
                 result = toSafeLogError(raw);
+            } else if (looksLikeHttpResponse(raw)) {
+                // An axios response carries its request config (headers) and the socket-bound request.
+                const { message: _unused, ...safeResponse } = toSafeLogError(raw);
+                result = safeResponse;
+            } else if (looksLikeHttpRequestConfig(raw)) {
+                const { message: _unused, ...safeConfig } = toSafeLogError({ config: raw });
+                result = safeConfig;
             } else if (typeof value === 'bigint') {
                 return value.toString();
             } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(raw)) {
@@ -633,4 +640,17 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 function isStackLoggingEnabled(): boolean {
     const setting = (process.env.LOG_STACK ?? '').trim().toLowerCase();
     return setting !== '0' && setting !== 'false';
+}
+
+// An axios request config: headers plus the request line. Plain `{ headers }` meta is not reduced.
+function looksLikeHttpRequestConfig(value: unknown): boolean {
+    const record = asRecord(value);
+    return !!record && asRecord(record.headers) !== undefined && typeof record.url === 'string' &&
+        ('method' in record || 'adapter' in record || 'transitional' in record);
+}
+
+// An axios response: a numeric status next to the request config and the request object.
+function looksLikeHttpResponse(value: unknown): boolean {
+    const record = asRecord(value);
+    return !!record && typeof record.status === 'number' && looksLikeHttpRequestConfig(record.config) && 'request' in record;
 }
