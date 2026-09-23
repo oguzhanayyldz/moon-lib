@@ -749,16 +749,42 @@ exports.logger = {
     debug: jest.fn(),
     verbose: jest.fn()
 };
+// saveWithRetry sahtesi: gerçek sözleşmeyle AYNI tekrar kuralı (TASK-MUEM4VTE4HLFW).
+// reapply yoksa tek deneme; reapply varsa sürüm hatasında belge _id ile yeniden okunur,
+// reapply taze belgeye uygulanır ve taze belge kaydedilir (bekleme yok). Açık
+// transaction'da yeniden okunmaz. Yalnız backoff ve loglama atlanır.
+const mockSaveWithRetry = async (doc, _operationName, session, reapply) => {
+    // Eğer save metodu yoksa mock bir sonuç döndür
+    if (!doc || typeof doc.save !== 'function') {
+        return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
+    }
+    const canReload = typeof reapply === 'function'
+        && !(session && typeof session.inTransaction === 'function' && session.inTransaction());
+    let target = doc;
+    for (let attempt = 1;; attempt++) {
+        try {
+            return await target.save();
+        }
+        catch (error) {
+            const isVersionError = error instanceof Error && (error.message.includes('version') ||
+                error.message.includes('VersionError') ||
+                error.message.includes('No matching document found'));
+            if (!canReload || !isVersionError || attempt >= 5) {
+                throw error;
+            }
+            const query = doc.constructor.findById(doc._id);
+            const fresh = await (session && typeof (query === null || query === void 0 ? void 0 : query.session) === 'function' ? query.session(session) : query);
+            if (!fresh) {
+                throw new Error(`Document not found: ${doc._id}`);
+            }
+            await reapply(fresh);
+            target = fresh;
+        }
+    }
+};
 // OptimisticLockingUtil - Centralized mock
 exports.OptimisticLockingUtil = {
-    saveWithRetry: jest.fn().mockImplementation(async (doc, operationName) => {
-        // Mock save metodu - gerçek implementasyonu simüle et
-        if (doc && typeof doc.save === 'function') {
-            return await doc.save();
-        }
-        // Eğer save metodu yoksa mock bir sonuç döndür
-        return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
-    }),
+    saveWithRetry: jest.fn().mockImplementation(mockSaveWithRetry),
     updateWithRetry: jest.fn().mockImplementation(async (model, id, updateData, options = {}) => {
         const result = await model.findByIdAndUpdate(id, updateData, Object.assign({ new: true, omitUndefined: true }, options));
         if (!result) {
@@ -1035,12 +1061,7 @@ const setupTestEnvironment = () => {
     exports.isSubUserMode.mockClear();
     exports.getParentUserId.mockClear();
     // Reset OptimisticLockingUtil to default behavior
-    exports.OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(async (doc, operationName) => {
-        if (doc && typeof doc.save === 'function') {
-            return await doc.save();
-        }
-        return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
-    });
+    exports.OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(mockSaveWithRetry);
     exports.OptimisticLockingUtil.saveWithContext = jest.fn().mockImplementation(async (doc, req, operationName) => {
         const session = req === null || req === void 0 ? void 0 : req.dbSession;
         if (doc && typeof doc.save === 'function') {

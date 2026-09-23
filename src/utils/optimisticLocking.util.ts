@@ -78,26 +78,63 @@ export class OptimisticLockingUtil {
     * @param {T} document - Kaydedilecek doküman
     * @param {string} [operationName] - İşlem adı (loglama için)
     * @param {ClientSession} [session] - MongoDB session (transaction için)
-    * @return {Promise<T>} Kaydedilen doküman
+    * @param {(fresh: T) => void | Promise<void>} [reapply] - Sürüm çakışmasında değişikliği taze belgeye yeniden uygular
+    * @return {Promise<T>} Kaydedilen doküman (reapply ile yeniden denendiyse TAZE belge, `document` değil)
     * @description Session-aware doküman kaydetme. Session varsa transaction içinde çalışır.
+    *
+    * SÜRÜM ÇAKIŞMASI (updateIfCurrentPlugin, base.schema): save `{ _id, version: <bellekteki> }` ile
+    * koşullanır ve bellekteki sürüm başarısız denemeler arasında DEĞİŞMEZ. Bayat bir belgeyi tekrar
+    * kaydetmek her seferinde aynı VersionError'u verir (TASK-MUEM4VTE4HLFW). Bu yüzden:
+    *   - `reapply` VERİLMEDİYSE sürüm hatası ilk denemede fırlatılır (boşuna tekrar + backoff yok).
+    *   - `reapply` VERİLDİYSE her tekrar denemede belge `_id` ile YENİDEN OKUNUR, `reapply(fresh)`
+    *     değişikliği taze değerler üzerinden yeniden hesaplar ve taze belge kaydedilir. Eşzamanlı
+    *     yazarın dokunduğu alanlar korunur. Çağıran dönüş değerini kullanmalıdır.
+    *   - Açık bir transaction içinde yeniden okuma anlık görüntüyü görür, yeni sürümü göremez;
+    *     orada hata ilk denemede fırlatılır, transaction düzeyindeki yeniden deneme devralır.
     */
     static async saveWithRetry<T extends { save(options?: any): Promise<any>; id?: string }>(
         document: T,
         operationName?: string,
-        session?: ClientSession
+        session?: ClientSession,
+        reapply?: (fresh: T) => void | Promise<void>
     ): Promise<T> {
         const docName = operationName || `Document ${document.id || 'unknown'}`;
-        
+        const canReload = !!reapply && !(session && session.inTransaction());
+        let attempt = 0;
+
         return await this.retryWithOptimisticLocking(
             async () => {
+                attempt++;
+                const target = attempt === 1 ? document : await this.reloadDocument(document, session);
+                if (attempt > 1) {
+                    await reapply!(target);
+                }
                 const saveOptions = session ? { session } : {};
-                await document.save(saveOptions);
-                return document;
+                await target.save(saveOptions);
+                return target;
             },
-            5,
+            canReload ? 5 : 1,
             100,
             `${docName} save${session ? ' (transactional)' : ''}`
         );
+    }
+
+    /**
+     * saveWithRetry tekrar denemesi için belgeyi `_id` ile veritabanından yeniden okur.
+     * @private
+     */
+    private static async reloadDocument<T>(document: T, session?: ClientSession): Promise<T> {
+        const Model = (document as any).constructor;
+        const id = (document as any)._id;
+        if (!Model || typeof Model.findById !== 'function' || id == null) {
+            throw new Error('saveWithRetry: reapply yalnız mongoose belgesiyle kullanılabilir');
+        }
+        const query = Model.findById(id);
+        const fresh = await (session ? query.session(session) : query);
+        if (!fresh) {
+            throw new Error(`Document not found: ${id}`);
+        }
+        return fresh;
     }
 
     /**
