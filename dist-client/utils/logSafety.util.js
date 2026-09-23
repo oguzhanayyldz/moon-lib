@@ -1,4 +1,15 @@
 "use strict";
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LOG_SERIALIZATION_ERROR = exports.MAX_LOG_META_LENGTH = exports.REDACTED_FIELD_MASK = void 0;
 exports.maskConnectionUriSecret = maskConnectionUriSecret;
@@ -549,6 +560,15 @@ function serializeLogMeta(meta, maxLength = exports.MAX_LOG_META_LENGTH) {
             if (isLoggableError(raw)) {
                 result = toSafeLogError(raw);
             }
+            else if (looksLikeHttpResponse(raw)) {
+                // An axios response carries its request config (headers) and the socket-bound request.
+                const _a = toSafeLogError(raw), { message: _unused } = _a, safeResponse = __rest(_a, ["message"]);
+                result = safeResponse;
+            }
+            else if (looksLikeHttpRequestConfig(raw)) {
+                const _b = toSafeLogError({ config: raw }), { message: _unused } = _b, safeConfig = __rest(_b, ["message"]);
+                result = safeConfig;
+            }
             else if (typeof value === 'bigint') {
                 return value.toString();
             }
@@ -596,4 +616,15 @@ function isStackLoggingEnabled() {
     var _a;
     const setting = ((_a = process.env.LOG_STACK) !== null && _a !== void 0 ? _a : '').trim().toLowerCase();
     return setting !== '0' && setting !== 'false';
+}
+// An axios request config: headers plus the request line. Plain `{ headers }` meta is not reduced.
+function looksLikeHttpRequestConfig(value) {
+    const record = asRecord(value);
+    return !!record && asRecord(record.headers) !== undefined && typeof record.url === 'string' &&
+        ('method' in record || 'adapter' in record || 'transitional' in record);
+}
+// An axios response: a numeric status next to the request config and the request object.
+function looksLikeHttpResponse(value) {
+    const record = asRecord(value);
+    return !!record && typeof record.status === 'number' && looksLikeHttpRequestConfig(record.config) && 'request' in record;
 }
