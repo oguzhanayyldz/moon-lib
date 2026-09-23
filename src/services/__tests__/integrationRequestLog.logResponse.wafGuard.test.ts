@@ -87,4 +87,47 @@ describe('IntegrationRequestLogService.logResponse — WAF/engelleme guard', () 
 
         expect(getCapturedUpdate().interpretedResponse.success).toBe(true);
     });
+
+    it('bodyPreview ham gövde değil maskeli gövdeden üretilir (token/password/authorization sızmaz)', async () => {
+        const logEntry = {
+            id: 'log-4',
+            integrationName: ResourceName.Trendyol,
+            operationType: OperationType.SEND_PRODUCTS,
+            requestTime: new Date()
+        };
+        const { connection, getCapturedUpdate } = createFakeConnection(logEntry);
+        const service = new IntegrationRequestLogService(connection);
+
+        await service.logResponse('log-4', {
+            responseStatus: 403,
+            responseBody: '<html>{"token":"tok-SECRET-1","password":"pw-SECRET-2","authorization":"Bearer auth-SECRET-3"}</html>' as any
+        });
+
+        const updateData = getCapturedUpdate();
+        const preview = updateData.interpretedResponse.details.bodyPreview;
+        expect(updateData.interpretedResponse.success).toBe(false);
+        expect(preview).not.toContain('tok-SECRET-1');
+        expect(preview).not.toContain('pw-SECRET-2');
+        expect(preview).not.toContain('auth-SECRET-3');
+        expect(preview).toBe(String(updateData.responseBody).slice(0, 300));
+    });
+
+    it('200 + gövdede "cloudflare" geçen düz metin engelleme sayılmaz (yalnız status>=300)', async () => {
+        const logEntry = {
+            id: 'log-5',
+            integrationName: ResourceName.Trendyol,
+            operationType: OperationType.SEND_PRODUCTS,
+            requestTime: new Date()
+        };
+        const { connection, getCapturedUpdate } = createFakeConnection(logEntry);
+        const service = new IntegrationRequestLogService(connection);
+
+        await service.logResponse('log-5', {
+            responseStatus: 200,
+            responseBody: 'served via cloudflare edge, all good' as any
+        });
+
+        const details = getCapturedUpdate().interpretedResponse?.details;
+        expect(details?.bodyPreview).toBeUndefined();
+    });
 });

@@ -133,7 +133,8 @@ export class IntegrationRequestLogService {
                         failureCount: 1,
                         details: {
                             responseStatus: options.responseStatus,
-                            bodyPreview: String(options.responseBody).slice(0, 300)
+                            // Ham gövde değil: kimlik alanları maskelenmiş sürüm (responseBody ile aynı redaksiyon)
+                            bodyPreview: String(sanitizedResponseBody).slice(0, 300)
                         },
                         parsedAt: new Date()
                     } as InterpretedResponse;
@@ -713,8 +714,7 @@ export class IntegrationRequestLogService {
      */
     private static looksLikeBlockedResponse(responseStatus: number | undefined, responseBody: any): boolean {
         if (typeof responseBody !== 'string') return false;
-        const looksBlocked = /<html|cloudflare|attention required/i.test(responseBody);
-        if (looksBlocked) return true;
+        // Yalnız hata durum kodunda: 2xx düz metin gövdede "cloudflare" vb. geçmesi engelleme sayılmaz.
         return typeof responseStatus === 'number' && responseStatus >= 300;
     }
 
