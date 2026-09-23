@@ -617,19 +617,23 @@ export class IntegrationRequestLogService {
                     { $match: query },
                     { 
                         $project: {
-                            requestSize: { 
-                                $cond: [
-                                    '$requestBody',
-                                    { $bsonSize: '$requestBody' },
-                                    0
-                                ] 
+                            requestSize: {
+                                $switch: {
+                                    branches: [
+                                        { case: { $eq: [{ $type: '$requestBody' }, 'string'] }, then: { $strLenBytes: '$requestBody' } },
+                                        { case: { $in: [{ $type: '$requestBody' }, ['object', 'array']] }, then: { $bsonSize: '$requestBody' } }
+                                    ],
+                                    default: 0
+                                }
                             },
-                            responseSize: { 
-                                $cond: [
-                                    '$responseBody',
-                                    { $bsonSize: '$responseBody' },
-                                    0
-                                ] 
+                            responseSize: {
+                                $switch: {
+                                    branches: [
+                                        { case: { $eq: [{ $type: '$responseBody' }, 'string'] }, then: { $strLenBytes: '$responseBody' } },
+                                        { case: { $in: [{ $type: '$responseBody' }, ['object', 'array']] }, then: { $bsonSize: '$responseBody' } }
+                                    ],
+                                    default: 0
+                                }
                             }
                         } 
                     },
