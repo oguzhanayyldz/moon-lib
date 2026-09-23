@@ -294,20 +294,23 @@ const TURKISH_TO_ASCII: Record<string, string> = {
     ç: 'c', Ç: 'c', ğ: 'g', Ğ: 'g', ı: 'i', İ: 'i', ö: 'o', Ö: 'o', ş: 's', Ş: 's', ü: 'u', Ü: 'u'
 };
 // Matched anywhere inside the normalized name: `ApiKey`, `x-ibm-client-secret`, `restrictedDataToken`, `WebServisSifre`.
+// `session`, `jwt` and `signature` carry a login session id, a bearer JWT or a request signature
+// (`sessionId`, `SessionToken`, `x-wc-webhook-signature`); `pwd` and `passw` cover `userPwd` and `passwort`.
 const SENSITIVE_NAME_PARTS = [
-    'password', 'passwd', 'passphrase', 'parola', 'sifre', 'secret', 'token', 'key', 'authorization',
-    'credential', 'cookie', 'bearer', 'uyekodu', 'yetkikodu'
+    'password', 'passwd', 'passw', 'passphrase', 'parola', 'sifre', 'secret', 'token', 'key', 'authorization',
+    'credential', 'cookie', 'bearer', 'uyekodu', 'yetkikodu', 'session', 'jwt', 'signature', 'pwd'
 ];
 // Matched only as the whole normalized name: too short or too common to be searched inside other names.
 // The login names are half of a username/password pair (Aras, Yurtiçi, Paraşüt, Mikro, Sürat).
 const SENSITIVE_NAMES = new Set([
-    'pass', 'pwd', 'auth', 'username', 'wsusername', 'kullaniciadi', 'kullanicikodu', 'firmakodu', 'customercode'
+    'pass', 'auth', 'xauth', 'username', 'wsusername', 'kullaniciadi', 'kullanicikodu', 'firmakodu', 'customercode'
 ]);
 // Non-secret fields that contain a part above, measured on the integrations' payloads: product SEO
 // text (`metaKeywords`, `SeoKeywords`), the cargo tracking key, pagination cursors (Trendyol
-// `nextPageToken`, Amazon `NextToken`) and the Shopify `sortKey` enum. They are cut out of the name
-// before the part check, so `keywordSecret` is still masked for its `secret`.
-const NON_SENSITIVE_NAME_PARTS = ['keyword', 'cargokey', 'sortkey', 'nexttoken', 'nextpagetoken'];
+// `nextPageToken`, Amazon `NextToken`), the Shopify `sortKey` enum and the WooCommerce OAuth 1.0a
+// algorithm name (`oauth_signature_method`). They are cut out of the name before the part check, so
+// `keywordSecret` is still masked for its `secret`.
+const NON_SENSITIVE_NAME_PARTS = ['keyword', 'cargokey', 'sortkey', 'nexttoken', 'nextpagetoken', 'signaturemethod'];
 
 const NON_ALPHANUMERIC_PATTERN = /[^a-z0-9]/g;
 // XML start tag, optionally namespace-prefixed and with attributes: `<tem:UyeKodu xsi:type="x">`.
@@ -328,6 +331,22 @@ const FORM_VALUE_QUOTE_PATTERN = /^\\*["']/;
 // (followed by a JSON/XML delimiter or the end), so an XML or JSON text around it stays intact.
 // Whitespace and line breaks belong to the value (a passphrase, a PEM key): fail-closed.
 const FORM_VALUE_END_PATTERN = /[&<>]|["'](?=[\s,;:)}\]>/]|$)/;
+// `Name: value` of a header dump (`Authorization: Bearer …`), of `util.inspect` output (`token: '…'`)
+// or of an escaped JSON pair (`{\"token\":\"…\"}`). The name starts a line or follows a delimiter, and
+// may be quoted with the same quote sequence on both sides. `://` is a URL scheme, not a pair.
+const HEADER_NAME_PATTERN = /(?<=^|[\s{,;(\[])(\\*["']?)([A-Za-z_çğıöşüÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ.-]*)\1[ \t]*:(?!\/\/)[ \t]*/;
+// `Bearer <token>` / `Basic <base64>`: the scheme word stays readable, only the token is masked.
+const HEADER_AUTH_SCHEME_PATTERN = /^(?:Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=-]+/i;
+const LINE_END_PATTERN = /[\r\n]/;
+// A JWT/JWS/JWE without a name around it: three to five base64url parts, the first one a JSON header
+// (`{"` encodes as `eyJ`). The lookbehind keeps it linear: a match only starts at the start of a word.
+const JWT_PATTERN = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]*){2,4}/g;
+// Userinfo of a URL in free text (`https://user:pass@host`): the delimiter is the LAST `@` before the
+// path. The lookbehind keeps it linear: a scheme only starts at the start of a word.
+const URL_USERINFO_IN_TEXT_PATTERN = /(?<![A-Za-z0-9+.-])([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s/?#"<>]+@/g;
+// `Bearer <token>` with no name before it (an echoed header value). Runs after the pair rules, which
+// keep the scheme word and already masked the token (`***` is not a token character).
+const BARE_BEARER_PATTERN = /\b(Bearer)[ \t]+[A-Za-z0-9._~+/=-]+/gi;
 
 /**
  * Whether a field, header, XML element or form key name holds a credential.
@@ -379,16 +398,24 @@ export function redactSensitiveFields<T>(value: T): T {
  *
  * - A text that parses as a JSON object or array is redacted structurally and serialized again; it
  *   is returned unchanged when it holds no credential field, so its original formatting stays.
- * - Otherwise three shapes are masked in place: XML elements (namespace prefix, attributes, CDATA
- *   and multi-line values included), `"name": value` pairs and `name=value` pairs — form bodies,
+ * - Otherwise these shapes are masked in place: XML elements (namespace prefix, attributes, CDATA
+ *   and multi-line values included), `"name": value` pairs, `name=value` pairs — form bodies,
  *   query strings and XML attributes (`<auth key="…"/>`); a quoted value is masked up to its closing
- *   quote, an unquoted one up to the next `&`, angle bracket or closing quote, whitespace included.
+ *   quote, an unquoted one up to the next `&`, angle bracket or closing quote, whitespace included —
+ *   and `Name: value` pairs: header dumps, `util.inspect` output and escaped JSON pairs (`{\"Sifre\":…}`).
+ *   A `Bearer`/`Basic` header value keeps its scheme word; any other unquoted value is masked up to the
+ *   end of the line. A value that opens with `{` or `[` is a structure, not a header value (Mongo's
+ *   `dup key: { sku: "…" }`), and is left to the other rules.
+ * - Wherever they stand, a JWT (`eyJ….….…`), the userinfo of a URL (`https://user:pass@host`) and the
+ *   token after a `Bearer` scheme word are masked too, whatever name is around them or none.
  *
  * Fail-closed: a credential-named XML element without a closing tag, and a quoted credential value
  * without a closing quote, are masked up to the end of the text.
  * Every rule runs in linear time: the text may come from a tenant-controlled site.
- * Known limit: credentials in escaped JSON pairs (`{\"Sifre\":…}` inside a string that is not itself
- * JSON) and in attributes with whitespace around `=` (`key = "…"`) are not recognized.
+ * Known limits: attributes with whitespace around `=` (`key = "…"`), a `Basic <base64>` with no name
+ * before it (in a product text it cannot be told apart from the word after a plain-English "basic";
+ * `maskErrorText` masks it in error messages), and URL userinfo holding an unescaped `/`, `?`, `#`,
+ * `"`, `<`, `>` or whitespace (an invalid URL: a parser reads it as the path) are not recognized.
  */
 export function redactSensitiveText(text: string): string {
     const trimmed = text.trim();
@@ -401,7 +428,12 @@ export function redactSensitiveText(text: string): string {
             // Not JSON after all (or a JSON fragment): fall through to the text rules.
         }
     }
-    return redactFormPairs(redactJsonPairs(redactXmlElements(text)));
+    // The name-free rules run last: masked first, a JWT after `Authorization: Bearer` would no longer
+    // look like a token, and the header rule would then mask the rest of the line instead.
+    return redactHeaderPairs(redactFormPairs(redactJsonPairs(redactXmlElements(text))))
+        .replace(JWT_PATTERN, REDACTED_FIELD_MASK)
+        .replace(URL_USERINFO_IN_TEXT_PATTERN, `$1${REDACTED_FIELD_MASK}@`)
+        .replace(BARE_BEARER_PATTERN, `$1 ${REDACTED_FIELD_MASK}`);
 }
 
 function normalizeFieldName(name: string): string {
@@ -463,6 +495,44 @@ function redactFormPairs(text: string): string {
         }
         copiedUpTo = valueStart + valueLength;
         formName.lastIndex = copiedUpTo;
+    }
+    return result + text.slice(copiedUpTo);
+}
+
+function redactHeaderPairs(text: string): string {
+    const headerName = new RegExp(HEADER_NAME_PATTERN.source, 'g');
+    let result = '';
+    let copiedUpTo = 0;
+    let match: RegExpExecArray | null;
+    while ((match = headerName.exec(text)) !== null) {
+        const valueStart = match.index + match[0].length;
+        const value = text.slice(valueStart);
+        if (!isSensitiveFieldName(match[2]) || /^[{[]/.test(value)) {
+            continue;
+        }
+        const quote = FORM_VALUE_QUOTE_PATTERN.exec(value)?.[0];
+        const scheme = HEADER_AUTH_SCHEME_PATTERN.exec(value)?.[0];
+        let masked: string;
+        let valueLength: number;
+        if (quote) {
+            // Fail-closed: a quoted value that is never closed is masked up to the end of the text.
+            const closingIndex = value.indexOf(quote, quote.length);
+            valueLength = closingIndex === -1 ? value.length : closingIndex + quote.length;
+            masked = quote + REDACTED_FIELD_MASK + (closingIndex === -1 ? '' : quote);
+        } else if (scheme) {
+            valueLength = scheme.length;
+            masked = `${scheme.split(/[ \t]/, 1)[0]} ${REDACTED_FIELD_MASK}`;
+        } else {
+            const lineEnd = value.search(LINE_END_PATTERN);
+            valueLength = lineEnd === -1 ? value.length : lineEnd;
+            masked = REDACTED_FIELD_MASK;
+        }
+        if (valueLength === 0) {
+            continue;
+        }
+        result += text.slice(copiedUpTo, valueStart) + masked;
+        copiedUpTo = valueStart + valueLength;
+        headerName.lastIndex = copiedUpTo;
     }
     return result + text.slice(copiedUpTo);
 }

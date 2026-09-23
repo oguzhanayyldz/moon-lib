@@ -34,7 +34,8 @@ const expectNoSecret = (line: string) => {
     for (const secret of SECRETS) {
         expect(line).not.toContain(secret);
     }
-    expect(line).not.toMatch(/Bearer (?!\*\*\*\*)/);
+    // Both markers start with `***`: `****` (maskErrorText) and `***REDACTED***` (redactSensitiveText).
+    expect(line).not.toMatch(/Bearer (?!\*\*\*)/);
 };
 
 /** Logs through the real exported logger and returns the single line written by the winston transport. */
@@ -204,7 +205,7 @@ describe('logger with a real AxiosError (test plan 1)', () => {
         const line = logLine(() => logger.error('Auth failed:', error));
 
         expectNoSecret(line);
-        expect(line).toContain('Auth failed: upstream rejected Authorization: Bearer **** (401) {');
+        expect(line).toContain('Auth failed: upstream rejected Authorization: Bearer ***REDACTED*** (401) {');
     });
 });
 

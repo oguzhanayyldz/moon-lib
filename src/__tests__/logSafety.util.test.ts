@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { performance } from 'perf_hooks';
 import { inspect } from 'util';
 import { runInNewContext } from 'vm';
@@ -667,5 +668,193 @@ describe('redactSensitiveText — linear time on hostile input (TASK-MUBXAY9XUFB
         ['form: a name that never reaches `=`', '&' + 'a'.repeat(MB)]
     ])('%s (1 MB) finishes in linear time', (_label, input) => {
         expect(timedRedact(input)).toBeLessThan(LINEAR_BUDGET_MS);
+    });
+});
+
+describe('redactSensitiveText — name-free tokens, header lines, session/jwt/signature names (TASK-MUEL7QFK7DEN7)', () => {
+    // Secrets are generated at run time, so no credential-shaped literal sits in source. Every test checks
+    // the leak with a boolean first: if a rule regresses, jest reports `true`/`false` and never prints the
+    // value, because a failed expect stops the test before the structural `toBe` below it.
+    const runtimeSecret = (): string => `s${randomBytes(12).toString('hex')}`;
+    const base64url = (value: string | Buffer): string => Buffer.from(value).toString('base64url');
+    const runtimeJwt = (): string =>
+        `${base64url('{"alg":"HS256","typ":"JWT"}')}.${base64url(`{"sub":"${runtimeSecret()}"}`)}.${base64url(randomBytes(32))}`;
+    const leaks = (output: unknown, ...secrets: string[]): boolean => {
+        const text = typeof output === 'string' ? output : JSON.stringify(output);
+        return secrets.some((secret) => text.includes(secret));
+    };
+    const redactHidden = (input: string, ...secrets: string[]): string => {
+        const output = redactSensitiveText(input);
+        expect(leaks(output, ...secrets)).toBe(false);
+        return output;
+    };
+    const M = REDACTED_FIELD_MASK;
+
+    describe('session, jwt and signature are credential names', () => {
+        it.each([
+            'sessionId', 'SessionToken', 'JSESSIONID', 'ASP.NET_SessionId', 'session',
+            'jwt', 'id_jwt', 'JwtToken',
+            'signature', 'X-WC-Webhook-Signature', 'x-ikas-signature', 'oauth_signature',
+            'x-auth', 'userPwd'
+        ])('%s is a credential name', (name) => {
+            expect(isSensitiveFieldName(name)).toBe(true);
+        });
+
+        it('oauth_signature_method (the algorithm name, HMAC-SHA1) stays readable', () => {
+            expect(isSensitiveFieldName('oauth_signature_method')).toBe(false);
+        });
+
+        it('masks their values in a payload object', () => {
+            const [session, jwt, signature] = [runtimeSecret(), runtimeSecret(), runtimeSecret()];
+
+            const result = redactSensitiveFields({ sessionId: session, jwt, 'X-WC-Webhook-Signature': signature, page: 2 });
+
+            expect(leaks(result, session, jwt, signature)).toBe(false);
+            expect(result).toEqual({ sessionId: M, jwt: M, 'X-WC-Webhook-Signature': M, page: 2 });
+        });
+    });
+
+    describe('Name: value header lines', () => {
+        it('keeps the Bearer scheme word and the rest of the line, masks the token', () => {
+            const token = runtimeSecret();
+
+            expect(redactHidden(`upstream rejected Authorization: Bearer ${token} (401)`, token))
+                .toBe(`upstream rejected Authorization: Bearer ${M} (401)`);
+        });
+
+        it('masks a Bearer JWT in one piece, scheme word and rest of the line kept', () => {
+            const jwt = runtimeJwt();
+
+            expect(redactHidden(`Authorization: Bearer ${jwt} (401)`, jwt.split('.')[1], jwt.split('.')[2]))
+                .toBe(`Authorization: Bearer ${M} (401)`);
+        });
+
+        it('masks a Basic credential', () => {
+            const basic = Buffer.from(`merchant:${runtimeSecret()}`).toString('base64');
+
+            expect(redactHidden(`authorization: Basic ${basic}`, basic)).toBe(`authorization: Basic ${M}`);
+        });
+
+        it('masks only the credential lines of a multi-line header dump', () => {
+            const [apiKey, cookie] = [runtimeSecret(), runtimeSecret()];
+            const dump = `Host: api.example.test\r\nX-Api-Key: ${apiKey}\r\nCookie: sid=${cookie}; lang=tr\r\nAccept: */*`;
+
+            expect(redactHidden(dump, apiKey, cookie))
+                .toBe(`Host: api.example.test\r\nX-Api-Key: ${M}\r\nCookie: ${M}\r\nAccept: */*`);
+        });
+
+        it('masks a quoted value of util.inspect output up to its closing quote', () => {
+            const token = runtimeSecret();
+
+            expect(redactHidden(`{ token: '${token}', page: 2 }`, token)).toBe(`{ token: '${M}', page: 2 }`);
+        });
+
+        it('masks an escaped JSON pair inside a text that is not itself JSON', () => {
+            const password = runtimeSecret();
+
+            expect(redactHidden(`body={\\"Sifre\\":\\"${password}\\",\\"Adet\\":2}`, password))
+                .toBe(`body={\\"Sifre\\":\\"${M}\\",\\"Adet\\":2}`);
+        });
+
+        it('recognizes a Turkish header name', () => {
+            const password = runtimeSecret();
+
+            expect(redactHidden(`Kullanıcı: ali\nŞifre: ${password}`, password)).toBe(`Kullanıcı: ali\nŞifre: ${M}`);
+        });
+
+        it.each([
+            ['a Mongo duplicate-key structure', 'E11000 duplicate key error dup key: { sku: "SKU-1" }'],
+            ['a non-credential header', 'Location: https://api.example.test/v1/items'],
+            ['a URL scheme', 'see https://api.example.test/token/refresh'],
+            ['a clock time', 'retry at 10:30']
+        ])('leaves %s unchanged', (_label, text) => {
+            expect(redactSensitiveText(text)).toBe(text);
+        });
+    });
+
+    describe('a JWT with no name around it', () => {
+        it('is masked in free text', () => {
+            const jwt = runtimeJwt();
+
+            expect(redactHidden(`token rejected: ${jwt} expired`, jwt.split('.')[1], jwt.split('.')[2]))
+                .toBe(`token rejected: ${M} expired`);
+        });
+
+        it('is masked inside a JSON string value', () => {
+            const jwt = runtimeJwt();
+
+            expect(redactHidden(JSON.stringify({ note: `id ${jwt}`, orderNumber: '1001' }), jwt.split('.')[1]))
+                .toBe(`{"note":"id ${M}","orderNumber":"1001"}`);
+        });
+
+        it('is masked as a five-part JWE', () => {
+            const jwe = `${base64url('{"alg":"dir","enc":"A256GCM"}')}..${base64url(randomBytes(12))}.${base64url(randomBytes(40))}.${base64url(randomBytes(16))}`;
+            const [, , iv, ciphertext, tag] = jwe.split('.');
+
+            expect(redactHidden(`payload ${jwe}`, iv, ciphertext, tag)).toBe(`payload ${M}`);
+        });
+
+        it('leaves `eyJ` without the dot-separated parts unchanged', () => {
+            expect(redactSensitiveText('base64 header eyJhbGciOiJIUzI1NiJ9 only')).toBe('base64 header eyJhbGciOiJIUzI1NiJ9 only');
+        });
+    });
+
+    describe('URL userinfo in free text', () => {
+        it('masks user:password and keeps scheme, host and path', () => {
+            const password = runtimeSecret();
+
+            expect(redactHidden(`connect https://merchant:${password}@api.example.test/v1 failed`, password))
+                .toBe(`connect https://${M}@api.example.test/v1 failed`);
+        });
+
+        it('masks single-part userinfo (a token)', () => {
+            const token = runtimeSecret();
+
+            expect(redactHidden(`GET https://${token}@api.example.test/v1`, token)).toBe(`GET https://${M}@api.example.test/v1`);
+        });
+
+        it('masks up to the LAST `@` before the path (unescaped `@` in the password)', () => {
+            const [first, second] = [runtimeSecret(), runtimeSecret()];
+
+            expect(redactHidden(`ftp://u:${first}@${second}@files.example.test/in`, first, second))
+                .toBe(`ftp://${M}@files.example.test/in`);
+        });
+
+        it.each([
+            ['an e-mail address', 'mail sent to ali@example.test'],
+            ['an `@` in the path', 'see https://example.test/users/@me']
+        ])('leaves %s unchanged', (_label, text) => {
+            expect(redactSensitiveText(text)).toBe(text);
+        });
+    });
+
+    describe('a Bearer token with no name before it', () => {
+        it('is masked, the scheme word kept', () => {
+            const token = runtimeSecret();
+
+            expect(redactHidden(`header was Bearer ${token}, rejected`, token)).toBe(`header was Bearer ${M}, rejected`);
+        });
+    });
+
+    describe('linear time on hostile input', () => {
+        const HARD_LIMIT_MS = 2000;
+        const LINEAR_BUDGET_MS = 1000;
+        const MB = 1000000;
+        const repeatTo = (unit: string, size: number): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+
+        it.each([
+            ['JWT: `eyJ` run without separators', repeatTo('eyJ', MB)],
+            ['JWT: dotted parts that never reach three', repeatTo('eyJa.', MB)],
+            ['URL userinfo: schemes without `@`', repeatTo('a://b:', MB)],
+            ['URL userinfo: a scheme word that never reaches `://`', 'a'.repeat(MB)],
+            ['header: credential names that never reach a value', repeatTo('\ntoken:', MB)],
+            ['header: escaped quote run before a name', '{' + '\\'.repeat(MB)],
+            ['header: unclosed quoted credential values', repeatTo(' token: "', MB)],
+            ['Bearer: scheme words without a token', repeatTo('Bearer ', MB)]
+        ])('%s (1 MB) finishes in linear time', (_label, input) => {
+            const started = performance.now();
+            runInNewContext('redact(input)', { redact: redactSensitiveText, input }, { timeout: HARD_LIMIT_MS });
+            expect(performance.now() - started).toBeLessThan(LINEAR_BUDGET_MS);
+        });
     });
 });
