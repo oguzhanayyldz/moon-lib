@@ -240,63 +240,6 @@ class EnhancedEntityDeletionRegistry {
         }
     }
     /**
-     * Execute batch deletion
-     */
-    async executeBatch(context) {
-        const timer = new performanceMonitor_util_1.PerformanceTimer(`batch_deletion_${context.requestId || Date.now()}`);
-        try {
-            // Warm up cache if not already done
-            await this.ensureCacheWarmedUp();
-            // Apply default batch configuration
-            const configWithDefaults = Object.assign({ useTransactions: false, transactionTimeout: 30000, retryOnTransactionError: true, maxRetries: 3, enableDetailedLogging: false, batchSize: 50, maxConcurrentBatches: 3, batchTimeout: 60000, continueOnBatchFailure: true, useBulkOperations: true, memoryThreshold: 512, enablePerformanceMonitoring: true, enableConnectionPooling: true, batchDelay: 100 }, context.config);
-            const enhancedContext = Object.assign(Object.assign({}, context), { config: configWithDefaults });
-            performanceMonitor_util_1.performanceMonitor.incrementMetric('batch_deletions_attempted');
-            performanceMonitor_util_1.performanceMonitor.setMetric('active_batches', performanceMonitor_util_1.performanceMonitor.getMetric('active_batches', 0) + 1);
-            const result = await this.batchProcessingEngine.processBatchDeletion(enhancedContext);
-            const executionTime = timer.stop();
-            // Record metrics
-            if (result.success) {
-                performanceMonitor_util_1.performanceMonitor.incrementMetric('batch_deletions_successful');
-            }
-            else {
-                performanceMonitor_util_1.performanceMonitor.incrementMetric('batch_deletions_failed');
-            }
-            performanceMonitor_util_1.performanceMonitor.setMetric('last_batch_deletion_time', executionTime);
-            performanceMonitor_util_1.performanceMonitor.decrementMetric('active_batches');
-            return result;
-        }
-        catch (error) {
-            timer.stop();
-            performanceMonitor_util_1.performanceMonitor.incrementMetric('batch_deletions_error');
-            performanceMonitor_util_1.performanceMonitor.decrementMetric('active_batches');
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            logger_service_1.logger.error('Batch deletion failed', {
-                requestId: context.requestId,
-                itemCount: context.items.length,
-                error: errorMessage
-            });
-            return {
-                success: false,
-                batchResults: [],
-                metrics: {
-                    totalItems: context.items.length,
-                    successfulDeletions: 0,
-                    failedDeletions: context.items.length,
-                    totalExecutionTime: timer.getElapsed(),
-                    averageTimePerItem: 0,
-                    batchesProcessed: 0,
-                    parallelOperations: 0,
-                    peakMemoryUsage: performanceMonitor_util_1.performanceMonitor.getCurrentResourceUsage().memoryUsage,
-                    databaseOperations: 0,
-                    networkOperations: 0,
-                    retriesPerformed: 0
-                },
-                affectedServices: [],
-                error: errorMessage
-            };
-        }
-    }
-    /**
      * Execute with transaction support
      */
     async executeWithTransaction(context) {
