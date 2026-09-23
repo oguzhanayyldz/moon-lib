@@ -29,7 +29,13 @@ export enum OrderStatus {
     Returned = "returned",
     Refunded = "refunded",
     Failed = "failed",
-    
+    /**
+     * Teslim edilemedi: kargo alıcıya ulaşamadı, mal depodan çıkmış ve dönüş yolunda.
+     * `Failed`'dan ayrıdır: ödeme/oluşturma hatası değil, kargo sonrası istisnadır.
+     * Beklenen devamı `Returned` (paket geri geldi) ya da yeniden teslimle `Delivered`.
+     */
+    Undelivered = "undelivered",
+
     // Hold states
     OnHold= "onHold",
     WaitingPayment = "waitingPayment",
@@ -106,17 +112,25 @@ export const ORDER_STATUS_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]
     ],
     [OrderStatus.Shipped]: [
         OrderStatus.InTransit,
-        OrderStatus.Returned
+        OrderStatus.Returned,
+        OrderStatus.Undelivered     // Pazaryeri ara kargo statüsünü atlayıp "teslim edilemedi" bildirebilir
     ],
     [OrderStatus.InTransit]: [
         OrderStatus.OutForDelivery,
         OrderStatus.Returned,
-        OrderStatus.Failed
+        OrderStatus.Failed,
+        OrderStatus.Undelivered
     ],
     [OrderStatus.OutForDelivery]: [
         OrderStatus.Delivered,
         OrderStatus.Returned,
-        OrderStatus.Failed
+        OrderStatus.Failed,
+        OrderStatus.Undelivered
+    ],
+    [OrderStatus.Undelivered]: [
+        OrderStatus.Delivered,      // Yeniden teslim denemesi başarılı
+        OrderStatus.Returned,       // Paket satıcıya geri döndü
+        OrderStatus.Cancelled
     ],
     [OrderStatus.Delivered]: [
         OrderStatus.Completed,
@@ -233,6 +247,10 @@ export const ORDER_STATUS_PRIORITY: Record<OrderStatus, number> = {
     [OrderStatus.Shipped]: 35,
     [OrderStatus.InTransit]: 40,
     [OrderStatus.OutForDelivery]: 45,
+    // Kargo sonrası istisna; teslimden ÖNCE sıralanır: kargo yolu `Undelivered → Delivered/Returned/Cancelled`
+    // ileri sayılır, `Delivered → Undelivered` geri sayılıp engellenir. Mutlu yolun adımı DEĞİLDİR,
+    // `getSkippedStatuses` onu atlanan statü olarak listelemez.
+    [OrderStatus.Undelivered]: 47,
 
     // Delivery states (50-59)
     [OrderStatus.Delivered]: 50,
@@ -323,6 +341,9 @@ export const getSkippedStatuses = (fromStatus: OrderStatus, toStatus: OrderStatu
     const skipped: OrderStatus[] = [];
 
     for (const [status, priority] of Object.entries(ORDER_STATUS_PRIORITY)) {
+        if (status === OrderStatus.Undelivered) {
+            continue;
+        }
         if (priority > fromPriority && priority < toPriority) {
             skipped.push(status as OrderStatus);
         }
