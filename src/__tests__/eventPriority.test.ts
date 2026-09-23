@@ -50,10 +50,6 @@ describe('Event Priority System', () => {
         });
         
         describe('Priority 3 - Secondary Entity', () => {
-            it('should return priority 3 for CombinationCreated', () => {
-                expect(getEventPriority(Subjects.CombinationCreated)).toBe(3);
-            });
-            
             it('should return priority 3 for StockCreated', () => {
                 expect(getEventPriority(Subjects.StockCreated)).toBe(3);
             });
@@ -220,7 +216,7 @@ describe('Event Priority System', () => {
             it('should ensure priority 1 < priority 2 < priority 3 < priority 4 < priority 5', () => {
                 const priority1 = getEventPriority(Subjects.UserCreated);
                 const priority2 = getEventPriority(Subjects.ProductCreated);
-                const priority3 = getEventPriority(Subjects.CombinationCreated);
+                const priority3 = getEventPriority(Subjects.ProductStockCreated);
                 const priority4 = getEventPriority(Subjects.ProductPriceIntegrationUpdated);
                 const priority5 = getEventPriority(Subjects.EntityVersionUpdated);
                 
@@ -240,8 +236,8 @@ describe('Event Priority System', () => {
                 // Lower number = higher priority
             });
             
-            it('CombinationCreated should have higher priority than ProductPriceIntegrationUpdated', () => {
-                const combinationPriority = getEventPriority(Subjects.CombinationCreated);
+            it('ProductStockCreated should have higher priority than ProductPriceIntegrationUpdated', () => {
+                const combinationPriority = getEventPriority(Subjects.ProductStockCreated);
                 const priceIntegrationPriority = getEventPriority(Subjects.ProductPriceIntegrationUpdated);
                 
                 expect(combinationPriority).toBeLessThan(priceIntegrationPriority);
@@ -288,7 +284,7 @@ describe('Event Priority System', () => {
                 // Shopify'dan ürün çekildiğinde oluşan event'ler
                 const events = [
                     { type: Subjects.ProductCreated, priority: getEventPriority(Subjects.ProductCreated) },
-                    { type: Subjects.CombinationCreated, priority: getEventPriority(Subjects.CombinationCreated) },
+                    { type: Subjects.ProductStockCreated, priority: getEventPriority(Subjects.ProductStockCreated) },
                     { type: Subjects.ProductPriceIntegrationUpdated, priority: getEventPriority(Subjects.ProductPriceIntegrationUpdated) },
                     { type: Subjects.ProductStockIntegrationUpdated, priority: getEventPriority(Subjects.ProductStockIntegrationUpdated) },
                 ];
@@ -298,8 +294,8 @@ describe('Event Priority System', () => {
                 
                 // ProductCreated ilk olmalı
                 expect(sorted[0].type).toBe(Subjects.ProductCreated);
-                // CombinationCreated ikinci olmalı
-                expect(sorted[1].type).toBe(Subjects.CombinationCreated);
+                // ProductStockCreated ikinci olmalı
+                expect(sorted[1].type).toBe(Subjects.ProductStockCreated);
                 // Integration events sonra gelmeli
                 expect(sorted[2].priority).toBe(4);
                 expect(sorted[3].priority).toBe(4);
