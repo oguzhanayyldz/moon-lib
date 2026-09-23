@@ -33,6 +33,12 @@ export interface CommandDispatchInfo {
     skipped?: Record<string, number>;
 }
 
+/**
+ * Stok bu platformdan ÇEKİLDİĞİ için (döngüsel akış koruması) gönderilmeyen SKU'ların `skipped[].reason` değeri.
+ * Kullanıcının kendi ayarıdır ve her stok çalışmasında tekrar eder: özette `skipped` sayılır, bildirim tetiklemez.
+ */
+export const STOCK_FETCH_MODE_SKIP_REASON = 'stock-fetch-mode';
+
 /** `summary` üretilen toplu komutlar */
 export const ITEM_SUMMARY_COMMANDS = ['updatePrices', 'updateStocks'] as const;
 
@@ -74,9 +80,13 @@ function countSkipped(result: any): number {
  * Platform sonucundan `ItemSummary` üretir. Sonuç zaten geçerli `summary` taşıyorsa onu döner.
  *
  * - `{ results: [...] }` ya da dizi sonuç satır satır sayılır; `itemCount` (pozitif tamsayı) satır ağırlığıdır.
- * - Hiçbir satır kalem kimliği ya da `itemCount` taşımıyorsa sonuç PARTİ düzeyindedir (Amazon feed):
+ * - Satırlar kalem kimliği ya da `itemCount` taşımıyorsa sonuç PARTİ düzeyindedir (Amazon feed):
  *   `inputCount` (SKU birimi, bkz. `countCommandInputUnits`) verilmişse gönderilen tüm SKU'lar partinin sonucunu paylaşır.
+ *   Boş `results` parti değildir: platform hiçbir şey göndermemiştir, hiçbir birim başarılı SAYILMAZ.
  * - `skippedCount` / `skipped[]` (ör. Hepsiburada 0 fiyat ayıklaması) `skipped`'e yazılır.
+ * - `inputCount` verilmişse hiçbir satıra ve atlanana düşmeyen birimler de `skipped`'e yazılır: platforma hiç
+ *   ulaşmamışlardır (ör. stok tarafında boş varyant grubu, döngüsel akış koruması), ret görmedikleri için `failed`
+ *   değildirler ve entegrasyon sağlığını düşürmezler.
  *
  * Sayılabilir bir şekil yoksa `undefined` döner (tekil komutlar, void sonuç).
  */
@@ -92,8 +102,8 @@ export function buildItemSummary(result: any, options: { inputCount?: number } =
         return undefined;
     }
 
-    const skipped = countSkipped(result);
-    const batchLevel = isCount(options.inputCount)
+    let skipped = countSkipped(result);
+    const batchLevel = isCount(options.inputCount) && rows.length > 0
         && rows.every(row => !isCount(row?.itemCount) && !ITEM_IDENTITY_KEYS.some(key => row?.[key] !== undefined));
 
     let succeeded = 0;
@@ -116,6 +126,10 @@ export function buildItemSummary(result: any, options: { inputCount?: number } =
         }
     }
 
+    if (isCount(options.inputCount)) {
+        skipped += Math.max(options.inputCount - succeeded - failed - skipped, 0);
+    }
+
     return { total: succeeded + failed + skipped, succeeded, failed, skipped };
 }
 
@@ -132,6 +146,9 @@ export function countRequestUnits(update: any): number {
 
 /**
  * Toplu komut parametrelerinin SKU birimindeki toplamı (`priceUpdates` / `stockUpdates` üzerinden).
+ * Aynı SKU (varyantın ya da basit ürünün `externalId`'si) komutta birden fazla geçse de bir kez sayılır: dört platform
+ * da (Amazon, HB, N11, Trendyol) her SKU'yu bir kez gönderir. `externalId`'si olmayan kalem ve boş varyant grubu
+ * tekilleştirilmez, her biri bir birimdir (platformlar her birini ayrı atlar).
  * Toplu komut değilse ya da kalem dizisi yoksa `undefined`.
  */
 export function countCommandInputUnits(command: string, params: any): number | undefined {
@@ -139,7 +156,30 @@ export function countCommandInputUnits(command: string, params: any): number | u
         return undefined;
     }
     const items = command === 'updatePrices' ? params?.priceUpdates : params?.stockUpdates;
-    return Array.isArray(items) ? items.reduce((total: number, item: any) => total + countRequestUnits(item), 0) : undefined;
+    if (!Array.isArray(items)) {
+        return undefined;
+    }
+    const seenSkus = new Set<string>();
+    let units = 0;
+    const countSku = (externalId: unknown) => {
+        if (typeof externalId === 'string' && externalId) {
+            if (seenSkus.has(externalId)) {
+                return;
+            }
+            seenSkus.add(externalId);
+        }
+        units++;
+    };
+    for (const item of items) {
+        if (Array.isArray(item?.variants) && item.variants.length > 0) {
+            item.variants.forEach((variant: any) => countSku(variant?.externalId));
+        } else if (Array.isArray(item?.variants)) {
+            units++;
+        } else {
+            countSku(item?.externalId);
+        }
+    }
+    return units;
 }
 
 /**
