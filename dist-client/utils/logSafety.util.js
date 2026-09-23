@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.REDACTED_FIELD_MASK = void 0;
+exports.LOG_SERIALIZATION_ERROR = exports.MAX_LOG_META_LENGTH = exports.REDACTED_FIELD_MASK = void 0;
 exports.maskConnectionUriSecret = maskConnectionUriSecret;
 exports.maskConnectionUrisInText = maskConnectionUrisInText;
 exports.sanitizeConnectionError = sanitizeConnectionError;
@@ -10,6 +10,11 @@ exports.isSensitiveFieldName = isSensitiveFieldName;
 exports.redactSensitiveFields = redactSensitiveFields;
 exports.redactSensitiveText = redactSensitiveText;
 exports.escapeRegExp = escapeRegExp;
+exports.isLoggableError = isLoggableError;
+exports.toSafeLogError = toSafeLogError;
+exports.serializeLogMeta = serializeLogMeta;
+exports.maskErrorText = maskErrorText;
+exports.sanitizeRequestUrl = sanitizeRequestUrl;
 const MASK = '****';
 // Prevents log-line forging (CR/LF injection etc.): stripped from segments carried into the output unchanged.
 const CONTROL_CHAR_PATTERN = /[\x00-\x1F\x7F]/g;
@@ -445,4 +450,150 @@ function redactFormPairs(text) {
 }
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+// --- Log meta serialization --------------------------------------------------------------------
+// Used by the shared winston logger. `JSON.stringify(meta)` threw on circular errors (an AxiosError
+// references itself through config/request/response), which replaced the caller's error with
+// "Converting circular structure to JSON"; and `AxiosError.toJSON()` wrote the request config —
+// headers included — into the log line. An error is therefore reduced to a whitelist of fields.
+/** Upper bound of the serialized meta, in characters. Longer output is cut and marked. */
+exports.MAX_LOG_META_LENGTH = 8192;
+/** Written in place of meta that could not be serialized; the logger itself never throws. */
+exports.LOG_SERIALIZATION_ERROR = '{"logSerializationError":true}';
+const MAX_ERROR_CAUSE_DEPTH = 3;
+const SAFE_HTTP_METHOD_PATTERN = /^[A-Za-z]{1,16}$/;
+const STACK_FRAME_PATTERN = /^\s+at /;
+const URL_USERINFO_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/]*@/;
+// `Bearer <token>` / `Basic <base64>` in free text (a header echoed into an error message). Fail-closed:
+// the word after a plain-English "basic" is masked too, because a base64 value cannot be told apart from it.
+const AUTH_SCHEME_TOKEN_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
+/** Whether a value is an `Error` or an axios error (checked on the raw value, before any `toJSON`). */
+function isLoggableError(value) {
+    if (value instanceof Error) {
+        return true;
+    }
+    return typeof value === 'object' && value !== null && value.isAxiosError === true;
+}
+/**
+ * Reduces an error (plain `Error`, `AxiosError`, driver error, or a non-error thrown value) to fields
+ * that are safe to log:
+ *
+ * - `message`: connection addresses, credential pairs and `Bearer`/`Basic` tokens inside it are masked
+ * - `name`, `code`: carried over only when they match the expected shape
+ * - `status`: the HTTP status (`response.status`, `status` or `statusCode`)
+ * - `method`, `url`: from the axios request config; the URL loses its query string, fragment and userinfo
+ *   (`?api_key=…` must not reach the log)
+ * - `cause`: reduced the same way, at most `MAX_ERROR_CAUSE_DEPTH` levels deep (a cause may point back)
+ * - `stack`: only when `LOG_STACK` is not `0`/`false`; its first line is rebuilt from the masked message
+ *   and only the `at …` frames are kept, since the raw first line repeats the unmasked message
+ *
+ * Everything else — headers, request/response bodies, `config.data`, sockets — is deliberately dropped.
+ */
+function toSafeLogError(error, depth = 0) {
+    var _a;
+    if (typeof error !== 'object' || error === null) {
+        return { message: maskErrorText(String(error)) };
+    }
+    const source = error;
+    const safeError = {
+        message: typeof source.message === 'string' ? maskErrorText(source.message) : ''
+    };
+    if (typeof source.name === 'string' && SAFE_ERROR_NAME_PATTERN.test(source.name)) {
+        safeError.name = source.name;
+    }
+    if (typeof source.code === 'number' || (typeof source.code === 'string' && SAFE_ERROR_CODE_PATTERN.test(source.code))) {
+        safeError.code = source.code;
+    }
+    const response = asRecord(source.response);
+    const status = [response === null || response === void 0 ? void 0 : response.status, source.status, source.statusCode].find((value) => typeof value === 'number');
+    if (status !== undefined) {
+        safeError.status = status;
+    }
+    const config = asRecord(source.config);
+    if (config) {
+        if (typeof config.method === 'string' && SAFE_HTTP_METHOD_PATTERN.test(config.method)) {
+            safeError.method = config.method.toUpperCase();
+        }
+        if (typeof config.url === 'string') {
+            safeError.url = sanitizeRequestUrl(joinRequestUrl(config.baseURL, config.url));
+        }
+    }
+    if (source.cause !== undefined && source.cause !== null && depth < MAX_ERROR_CAUSE_DEPTH) {
+        safeError.cause = toSafeLogError(source.cause, depth + 1);
+    }
+    if (isStackLoggingEnabled() && typeof source.stack === 'string') {
+        const frames = source.stack.split('\n').filter((line) => STACK_FRAME_PATTERN.test(line));
+        safeError.stack = [`${(_a = safeError.name) !== null && _a !== void 0 ? _a : 'Error'}: ${safeError.message}`, ...frames].join('\n');
+    }
+    return safeError;
+}
+/**
+ * Serializes log meta to JSON without ever throwing.
+ *
+ * - Errors are caught on the RAW value (`this[key]`), before `toJSON` output replaces them: the value
+ *   the replacer receives for an `AxiosError` is already `toJSON()`'s copy of the request config.
+ *   They are written as `toSafeLogError` output.
+ * - Cycles become `"[Circular]"`. Detection uses the stack of ancestors of the current value, not a
+ *   `WeakSet` of every visited value: the same object referenced twice without a cycle is written twice.
+ * - `bigint` is written as a string, a `Buffer` as its length only.
+ * - Output longer than `maxLength` is cut and marked with the number of characters dropped.
+ * - Anything that still throws (a throwing getter or `toJSON`) yields `LOG_SERIALIZATION_ERROR`.
+ */
+function serializeLogMeta(meta, maxLength = exports.MAX_LOG_META_LENGTH) {
+    let json;
+    try {
+        const ancestors = [];
+        json = JSON.stringify(meta, function (key, value) {
+            const raw = this[key];
+            let result = value;
+            if (isLoggableError(raw)) {
+                result = toSafeLogError(raw);
+            }
+            else if (typeof value === 'bigint') {
+                return value.toString();
+            }
+            else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(raw)) {
+                return `[Buffer ${raw.length} bytes]`;
+            }
+            if (typeof result === 'object' && result !== null) {
+                while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+                    ancestors.pop();
+                }
+                if (ancestors.includes(result)) {
+                    return '[Circular]';
+                }
+                ancestors.push(result);
+            }
+            return result;
+        });
+    }
+    catch (_a) {
+        return exports.LOG_SERIALIZATION_ERROR;
+    }
+    if (json === undefined) {
+        return '';
+    }
+    return json.length > maxLength ? `${json.slice(0, maxLength)}…[truncated ${json.length - maxLength} chars]` : json;
+}
+/** Masks connection addresses, credential pairs and authorization tokens in an error message. */
+function maskErrorText(text) {
+    return redactSensitiveText(maskUriTextOrEmpty(text)).replace(AUTH_SCHEME_TOKEN_PATTERN, `$1 ${MASK}`);
+}
+/** Drops the query string, fragment and userinfo of a request URL. */
+function sanitizeRequestUrl(url) {
+    return url.split(/[?#]/, 1)[0].replace(URL_USERINFO_PATTERN, `$1${MASK}@`).replace(CONTROL_CHAR_PATTERN, '');
+}
+function joinRequestUrl(baseURL, url) {
+    if (SCHEME_PATTERN.test(url) || typeof baseURL !== 'string' || !baseURL) {
+        return url;
+    }
+    return `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`;
+}
+function asRecord(value) {
+    return typeof value === 'object' && value !== null ? value : undefined;
+}
+function isStackLoggingEnabled() {
+    var _a;
+    const setting = ((_a = process.env.LOG_STACK) !== null && _a !== void 0 ? _a : '').trim().toLowerCase();
+    return setting !== '0' && setting !== 'false';
 }

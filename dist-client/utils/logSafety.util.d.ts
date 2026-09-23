@@ -124,3 +124,53 @@ export declare function redactSensitiveFields<T>(value: T): T;
  */
 export declare function redactSensitiveText(text: string): string;
 export declare function escapeRegExp(value: string): string;
+/** Upper bound of the serialized meta, in characters. Longer output is cut and marked. */
+export declare const MAX_LOG_META_LENGTH = 8192;
+/** Written in place of meta that could not be serialized; the logger itself never throws. */
+export declare const LOG_SERIALIZATION_ERROR = "{\"logSerializationError\":true}";
+/** Error fields that may be written to logs. Headers, bodies and the request config are never carried over. */
+export interface SafeLogError {
+    name?: string;
+    message: string;
+    code?: string | number;
+    status?: number;
+    method?: string;
+    url?: string;
+    cause?: SafeLogError;
+    stack?: string;
+}
+/** Whether a value is an `Error` or an axios error (checked on the raw value, before any `toJSON`). */
+export declare function isLoggableError(value: unknown): boolean;
+/**
+ * Reduces an error (plain `Error`, `AxiosError`, driver error, or a non-error thrown value) to fields
+ * that are safe to log:
+ *
+ * - `message`: connection addresses, credential pairs and `Bearer`/`Basic` tokens inside it are masked
+ * - `name`, `code`: carried over only when they match the expected shape
+ * - `status`: the HTTP status (`response.status`, `status` or `statusCode`)
+ * - `method`, `url`: from the axios request config; the URL loses its query string, fragment and userinfo
+ *   (`?api_key=…` must not reach the log)
+ * - `cause`: reduced the same way, at most `MAX_ERROR_CAUSE_DEPTH` levels deep (a cause may point back)
+ * - `stack`: only when `LOG_STACK` is not `0`/`false`; its first line is rebuilt from the masked message
+ *   and only the `at …` frames are kept, since the raw first line repeats the unmasked message
+ *
+ * Everything else — headers, request/response bodies, `config.data`, sockets — is deliberately dropped.
+ */
+export declare function toSafeLogError(error: unknown, depth?: number): SafeLogError;
+/**
+ * Serializes log meta to JSON without ever throwing.
+ *
+ * - Errors are caught on the RAW value (`this[key]`), before `toJSON` output replaces them: the value
+ *   the replacer receives for an `AxiosError` is already `toJSON()`'s copy of the request config.
+ *   They are written as `toSafeLogError` output.
+ * - Cycles become `"[Circular]"`. Detection uses the stack of ancestors of the current value, not a
+ *   `WeakSet` of every visited value: the same object referenced twice without a cycle is written twice.
+ * - `bigint` is written as a string, a `Buffer` as its length only.
+ * - Output longer than `maxLength` is cut and marked with the number of characters dropped.
+ * - Anything that still throws (a throwing getter or `toJSON`) yields `LOG_SERIALIZATION_ERROR`.
+ */
+export declare function serializeLogMeta(meta: unknown, maxLength?: number): string;
+/** Masks connection addresses, credential pairs and authorization tokens in an error message. */
+export declare function maskErrorText(text: string): string;
+/** Drops the query string, fragment and userinfo of a request URL. */
+export declare function sanitizeRequestUrl(url: string): string;
