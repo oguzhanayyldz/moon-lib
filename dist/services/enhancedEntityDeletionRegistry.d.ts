@@ -1,5 +1,4 @@
 import { EntityDeletionStrategy, IEntityDeletionRegistry, DeletionContext, DeletionResult, BatchDeletionStrategy } from '../common/interfaces/entity-deletion.interface';
-import { BatchDeletionContext, BatchDeletionResult } from '../common/interfaces/batch-deletion.interface';
 /**
  * Enhanced Entity Deletion Registry with batch operations and performance optimizations
  */
@@ -39,10 +38,6 @@ export declare class EnhancedEntityDeletionRegistry implements IEntityDeletionRe
      * Execute single entity deletion
      */
     execute(context: DeletionContext): Promise<DeletionResult>;
-    /**
-     * Execute batch deletion
-     */
-    executeBatch(context: BatchDeletionContext): Promise<BatchDeletionResult>;
     /**
      * Execute with transaction support
      */

@@ -91,17 +91,13 @@ class BatchOperationHelpers {
      * Sort items by priority and dependencies
      */
     static sortItemsByPriorityAndDependencies(items) {
-        // Create a map of entity IDs for quick lookup
+        // Topological sort (dependency-first) across ALL items, with priority as the
+        // tie-breaker among items that are otherwise unordered by dependencies.
+        // Splitting into "with"/"without dependencies" groups before sorting is wrong:
+        // a dependency that has no dependencies of its own would land in the
+        // "without dependencies" group and get sorted AFTER its dependents.
         const entityIdSet = new Set(items.map(item => item.entityId));
-        // Separate items with and without dependencies
-        const itemsWithDependencies = items.filter(item => item.dependencies && item.dependencies.length > 0);
-        const itemsWithoutDependencies = items.filter(item => !item.dependencies || item.dependencies.length === 0);
-        // Sort items without dependencies by priority
-        itemsWithoutDependencies.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-        // Topological sort for items with dependencies
-        const sortedWithDependencies = this.topologicalSort(itemsWithDependencies, entityIdSet);
-        // Combine sorted arrays
-        return [...sortedWithDependencies, ...itemsWithoutDependencies];
+        return this.topologicalSort(items, entityIdSet);
     }
     /**
      * Perform topological sort on items with dependencies
