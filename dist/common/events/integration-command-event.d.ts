@@ -1,5 +1,6 @@
 import { ResourceName } from "../types/resourceName";
 import { Subjects } from "./subjects";
+import { CommandDispatchInfo } from "../constants/command-item-summary";
 export interface IntegrationCommandEvent {
     subject: Subjects.IntegrationCommand;
     data: {
@@ -14,5 +15,7 @@ export interface IntegrationCommandEvent {
             integrationId: string;
         };
         replyTo?: any;
+        /** Gönderim bağlamı (Karar 5): yalnız yayınlayan servisin outbox'ında okunur, yönlendirici platforma iletmez */
+        dispatch?: CommandDispatchInfo;
     };
 }
