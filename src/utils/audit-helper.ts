@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { UserRole } from '../common/types/user-role';
+import { UserRole, parseUserRole } from '../common/types/user-role';
 
 export interface AuditLogEntry {
     service: string;
@@ -40,7 +40,7 @@ export const createAuditLogEntry = (
         actualUserId: currentUser?.subUserId || currentUser?.id || 'unknown',
         effectiveUserId: currentUser?.id || 'unknown',
         isSubUser: currentUser?.isSubUserMode || false,
-        userRole: currentUser?.role || UserRole.SubUser,
+        userRole: parseUserRole(currentUser?.role) ?? UserRole.SubUser,
         parentUserId: currentUser?.isSubUserMode ? currentUser?.id : undefined,
         success: true,
         metadata,
