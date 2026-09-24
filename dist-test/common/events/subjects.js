@@ -14,6 +14,10 @@ var Subjects;
     Subjects["UserCreated"] = "user:created";
     Subjects["UserUpdated"] = "user:updated";
     Subjects["UserConfigUpdated"] = "user:config:updated";
+    // Hesap duzeyinde oturum iptali (TASK-MUFJ7F2IFKC77)
+    // auth → subscription: `sessionsRevokedAt` damgasi. Redis servis basina izole,
+    // UserUpdated `version` artmayan damgayi tasiyamaz — tek yol bu event.
+    Subjects["UserSessionsRevoked"] = "user:sessions:revoked";
     Subjects["StockCreated"] = "stock:created";
     Subjects["StockUpdated"] = "stock:updated";
     Subjects["OrderCreated"] = "order:created";

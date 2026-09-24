@@ -21,6 +21,12 @@ export interface UserPayload {
     subUserRole?: UserRole;   // SubUser'ın rolü (her zaman SubUser)
     emailVerified?: boolean;
     onboardingCompleted?: boolean;
+    // Oturum baslangici (ms) — auth giriste basar, yenilemede ve yeniden basimlarda
+    // TASIR (TASK-MUFF45OU53HGU). `requireFreshSession` iptal esigiyle karsilastirir.
+    sst?: number;
+    // JWT'nin basim ani (saniye) — `jwt.verify` payload'i oldugu gibi aktarildigi
+    // icin her token'da var; `sst` tasimayan eski token'da yedek baslangic.
+    iat?: number;
 }
 
 /**

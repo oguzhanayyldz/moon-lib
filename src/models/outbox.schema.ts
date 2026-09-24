@@ -72,6 +72,7 @@ import {
     IntegrationAuthFailureExceededEvent,
     StockUpdateConfirmedEvent,
     NewsletterEmailRequestedEvent,
+    UserSessionsRevokedEvent,
     StockCountStartedEvent,
     StockCountFinishedEvent
 } from "../common";
@@ -146,6 +147,7 @@ interface EventPayloadMap {
     [Subjects.IntegrationAuthFailureExceeded]: IntegrationAuthFailureExceededEvent['data'];
     [Subjects.StockUpdateConfirmed]: StockUpdateConfirmedEvent['data'];
     [Subjects.NewsletterEmailRequested]: NewsletterEmailRequestedEvent['data'];
+    [Subjects.UserSessionsRevoked]: UserSessionsRevokedEvent['data'];
     [Subjects.StockCountStarted]: StockCountStartedEvent['data'];
     [Subjects.StockCountFinished]: StockCountFinishedEvent['data'];
 }

@@ -10,3 +10,4 @@ export * from './sub-user-context';
 export * from './require-email-verified';
 export * from './require-onboarding';
 export * from './require-active-subscription';
+export * from './require-fresh-session';
