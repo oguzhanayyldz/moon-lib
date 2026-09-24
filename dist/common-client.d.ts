@@ -26,6 +26,7 @@ export * from './common/types/user-role';
 export * from './common/types/permission.types';
 export * from './common/types/integration-params';
 export * from './common/types/cron-defaults';
+export * from './common/types/amount-contract';
 export * from './common/events/types/order-status';
 export * from './common/events/types/order-status2';
 export * from './common/events/types/order-type';

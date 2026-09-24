@@ -2,6 +2,7 @@ import { OrderStatus } from "../events/types/order-status";
 import { OrderType } from "../events/types/order-type";
 import { PaymentType } from "../events/types/payment-type";
 import { CostSource } from "../types/cost-source";
+import { LineDiscountBasis, OrderDiscountBasis } from "../types/amount-contract";
 import { CurrencyCode } from "../types/currency-code";
 import { ResourceName } from "../types/resourceName";
 
@@ -31,6 +32,15 @@ export interface OrderIntegrationCreated {
     currency: CurrencyCode;
     orderProducts: OrderIntegrationProductCreted[];
     fields?: Record<string, any>;
+    /**
+     * Tutar sozlesmesi v2 BEYANI (INDIRIM-SOZLESMESI-TASARIM §4.2). Donusturucu kalem ve siparis
+     * indiriminin ANLAMINI bildirir; orders bunu tek noktada kanonik bicime cevirir ve siparise
+     * `amountContract` isareti yazar. IKISI BIRLIKTE gonderilmeli: yalniz biri ya da gecersiz deger
+     * gelirse beyan yok sayilir ve siparis v1 kurallariyla islenir. Gondermeyen uretici = v1 (bugunku
+     * davranis, bit bit ayni). Ayrinti: `common/types/amount-contract.ts`.
+     */
+    lineDiscountBasis?: LineDiscountBasis;
+    orderDiscountBasis?: OrderDiscountBasis;
 }
 
 export interface OrderIntegrationProductCreted {

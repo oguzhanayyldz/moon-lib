@@ -44,6 +44,7 @@ __exportStar(require("./common/types/user-role"), exports);
 __exportStar(require("./common/types/permission.types"), exports);
 __exportStar(require("./common/types/integration-params"), exports);
 __exportStar(require("./common/types/cron-defaults"), exports);
+__exportStar(require("./common/types/amount-contract"), exports);
 // ========== Event Types (pure enums, no backend deps) ==========
 __exportStar(require("./common/events/types/order-status"), exports);
 __exportStar(require("./common/events/types/order-status2"), exports);
