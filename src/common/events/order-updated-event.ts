@@ -1,6 +1,7 @@
 import { CurrencyCode } from "../types/currency-code";
 import { ResourceName } from "../types/resourceName";
 import { CostSource } from "../types/cost-source";
+import { AmountContract } from "../types/amount-contract";
 import { Subjects } from "./subjects";
 import { OrderStatus } from "./types/order-status";
 import { OrderStatus2 } from "./types/order-status2";
@@ -117,6 +118,12 @@ export interface OrderUpdated {
     costTotal?: number;
     commissionTotal?: number;
     discountTotal?: number;
+    /**
+     * Tutar sozlesmesi isareti (v2). VARSA kalem `discountTotal` muhasebe indirimidir, siparis
+     * `discountTotal` = Σ kalem ve `total` = Σ(adet × price − discountTotal) + kargo. YOKSA kayit v1'dir
+     * (eski kurallar). Opsiyonel, additive: alani okumayan tuketici eski davranisla calisir.
+     */
+    amountContract?: AmountContract;
     invoiceTotal?: number;
     creditTotal?: number;
     shippingTotal?: number;
