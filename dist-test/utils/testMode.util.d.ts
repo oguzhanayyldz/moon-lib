@@ -1,0 +1,11 @@
+/**
+ * testMode normalizasyonu (merkezi).
+ *
+ * `testMode` DB'de credential olarak STRING ("true"/"false") saklanır. `=== false` ya da truthy
+ * kontrolleri "false" string'inde yanlış ortama gider.
+ *
+ * Kural: test ortamı YALNIZ açık `true` / `"true"` / `1` / `"1"` (büyük-küçük harf duyarsız) ile
+ * seçilir. Diğer her şey (false, "false", undefined, null, "") → CANLI.
+ */
+export declare function isTestMode(value: unknown): boolean;
+//# sourceMappingURL=testMode.util.d.ts.map

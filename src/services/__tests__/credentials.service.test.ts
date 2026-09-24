@@ -87,6 +87,29 @@ describe('CredentialsService.mergeAndParse — source-level enabled override', (
     });
 });
 
+describe('CredentialsService.mergeAndParse — testMode normalizasyonu', () => {
+    const merge = (integration: Record<string, any>, base: Record<string, any> | null = null) =>
+        CredentialsService.mergeAndParse(base, integration, 'id', 'Hepsiburada', IntegrationType.MarketPlace);
+
+    it.each([
+        [true, true], ['true', true], ['TRUE', true], ['True', true], [1, true], ['1', true],
+        [false, false], ['false', false], ['FALSE', false], [0, false], ['0', false],
+        ['', false], [null, false], ['yes', false], [2, false]
+    ])('testMode %p → %p', (input, expected) => {
+        expect(merge({ testMode: input }).testMode).toBe(expected);
+    });
+
+    it('anahtar yoksa testMode eklenmez (platform varsayılanı korunur)', () => {
+        const result = merge({ apiKey: 'k' });
+        expect('testMode' in result).toBe(false);
+    });
+
+    it('BASE üzerindeki string testMode de normalize edilir, integration override kazanır', () => {
+        expect(merge({}, { testMode: 'false' }).testMode).toBe(false);
+        expect(merge({ testMode: 'false' }, { testMode: 'true' }).testMode).toBe(false);
+    });
+});
+
 describe('CredentialsService.mergeAndParse — price_update_settings source override', () => {
     const baseSettings = {
         price_update_settings: JSON.stringify({

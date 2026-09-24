@@ -22,6 +22,7 @@ exports.CredentialsService = void 0;
 const logger_service_1 = require("./logger.service");
 const integration_type_1 = require("../common/types/integration-type");
 const encryption_util_1 = require("../utils/encryption.util");
+const testMode_util_1 = require("../utils/testMode.util");
 class CredentialsService {
     /**
      * BASE ve Integration credentials'ı birleştirir ve parse eder
@@ -52,6 +53,11 @@ class CredentialsService {
                     }
                 }
             }
+        }
+        // 2.6. testMode DB'de string ("false") saklanır → boolean'a normalize et.
+        // Anahtar yoksa dokunma: platform varsayılanı (ör. Amazon sandbox) korunur.
+        if (merged.testMode !== undefined) {
+            merged.testMode = (0, testMode_util_1.isTestMode)(merged.testMode);
         }
         logger_service_1.logger.debug('CredentialsService.mergeAndParse - Merged credentials', {
             baseCount: Object.keys(baseObj).length,

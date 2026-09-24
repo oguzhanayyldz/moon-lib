@@ -20,6 +20,7 @@
 import { logger } from './logger.service';
 import { IntegrationType } from '../common/types/integration-type';
 import { EncryptionUtil } from '../utils/encryption.util';
+import { isTestMode } from '../utils/testMode.util';
 
 export interface ParsedShipmentSettings {
     enabled: boolean;
@@ -157,6 +158,12 @@ export class CredentialsService {
                     }
                 }
             }
+        }
+
+        // 2.6. testMode DB'de string ("false") saklanır → boolean'a normalize et.
+        // Anahtar yoksa dokunma: platform varsayılanı (ör. Amazon sandbox) korunur.
+        if (merged.testMode !== undefined) {
+            merged.testMode = isTestMode(merged.testMode);
         }
 
         logger.debug('CredentialsService.mergeAndParse - Merged credentials', {
