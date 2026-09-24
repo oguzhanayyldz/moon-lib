@@ -751,19 +751,22 @@ exports.logger = {
 };
 // saveWithRetry sahtesi: gerçek sözleşmeyle AYNI tekrar kuralı (TASK-MUEM4VTE4HLFW).
 // reapply yoksa tek deneme; reapply varsa sürüm hatasında belge _id ile yeniden okunur,
-// reapply taze belgeye uygulanır ve taze belge kaydedilir (bekleme yok). Açık
-// transaction'da yeniden okunmaz. Yalnız backoff ve loglama atlanır.
+// reapply taze belgeye uygulanır ve taze belge kaydedilir (bekleme yok). Session
+// parametresi yoksa belgenin bağlı session'ı (doc.$session()) kullanılır; yeniden okuma
+// ve taze belgenin kaydı o session ile yapılır (transaction içinde de). İlk deneme eski
+// sahte gibi argümansız save(). Yalnız backoff ve loglama atlanır.
 const mockSaveWithRetry = async (doc, _operationName, session, reapply) => {
+    var _a;
     // Eğer save metodu yoksa mock bir sonuç döndür
     if (!doc || typeof doc.save !== 'function') {
         return Object.assign(Object.assign({}, doc), { _id: doc.id || 'mock-id' });
     }
-    const canReload = typeof reapply === 'function'
-        && !(session && typeof session.inTransaction === 'function' && session.inTransaction());
+    const canReload = typeof reapply === 'function';
+    const boundSession = (_a = session !== null && session !== void 0 ? session : (typeof doc.$session === 'function' ? doc.$session() : undefined)) !== null && _a !== void 0 ? _a : undefined;
     let target = doc;
     for (let attempt = 1;; attempt++) {
         try {
-            return await target.save();
+            return await (attempt === 1 ? target.save() : target.save(boundSession ? { session: boundSession } : {}));
         }
         catch (error) {
             const isVersionError = error instanceof Error && (error.message.includes('version') ||
@@ -773,7 +776,7 @@ const mockSaveWithRetry = async (doc, _operationName, session, reapply) => {
                 throw error;
             }
             const query = doc.constructor.findById(doc._id);
-            const fresh = await (session && typeof (query === null || query === void 0 ? void 0 : query.session) === 'function' ? query.session(session) : query);
+            const fresh = await (boundSession && typeof (query === null || query === void 0 ? void 0 : query.session) === 'function' ? query.session(boundSession) : query);
             if (!fresh) {
                 throw new Error(`Document not found: ${doc._id}`);
             }

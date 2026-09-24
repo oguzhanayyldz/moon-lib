@@ -107,15 +107,5 @@ describe('OptimisticLockingUtil.saveWithRetry — bayat sürüm (gerçek Mongo)'
         expect(reapply).not.toHaveBeenCalled();
     });
 
-    it('açık transaction içinde yeniden okunmaz (snapshot yeni sürümü göremez), hata tek denemede fırlar', async () => {
-        const versionError = new Error('No matching document found for id "x" version 0');
-        const doc = { id: 'x', save: jest.fn().mockRejectedValue(versionError) };
-        const session = { inTransaction: () => true } as unknown as mongoose.ClientSession;
-        const reapply = jest.fn();
-
-        await expect(OptimisticLockingUtil.saveWithRetry(doc, 'probe', session, reapply)).rejects.toBe(versionError);
-        expect(doc.save).toHaveBeenCalledTimes(1);
-        expect(doc.save).toHaveBeenCalledWith({ session });
-        expect(reapply).not.toHaveBeenCalled();
-    });
+    // Session/transaction davranışı gerçek replica set ister: optimisticLocking.saveWithRetry.replset.test.ts
 });

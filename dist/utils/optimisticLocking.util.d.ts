@@ -51,8 +51,14 @@ export declare class OptimisticLockingUtil {
     *   - `reapply` VERİLDİYSE her tekrar denemede belge `_id` ile YENİDEN OKUNUR, `reapply(fresh)`
     *     değişikliği taze değerler üzerinden yeniden hesaplar ve taze belge kaydedilir. Eşzamanlı
     *     yazarın dokunduğu alanlar korunur. Çağıran dönüş değerini kullanmalıdır.
-    *   - Açık bir transaction içinde yeniden okuma anlık görüntüyü görür, yeni sürümü göremez;
-    *     orada hata ilk denemede fırlatılır, transaction düzeyindeki yeniden deneme devralır.
+    *   - SESSION: `session` parametresi yoksa belgenin bağlı olduğu session (`document.$session()`,
+    *     ör. `.session(s)` ile okunmuş belge) kullanılır; mongoose save de aynısını yapar
+    *     (model.js:290-293). Yeniden okuma ve taze belgenin kaydı bu session ile yapılır; aksi halde
+    *     transaction içindeki bir belge transaction DIŞINA yazılır ve abort onu geri almaz.
+    *   - Transaction içinde de yeniden okunur (aynı session ile): orada VersionError ancak snapshot
+    *     bellekteki belgeden YENİ bir sürüm içerdiğinde oluşur ve yeniden okuma o sürümü görür.
+    *     Snapshot'tan sonra gelen eşzamanlı commit ise WriteConflict'tir (sürüm hatası değildir),
+    *     ilk denemede fırlar ve transaction düzeyindeki yeniden deneme devralır.
     */
     static saveWithRetry<T extends {
         save(options?: any): Promise<any>;

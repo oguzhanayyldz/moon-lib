@@ -111,23 +111,30 @@ class OptimisticLockingUtil {
     *   - `reapply` VERİLDİYSE her tekrar denemede belge `_id` ile YENİDEN OKUNUR, `reapply(fresh)`
     *     değişikliği taze değerler üzerinden yeniden hesaplar ve taze belge kaydedilir. Eşzamanlı
     *     yazarın dokunduğu alanlar korunur. Çağıran dönüş değerini kullanmalıdır.
-    *   - Açık bir transaction içinde yeniden okuma anlık görüntüyü görür, yeni sürümü göremez;
-    *     orada hata ilk denemede fırlatılır, transaction düzeyindeki yeniden deneme devralır.
+    *   - SESSION: `session` parametresi yoksa belgenin bağlı olduğu session (`document.$session()`,
+    *     ör. `.session(s)` ile okunmuş belge) kullanılır; mongoose save de aynısını yapar
+    *     (model.js:290-293). Yeniden okuma ve taze belgenin kaydı bu session ile yapılır; aksi halde
+    *     transaction içindeki bir belge transaction DIŞINA yazılır ve abort onu geri almaz.
+    *   - Transaction içinde de yeniden okunur (aynı session ile): orada VersionError ancak snapshot
+    *     bellekteki belgeden YENİ bir sürüm içerdiğinde oluşur ve yeniden okuma o sürümü görür.
+    *     Snapshot'tan sonra gelen eşzamanlı commit ise WriteConflict'tir (sürüm hatası değildir),
+    *     ilk denemede fırlar ve transaction düzeyindeki yeniden deneme devralır.
     */
     static async saveWithRetry(document, operationName, session, reapply) {
+        var _a, _b, _c;
         const docName = operationName || `Document ${document.id || 'unknown'}`;
-        const canReload = !!reapply && !(session && session.inTransaction());
+        const boundSession = session !== null && session !== void 0 ? session : ((_c = (_b = (_a = document).$session) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : undefined);
         let attempt = 0;
         return await this.retryWithOptimisticLocking(async () => {
             attempt++;
-            const target = attempt === 1 ? document : await this.reloadDocument(document, session);
+            const target = attempt === 1 ? document : await this.reloadDocument(document, boundSession);
             if (attempt > 1) {
                 await reapply(target);
             }
-            const saveOptions = session ? { session } : {};
+            const saveOptions = boundSession ? { session: boundSession } : {};
             await target.save(saveOptions);
             return target;
-        }, canReload ? 5 : 1, 100, `${docName} save${session ? ' (transactional)' : ''}`);
+        }, reapply ? 5 : 1, 100, `${docName} save${boundSession ? ' (transactional)' : ''}`);
     }
     /**
      * saveWithRetry tekrar denemesi için belgeyi `_id` ile veritabanından yeniden okur.
