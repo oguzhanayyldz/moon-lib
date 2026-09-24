@@ -82,6 +82,7 @@ __exportStar(require("./security/MicroserviceSecurityService"), exports);
 __exportStar(require("./security-logger"), exports);
 // Metrics
 __exportStar(require("./metrics/EventMetrics"), exports);
+__exportStar(require("./metrics/OwnershipMetrics"), exports);
 __exportStar(require("./middleware/httpMetrics"), exports);
 // Performance Optimizations
 // Redis connection pooling handled by redisWrapper.service

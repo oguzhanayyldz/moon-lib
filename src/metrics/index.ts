@@ -5,3 +5,4 @@
  */
 
 export { EventMetrics } from './EventMetrics';
+export { OwnershipMetrics } from './OwnershipMetrics';
