@@ -10,6 +10,10 @@ export enum Subjects {
     UserCreated = "user:created",
     UserUpdated = "user:updated",
     UserConfigUpdated = "user:config:updated",
+    // Hesap duzeyinde oturum iptali (TASK-MUFJ7F2IFKC77)
+    // auth → subscription: `sessionsRevokedAt` damgasi. Redis servis basina izole,
+    // UserUpdated `version` artmayan damgayi tasiyamaz — tek yol bu event.
+    UserSessionsRevoked = "user:sessions:revoked",
     StockCreated = "stock:created",
     StockUpdated = "stock:updated",
     OrderCreated = "order:created",

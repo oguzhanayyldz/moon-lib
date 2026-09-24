@@ -51,6 +51,7 @@ const orderIntegrationStatusUpdated_publisher_1 = require("../events/publishers/
 const productMatched_publisher_1 = require("../events/publishers/productMatched.publisher");
 const notificationCreated_publisher_1 = require("../events/publishers/notificationCreated.publisher");
 const newsletterEmailRequested_publisher_1 = require("../events/publishers/newsletterEmailRequested.publisher");
+const userSessionsRevoked_publisher_1 = require("../events/publishers/userSessionsRevoked.publisher");
 const orderProductUpdated_publisher_1 = require("../events/publishers/orderProductUpdated.publisher");
 const entityVersionUpdated_publisher_1 = require("../events/publishers/entityVersionUpdated.publisher");
 const entityVersionBulkUpdated_publisher_1 = require("../events/publishers/entityVersionBulkUpdated.publisher");
@@ -641,6 +642,10 @@ class EventPublisherJob {
                     break;
                 case common_1.Subjects.NewsletterEmailRequested:
                     yield new newsletterEmailRequested_publisher_1.NewsletterEmailRequestedPublisher(this.natsClient)
+                        .publish(event.payload);
+                    break;
+                case common_1.Subjects.UserSessionsRevoked:
+                    yield new userSessionsRevoked_publisher_1.UserSessionsRevokedPublisher(this.natsClient)
                         .publish(event.payload);
                     break;
                 case common_1.Subjects.OrderProductUpdated:

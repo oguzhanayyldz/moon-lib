@@ -17,6 +17,8 @@ export interface UserPayload {
     subUserRole?: UserRole;
     emailVerified?: boolean;
     onboardingCompleted?: boolean;
+    sst?: number;
+    iat?: number;
 }
 /**
  * ⚠️ ALT KULLANICI TESPITI `role` ILE YAPILAMAZ — issue #651

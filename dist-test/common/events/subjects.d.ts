@@ -8,6 +8,7 @@ export declare enum Subjects {
     UserCreated = "user:created",
     UserUpdated = "user:updated",
     UserConfigUpdated = "user:config:updated",
+    UserSessionsRevoked = "user:sessions:revoked",
     StockCreated = "stock:created",
     StockUpdated = "stock:updated",
     OrderCreated = "order:created",
