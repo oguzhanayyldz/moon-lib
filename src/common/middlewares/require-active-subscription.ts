@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { NotAuthorizedError } from '../errors/not-authorized-error';
-import { UserRole } from '../types/user-role';
+import { UserRole, parseUserRole } from '../types/user-role';
 
 interface RequireActiveSubscriptionOptions {
     allowRead?: boolean;
@@ -13,7 +13,7 @@ export const requireActiveSubscription = (options: RequireActiveSubscriptionOpti
         }
 
         // Admin ve SubUser muaf
-        const roleNumber = Number(req.currentUser.role);
+        const roleNumber = parseUserRole(req.currentUser.role);
         if (roleNumber === UserRole.Admin || roleNumber === UserRole.SubUser) {
             return next();
         }

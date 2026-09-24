@@ -8,7 +8,7 @@ const requireAuthAdmin = (req, res, next) => {
     if (!req.currentUser) {
         throw new not_authorized_error_1.NotAuthorizedError();
     }
-    if (req.currentUser.role != user_role_1.UserRole.Admin) {
+    if ((0, user_role_1.parseUserRole)(req.currentUser.role) !== user_role_1.UserRole.Admin) {
         throw new not_authorized_error_1.NotAuthorizedError();
     }
     // ⚠️ `role` TEK BASINA ADMIN KANITI DEGIL: alt kullanici JWT'sinde `role`

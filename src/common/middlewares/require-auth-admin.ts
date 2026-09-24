@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { NotAuthorizedError } from '../errors/not-authorized-error';
-import { UserRole } from '../types/user-role';
+import { UserRole, parseUserRole } from '../types/user-role';
 import { isSubUser } from './current-user';
 
 export const requireAuthAdmin = (req: Request, res: Response, next: NextFunction) => {
@@ -8,7 +8,7 @@ export const requireAuthAdmin = (req: Request, res: Response, next: NextFunction
         throw new NotAuthorizedError();
     }
 
-    if (req.currentUser.role != UserRole.Admin) {
+    if (parseUserRole(req.currentUser.role) !== UserRole.Admin) {
         throw new NotAuthorizedError();
     }
 

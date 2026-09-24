@@ -38,7 +38,7 @@ export interface UserPayload {
  *      JWT'de bu alan hic yok.
  *   2. `buildLoginJwtPayload`'in "orphan" dali — `parentUser` alani bos bir
  *      alt kullanici (semada zorunlu degil) normal kullanici gibi donuyor.
- * `Number(role) === UserRole.SubUser` yedek sinyal olarak eklendi: normal akista
+ * `parseUserRole(role) === UserRole.SubUser` yedek sinyal olarak eklendi: normal akista
  * hicbir zaman dogru olmuyordu (role = PARENT'IN rolu), bu iki kenar durumda ise
  * `role` GERCEKTEN `SubUser`. Ikisinin OR'u hem yaygin hem nadir yolu kapatiyor.
  */

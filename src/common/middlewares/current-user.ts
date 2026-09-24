@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { UserRole } from '../types/user-role';
+import { UserRole, parseUserRole } from '../types/user-role';
 import { redisWrapper } from '../../services/redisWrapper.service';
 
 export interface UserPayload {
@@ -44,12 +44,12 @@ export interface UserPayload {
  *      JWT'de bu alan hic yok.
  *   2. `buildLoginJwtPayload`'in "orphan" dali — `parentUser` alani bos bir
  *      alt kullanici (semada zorunlu degil) normal kullanici gibi donuyor.
- * `Number(role) === UserRole.SubUser` yedek sinyal olarak eklendi: normal akista
+ * `parseUserRole(role) === UserRole.SubUser` yedek sinyal olarak eklendi: normal akista
  * hicbir zaman dogru olmuyordu (role = PARENT'IN rolu), bu iki kenar durumda ise
  * `role` GERCEKTEN `SubUser`. Ikisinin OR'u hem yaygin hem nadir yolu kapatiyor.
  */
 export const isSubUser = (user: UserPayload): boolean => {
-    return user.isSubUserMode === true || Number(user.role) === UserRole.SubUser;
+    return user.isSubUserMode === true || parseUserRole(user.role) === UserRole.SubUser;
 };
 
 /**
@@ -73,14 +73,16 @@ export const getActualUserId = (user: UserPayload): string => {
 };
 
 export const hasPermission = (user: UserPayload, resource: string, action: string): boolean => {
-    // Convert role to number to ensure type safety
-    const roleNumber = Number(user.role);
+    const roleNumber = parseUserRole(user.role);
 
     // Admin and User roles have full access
     if (roleNumber === UserRole.Admin || roleNumber === UserRole.User) {
-        // SubUser mode kontrolü - SubUser modunda ise permissions'a bak
-        if (user.isSubUserMode && user.permissions) {
-            const permission = user.permissions.find(p => p.resource === resource);
+        // ⚠️ Alt kullanici modunda `role` HESAP SAHIBININ rolu — tam yetki
+        // DEGIL. Izin listesi yoksa (bozuk/eski token) RED: onceden
+        // `isSubUserMode && permissions` kosulu dusup `return true`'ya
+        // iniyordu, yani alt kullanici sahip yetkisi kazaniyordu (SESS-D).
+        if (user.isSubUserMode) {
+            const permission = user.permissions?.find(p => p.resource === resource);
             return permission ? permission.actions.includes(action) || permission.actions.includes('*') : false;
         }
         return true;
@@ -121,8 +123,7 @@ export const hasPlatformPermission = (
         return true;
     }
 
-    // Convert role to number
-    const roleNumber = Number(user.role);
+    const roleNumber = parseUserRole(user.role);
 
     // Admin and User roles - check if SubUser mode
     if (roleNumber === UserRole.Admin || roleNumber === UserRole.User) {
@@ -176,15 +177,12 @@ declare global {
  * `Number(null)` sonrasi `0 != 0` false olup SESSIZCE ADMIN yetkisi verilirdi
  * — normalizasyonun kendisinin actigi bir fail-open.
  *
- * `null`/`undefined` (rol hic yok) `NaN`'a eslenir — hicbir `UserRole` degeriyle
- * ESLESMEZ, yani hem gevsek hem kati karsilastirmalarda GUVENLI sekilde
- * reddedilir. Bos string/dizi/`false` gibi diger "sahte sifir" degerler zaten
- * ONCEDEN de gevsek (`!=`) karsilastirmalarda kazara gecebiliyordu — bu, bu
- * PR'in kapsami DISINDA (issue #651 yalnizca dogru bicimli roldeki tip
- * uyumsuzlugunu hedefliyor).
+ * Ayni sinif bos string/`false`/`" 0 "`/`[]` icin de gecerliydi (hepsi
+ * `Number(...) === 0`); SEC-1-SESS-D ile ayristirma `parseUserRole`'a tasindi:
+ * yalniz `0|1|2` ve `"0"|"1"|"2"` gecerli, gerisi `NaN` → hicbir `UserRole`
+ * degeriyle ESLESMEZ, gevsek (`!=`) ve kati karsilastirmalarda RED.
  */
-const normalizeRole = (role: unknown): number =>
-    role === null || role === undefined ? NaN : Number(role);
+const normalizeRole = (role: unknown): number => parseUserRole(role) ?? NaN;
 
 export const currentUser = (req: Request, res: Response, next: NextFunction) => {
     if (!req.session?.jwt) {

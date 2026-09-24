@@ -6,6 +6,7 @@ const user_role_1 = require("../common/types/user-role");
  * SubUser context için audit log entry oluşturur
  */
 const createAuditLogEntry = (req, serviceName, operation, resourceType, resourceId, metadata) => {
+    var _a;
     const currentUser = req.currentUser;
     return {
         service: serviceName,
@@ -15,7 +16,7 @@ const createAuditLogEntry = (req, serviceName, operation, resourceType, resource
         actualUserId: (currentUser === null || currentUser === void 0 ? void 0 : currentUser.subUserId) || (currentUser === null || currentUser === void 0 ? void 0 : currentUser.id) || 'unknown',
         effectiveUserId: (currentUser === null || currentUser === void 0 ? void 0 : currentUser.id) || 'unknown',
         isSubUser: (currentUser === null || currentUser === void 0 ? void 0 : currentUser.isSubUserMode) || false,
-        userRole: (currentUser === null || currentUser === void 0 ? void 0 : currentUser.role) || user_role_1.UserRole.SubUser,
+        userRole: (_a = (0, user_role_1.parseUserRole)(currentUser === null || currentUser === void 0 ? void 0 : currentUser.role)) !== null && _a !== void 0 ? _a : user_role_1.UserRole.SubUser,
         parentUserId: (currentUser === null || currentUser === void 0 ? void 0 : currentUser.isSubUserMode) ? currentUser === null || currentUser === void 0 ? void 0 : currentUser.id : undefined,
         success: true,
         metadata,

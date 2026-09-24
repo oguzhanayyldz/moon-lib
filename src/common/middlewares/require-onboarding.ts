@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { NotAuthorizedError } from '../errors/not-authorized-error';
-import { UserRole } from '../types/user-role';
+import { UserRole, parseUserRole } from '../types/user-role';
 
 export const requireOnboarding = (req: Request, res: Response, next: NextFunction) => {
     if (!req.currentUser) {
@@ -8,7 +8,7 @@ export const requireOnboarding = (req: Request, res: Response, next: NextFunctio
     }
 
     // Admin ve SubUser muaf
-    const roleNumber = Number(req.currentUser.role);
+    const roleNumber = parseUserRole(req.currentUser.role);
     if (roleNumber === UserRole.Admin || roleNumber === UserRole.SubUser) {
         return next();
     }

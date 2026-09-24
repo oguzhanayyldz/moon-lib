@@ -8,7 +8,7 @@ const requireOnboarding = (req, res, next) => {
         throw new not_authorized_error_1.NotAuthorizedError();
     }
     // Admin ve SubUser muaf
-    const roleNumber = Number(req.currentUser.role);
+    const roleNumber = (0, user_role_1.parseUserRole)(req.currentUser.role);
     if (roleNumber === user_role_1.UserRole.Admin || roleNumber === user_role_1.UserRole.SubUser) {
         return next();
     }
