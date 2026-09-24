@@ -26,6 +26,9 @@ exports.toSafeLogError = toSafeLogError;
 exports.serializeLogMeta = serializeLogMeta;
 exports.maskErrorText = maskErrorText;
 exports.sanitizeRequestUrl = sanitizeRequestUrl;
+exports.maskResourceId = maskResourceId;
+exports.hashTenantId = hashTenantId;
+const crypto_1 = require("crypto");
 const MASK = '****';
 // Prevents log-line forging (CR/LF injection etc.): stripped from segments carried into the output unchanged.
 const CONTROL_CHAR_PATTERN = /[\x00-\x1F\x7F]/g;
@@ -699,4 +702,27 @@ function looksLikeHttpRequestConfig(value) {
 function looksLikeHttpResponse(value) {
     const record = asRecord(value);
     return !!record && typeof record.status === 'number' && looksLikeHttpRequestConfig(record.config) && 'request' in record;
+}
+// --- Identifier masking for ownership-denial logs --------------------------------------------------
+/**
+ * Masks a resource identifier for logs: only the last 4 characters stay, so the record cannot be
+ * reconstructed from a log line. Anything that is not a string (or is 4 characters or shorter)
+ * becomes `****` entirely. Control characters are stripped first (log-line forging).
+ */
+function maskResourceId(value) {
+    if (typeof value !== 'string') {
+        return '****';
+    }
+    const clean = value.replace(CONTROL_CHAR_PATTERN, '');
+    return clean.length > 4 ? `****${clean.slice(-4)}` : '****';
+}
+/**
+ * One-way, short (12 hex) identifier for a tenant/user id in logs: repeated denials from the same
+ * tenant can be correlated without writing the id itself. Only meant for debug-level logs.
+ */
+function hashTenantId(value) {
+    if (typeof value !== 'string' || value.length === 0) {
+        return 'unknown';
+    }
+    return (0, crypto_1.createHash)('sha256').update(value).digest('hex').slice(0, 12);
 }

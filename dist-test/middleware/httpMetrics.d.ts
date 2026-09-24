@@ -21,7 +21,7 @@ export declare class HttpMetrics {
      * Tracks total number of HTTP requests per service, method, route, and status code.
      * Labels: service, method, route, status_code
      */
-    static readonly httpRequestsTotal: Counter<"route" | "service" | "method" | "status_code">;
+    static readonly httpRequestsTotal: Counter<"method" | "route" | "service" | "status_code">;
     /**
      * HTTP request duration histogram
      *
@@ -29,7 +29,7 @@ export declare class HttpMetrics {
      * Labels: service, method, route, status_code
      * Buckets: 10ms -> 30s (optimized for API response times)
      */
-    static readonly httpRequestDuration: Histogram<"route" | "service" | "method" | "status_code">;
+    static readonly httpRequestDuration: Histogram<"method" | "route" | "service" | "status_code">;
     /**
      * Returns the Prometheus registry containing all HTTP metrics
      */

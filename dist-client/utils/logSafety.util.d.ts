@@ -182,3 +182,14 @@ export declare function serializeLogMeta(meta: unknown, maxLength?: number): str
 export declare function maskErrorText(text: string): string;
 /** Drops the query string, fragment and userinfo of a request URL. */
 export declare function sanitizeRequestUrl(url: string): string;
+/**
+ * Masks a resource identifier for logs: only the last 4 characters stay, so the record cannot be
+ * reconstructed from a log line. Anything that is not a string (or is 4 characters or shorter)
+ * becomes `****` entirely. Control characters are stripped first (log-line forging).
+ */
+export declare function maskResourceId(value: unknown): string;
+/**
+ * One-way, short (12 hex) identifier for a tenant/user id in logs: repeated denials from the same
+ * tenant can be correlated without writing the id itself. Only meant for debug-level logs.
+ */
+export declare function hashTenantId(value: unknown): string;

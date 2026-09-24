@@ -75,6 +75,7 @@ export * from './security-logger';
 
 // Metrics
 export * from './metrics/EventMetrics';
+export * from './metrics/OwnershipMetrics';
 export * from './middleware/httpMetrics';
 
 // Performance Optimizations

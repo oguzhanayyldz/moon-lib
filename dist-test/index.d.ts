@@ -50,6 +50,7 @@ export * from './security/SecurityManager';
 export * from './security/MicroserviceSecurityService';
 export * from './security-logger';
 export * from './metrics/EventMetrics';
+export * from './metrics/OwnershipMetrics';
 export * from './middleware/httpMetrics';
 export * from './utils/optimisticLocking.util';
 export * from './utils/typeGuards.util';
