@@ -32,6 +32,8 @@ export interface InvoiceFailed {
     // ERP bilgileri
     erpPlatform?: string; // Parasut, Logo, SAP, Netsis, etc.
     erpId?: string; // ERP'deki fatura ID'si (varsa - partial success durumunda)
+    erpInvoiceId?: string; // Sales Invoice ID (resmileştirme aşamasında başarısız olduysa dolu)
+    erpStatus?: string; // Kaynaktaki ERP aşaması (CREATE_FAILED, FORMALIZE_FAILED, PENDING...). Yoksa kopya erpStatus'una dokunulmaz
 
     // Hata bilgileri
     error: {
