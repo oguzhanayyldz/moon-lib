@@ -24,6 +24,8 @@ export interface InvoiceFailed {
     category?: InvoiceCategory;
     erpPlatform?: string;
     erpId?: string;
+    erpInvoiceId?: string;
+    erpStatus?: string;
     error: {
         code: string;
         message: string;
