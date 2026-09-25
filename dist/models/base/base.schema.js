@@ -299,14 +299,27 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         // hiç çalışmamıştı; canlansaydı util yollarında çift, sürüme dokunmayan yazımlarda sahte,
         // `new:false` $inc'te yanlış sürümlü EVU üretirdi (TASK-MUGFI4LUKX1WV).
     }
+    // updatedOn güncellemenin $set'ine birleştirilir; sorgu `op`'u DEĞİŞMEZ. Eskiden
+    // `this.updateOne(filter, { $set: { updatedOn } })` çağrılıyordu: Query.updateOne `op`'u
+    // 'updateOne' yapar ve post kancaları op ile seçildiği için hiçbir post('findOneAndUpdate')
+    // kancası (ör. aşağıdaki lean-id) çalışmıyordu (TASK-MUGFI4LUKX1WV).
+    // Birleştirme eskisiyle aynı: çağıranın $set.updatedOn'u ezilir, operatörsüz (üst seviye)
+    // updatedOn korunur. Pipeline (dizi) güncellemede $set aşaması eklenir (eskisi hata fırlatırdı).
+    const touchUpdatedOn = (query) => {
+        const update = query.getUpdate();
+        if (Array.isArray(update)) {
+            update.push({ $set: { updatedOn: new Date() } });
+        }
+        else {
+            query.setUpdate(Object.assign(Object.assign({}, update), { $set: Object.assign(Object.assign({}, update === null || update === void 0 ? void 0 : update.$set), { updatedOn: new Date() }) }));
+        }
+    };
     baseSchema.pre('findOneAndUpdate', function (next) {
-        const filter = this.getQuery();
-        this.updateOne(filter, { $set: { updatedOn: new Date() } });
+        touchUpdatedOn(this);
         next();
     });
     baseSchema.pre('updateOne', function (next) {
-        const filter = this.getQuery();
-        this.updateOne(filter, { $set: { updatedOn: new Date() } });
+        touchUpdatedOn(this);
         next();
     });
     baseSchema.pre('find', function (next) {
