@@ -231,10 +231,56 @@ export class OptimisticLockingUtil {
     }
 
     /**
+     * Sürümü SORGUYLA ilerleten yazım (ör. `findOneAndUpdate(..., { $inc: { version: 1 } })`) için
+     * EntityVersionUpdated'ı AÇIKÇA yazar. Sorgu yazımlarında EVU kancası yoktur (base.schema yalnız
+     * post('save')'de üretir); util dışındaki ham sorgu yazımı sync'e bu yardımcıyla haber verir.
+     *
+     * - Sürüm: `options.version` verilmişse o, yoksa `doc.version` (post-image). `new: false` ile
+     *   dönen ön görüntüde çağıran yeni sürümü kendisi verir: `{ version: (pre.version ?? 0) + 1 }`.
+     *   `previousVersion = version - 1`.
+     * - `options.session`: Outbox satırı bu session ile yazılır (transaction abort'unda EVU da geri alınır).
+     * - Model sürüm izlemeli değilse sessizce `false` döner.
+     * - HATA FIRLATMAZ: yayın hatası loglanır ve `false` döner; yazımı geri almaz, farkı sync döngüsü yakalar.
+     *
+     * @returns Outbox'a EVU yazıldıysa true
+     */
+    static async publishVersionEvent(
+        Model: any,
+        doc: any,
+        options: { version?: number; session?: ClientSession; source?: string } = {}
+    ): Promise<boolean> {
+        const version = options.version ?? doc?.version;
+        if (!doc || typeof version !== 'number' || !Number.isFinite(version)) {
+            logger.error(`❌ [VERSION-EVENT] ${Model?.modelName} için sürüm yok, EVU yazılmadı`, {
+                entityId: doc?.id || doc?._id?.toString()
+            });
+            return false;
+        }
+        try {
+            return await this.publishVersionEventForUpdate(
+                Model, doc, version, options.source ?? 'explicit', options.session
+            );
+        } catch (error) {
+            logger.error(`❌ [VERSION-EVENT] ${Model?.modelName} EVU yazılamadı`, {
+                entityId: doc.id || doc._id?.toString(),
+                version,
+                error: (error as Error)?.message
+            });
+            return false;
+        }
+    }
+
+    /**
      * updateWithRetry için EntityVersionUpdated event publish eder
      * @private
      */
-    private static async publishVersionEventForUpdate(Model: any, doc: any, newVersion: number): Promise<void> {
+    private static async publishVersionEventForUpdate(
+        Model: any,
+        doc: any,
+        newVersion: number,
+        source: string = 'updateWithRetry',
+        session?: ClientSession
+    ): Promise<boolean> {
         const docId = doc.id || doc._id?.toString();
 
         // ✅ GLOBAL MAP: Config'i Map'ten al
@@ -256,12 +302,12 @@ export class OptimisticLockingUtil {
 
         if (!config || !config.enableVersionTracking) {
             // Version tracking enabled değilse event publish etme (sessizce skip)
-            return;
+            return false;
         }
 
         const versionTrackingConfig = config.versionTrackingConfig;
         if (!versionTrackingConfig) {
-            return;
+            return false;
         }
 
         const { entityType, serviceName } = versionTrackingConfig;
@@ -272,7 +318,7 @@ export class OptimisticLockingUtil {
 
         if (!Outbox) {
             logger.warn(`⚠️ [UPDATE-WITH-RETRY-EVENT] Outbox model not found, skipping event publish`);
-            return;
+            return false;
         }
 
         const previousVersion = newVersion - 1;
@@ -288,13 +334,18 @@ export class OptimisticLockingUtil {
                 userId: doc.user?.toString() || doc.user,
                 metadata: {
                     modelName: Model.modelName,
-                    source: 'updateWithRetry'
+                    source
                 }
             },
             status: 'pending'
         };
 
-        await Outbox.create(outboxPayload);
+        if (session) {
+            await Outbox.create([outboxPayload], { session });
+        } else {
+            await Outbox.create(outboxPayload);
+        }
+        return true;
     }
 
     /**
@@ -327,7 +378,7 @@ export class OptimisticLockingUtil {
     * Metadata güncelleme - VERSION TRACKING OLMADAN
     *
     * Scheduler job'lar, istatistik güncellemeleri ve metadata-only operasyonlar için.
-    * Version tracking hook'larını tetiklemez, version increment yapmaz.
+    * Version increment yapmaz; `version` verilmedikçe EntityVersionUpdated yazmaz.
     *
     * Use Cases:
     * - AutomationRule: lastRunAt, totalProcessed, totalSuccess, totalFailed
@@ -345,9 +396,12 @@ export class OptimisticLockingUtil {
     * @param {ClientSession} [session] - MongoDB session (transaction için)
     * @return {Promise<T>} Güncellenen doküman
     * @description
-    * Version tracking hook'unu bypass eder çünkü:
+    * EVU üretmez çünkü:
     * - Metadata değişiklikleri anlamlı veri değişikliği değildir
     * - Version increment gereksizdir
+    * (Mekanizma: findByIdAndUpdate bir sorgu yazımıdır; base.schema EVU'yu yalnız post('save')'de
+    * üretir, sorgu yazımları için kanca yoktur. "Bypass" edilen bir kanca yok — EVU'yu bu metod
+    * aşağıda yalnız `version` verildiğinde açıkça yazar.)
     *
     * NOT: updateFields içinde version set edilmişse (FOREIGN entity sync gibi),
     * EntityVersionUpdated event publish eder — sync servisi haberdar olur.

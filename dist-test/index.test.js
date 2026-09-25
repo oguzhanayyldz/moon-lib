@@ -785,9 +785,14 @@ const mockSaveWithRetry = async (doc, _operationName, session, reapply) => {
         }
     }
 };
+// Açık EVU yardımcısı sahtede de GERÇEK: Outbox'a `Model.db.model('Outbox')` ile yazar, hata
+// fırlatmaz. Servis testleri EVU'yu gerçek Outbox satırı olarak sayabilir; bağlantıda Outbox
+// modeli yoksa yardımcı hatayı loglayıp false döner (TASK-MUHKJ49C3M25J).
+const realPublishVersionEvent = (Model, doc, options) => index_1.OptimisticLockingUtil.publishVersionEvent(Model, doc, options);
 // OptimisticLockingUtil - Centralized mock
 exports.OptimisticLockingUtil = {
     saveWithRetry: jest.fn().mockImplementation(mockSaveWithRetry),
+    publishVersionEvent: jest.fn().mockImplementation(realPublishVersionEvent),
     updateWithRetry: jest.fn().mockImplementation(async (model, id, updateData, options = {}) => {
         const result = await model.findByIdAndUpdate(id, updateData, Object.assign({ new: true, omitUndefined: true }, options));
         if (!result) {
@@ -1065,6 +1070,7 @@ const setupTestEnvironment = () => {
     exports.getParentUserId.mockClear();
     // Reset OptimisticLockingUtil to default behavior
     exports.OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(mockSaveWithRetry);
+    exports.OptimisticLockingUtil.publishVersionEvent = jest.fn().mockImplementation(realPublishVersionEvent);
     exports.OptimisticLockingUtil.saveWithContext = jest.fn().mockImplementation(async (doc, req, operationName) => {
         const session = req === null || req === void 0 ? void 0 : req.dbSession;
         if (doc && typeof doc.save === 'function') {
