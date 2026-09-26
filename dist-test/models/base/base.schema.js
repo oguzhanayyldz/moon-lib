@@ -278,30 +278,11 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                 next();
             }
         });
-        // POST-FINDONEANDUPDATE HOOK (updateWithRetry için)
-        baseSchema.post('findOneAndUpdate', async function (doc, next) {
-            var _a;
-            try {
-                if (!doc) {
-                    next();
-                    return;
-                }
-                const Model = this.constructor;
-                // Update query'den version bilgisini al
-                const query = this;
-                const update = query.getUpdate();
-                const newVersion = (_a = update === null || update === void 0 ? void 0 : update.$set) === null || _a === void 0 ? void 0 : _a.version;
-                if (newVersion !== undefined) {
-                    doc.version = newVersion;
-                }
-                await publishVersionEvent(doc, Model);
-                next();
-            }
-            catch (error) {
-                logger_service_1.logger.error('❌ [VERSION-TRACKING-HOOK-ERROR] post(findOneAndUpdate) hook error:', error);
-                next();
-            }
-        });
+        // Sorgu yazımlarında (findOneAndUpdate/findByIdAndUpdate) EVU kancası YOK: EVU'yu
+        // OptimisticLockingUtil açıkça üretir (updateWithRetry / updateMetadataWithRetry /
+        // applyVersionedUpdate / publishVersionEvent). Buradaki post('findOneAndUpdate') kancası
+        // hiç çalışmamıştı; canlansaydı util yollarında çift, sürüme dokunmayan yazımlarda sahte,
+        // `new:false` $inc'te yanlış sürümlü EVU üretirdi (TASK-MUGFI4LUKX1WV).
     }
     baseSchema.pre('findOneAndUpdate', function (next) {
         const filter = this.getQuery();

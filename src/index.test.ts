@@ -7,7 +7,7 @@
 // - Use: `npm run build:test` to build after modifying this file
 // - Agent script automatically detects if build is needed
 
-import { Subjects } from './index';
+import { Subjects, OptimisticLockingUtil as RealOptimisticLockingUtil } from './index';
 
 // Global test cleanup registry
 let testTimers: Set<any> = new Set();
@@ -810,9 +810,16 @@ const mockSaveWithRetry = async (doc: any, _operationName?: string, session?: an
     }
 };
 
+// Açık EVU yardımcısı sahtede de GERÇEK: Outbox'a `Model.db.model('Outbox')` ile yazar, hata
+// fırlatmaz. Servis testleri EVU'yu gerçek Outbox satırı olarak sayabilir; bağlantıda Outbox
+// modeli yoksa yardımcı hatayı loglayıp false döner (TASK-MUHKJ49C3M25J).
+const realPublishVersionEvent = (Model: any, doc: any, options?: any) =>
+    RealOptimisticLockingUtil.publishVersionEvent(Model, doc, options);
+
 // OptimisticLockingUtil - Centralized mock
 export const OptimisticLockingUtil = {
     saveWithRetry: jest.fn().mockImplementation(mockSaveWithRetry),
+    publishVersionEvent: jest.fn().mockImplementation(realPublishVersionEvent),
     updateWithRetry: jest.fn().mockImplementation(
         async (model, id, updateData, options = {}) => {
             const result = await model.findByIdAndUpdate(
@@ -1159,6 +1166,7 @@ export const setupTestEnvironment = () => {
     
     // Reset OptimisticLockingUtil to default behavior
     OptimisticLockingUtil.saveWithRetry = jest.fn().mockImplementation(mockSaveWithRetry);
+    OptimisticLockingUtil.publishVersionEvent = jest.fn().mockImplementation(realPublishVersionEvent);
 
     OptimisticLockingUtil.saveWithContext = jest.fn().mockImplementation(async (doc, req, operationName) => {
         const session = req?.dbSession;

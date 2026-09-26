@@ -228,11 +228,48 @@ class OptimisticLockingUtil {
         });
     }
     /**
+     * Sürümü SORGUYLA ilerleten yazım (ör. `findOneAndUpdate(..., { $inc: { version: 1 } })`) için
+     * EntityVersionUpdated'ı AÇIKÇA yazar. Sorgu yazımlarında EVU kancası yoktur (base.schema yalnız
+     * post('save')'de üretir); util dışındaki ham sorgu yazımı sync'e bu yardımcıyla haber verir.
+     *
+     * - Sürüm: `options.version` verilmişse o, yoksa `doc.version` (post-image). `new: false` ile
+     *   dönen ön görüntüde çağıran yeni sürümü kendisi verir: `{ version: (pre.version ?? 0) + 1 }`.
+     *   `previousVersion = version - 1`.
+     * - `options.session`: Outbox satırı bu session ile yazılır (transaction abort'unda EVU da geri alınır).
+     * - Model sürüm izlemeli değilse sessizce `false` döner.
+     * - HATA FIRLATMAZ: yayın hatası loglanır ve `false` döner; yazımı geri almaz, farkı sync döngüsü yakalar.
+     *
+     * @returns Outbox'a EVU yazıldıysa true
+     */
+    static publishVersionEvent(Model_1, doc_1) {
+        return __awaiter(this, arguments, void 0, function* (Model, doc, options = {}) {
+            var _a, _b, _c, _d;
+            const version = (_a = options.version) !== null && _a !== void 0 ? _a : doc === null || doc === void 0 ? void 0 : doc.version;
+            if (!doc || typeof version !== 'number' || !Number.isFinite(version)) {
+                logger_service_1.logger.error(`❌ [VERSION-EVENT] ${Model === null || Model === void 0 ? void 0 : Model.modelName} için sürüm yok, EVU yazılmadı`, {
+                    entityId: (doc === null || doc === void 0 ? void 0 : doc.id) || ((_b = doc === null || doc === void 0 ? void 0 : doc._id) === null || _b === void 0 ? void 0 : _b.toString())
+                });
+                return false;
+            }
+            try {
+                return yield this.publishVersionEventForUpdate(Model, doc, version, (_c = options.source) !== null && _c !== void 0 ? _c : 'explicit', options.session);
+            }
+            catch (error) {
+                logger_service_1.logger.error(`❌ [VERSION-EVENT] ${Model === null || Model === void 0 ? void 0 : Model.modelName} EVU yazılamadı`, {
+                    entityId: doc.id || ((_d = doc._id) === null || _d === void 0 ? void 0 : _d.toString()),
+                    version,
+                    error: error === null || error === void 0 ? void 0 : error.message
+                });
+                return false;
+            }
+        });
+    }
+    /**
      * updateWithRetry için EntityVersionUpdated event publish eder
      * @private
      */
-    static publishVersionEventForUpdate(Model, doc, newVersion) {
-        return __awaiter(this, void 0, void 0, function* () {
+    static publishVersionEventForUpdate(Model_1, doc_1, newVersion_1) {
+        return __awaiter(this, arguments, void 0, function* (Model, doc, newVersion, source = 'updateWithRetry', session) {
             var _a, _b;
             const docId = doc.id || ((_a = doc._id) === null || _a === void 0 ? void 0 : _a.toString());
             // ✅ GLOBAL MAP: Config'i Map'ten al
@@ -252,11 +289,11 @@ class OptimisticLockingUtil {
             }
             if (!config || !config.enableVersionTracking) {
                 // Version tracking enabled değilse event publish etme (sessizce skip)
-                return;
+                return false;
             }
             const versionTrackingConfig = config.versionTrackingConfig;
             if (!versionTrackingConfig) {
-                return;
+                return false;
             }
             const { entityType, serviceName } = versionTrackingConfig;
             // Outbox model'i Model'in database connection'ından al
@@ -264,7 +301,7 @@ class OptimisticLockingUtil {
             const Outbox = Model.db.model('Outbox');
             if (!Outbox) {
                 logger_service_1.logger.warn(`⚠️ [UPDATE-WITH-RETRY-EVENT] Outbox model not found, skipping event publish`);
-                return;
+                return false;
             }
             const previousVersion = newVersion - 1;
             const outboxPayload = {
@@ -279,12 +316,18 @@ class OptimisticLockingUtil {
                     userId: ((_b = doc.user) === null || _b === void 0 ? void 0 : _b.toString()) || doc.user,
                     metadata: {
                         modelName: Model.modelName,
-                        source: 'updateWithRetry'
+                        source
                     }
                 },
                 status: 'pending'
             };
-            yield Outbox.create(outboxPayload);
+            if (session) {
+                yield Outbox.create([outboxPayload], { session });
+            }
+            else {
+                yield Outbox.create(outboxPayload);
+            }
+            return true;
         });
     }
     /**
@@ -311,7 +354,7 @@ class OptimisticLockingUtil {
     * Metadata güncelleme - VERSION TRACKING OLMADAN
     *
     * Scheduler job'lar, istatistik güncellemeleri ve metadata-only operasyonlar için.
-    * Version tracking hook'larını tetiklemez, version increment yapmaz.
+    * Version increment yapmaz; `version` verilmedikçe EntityVersionUpdated yazmaz.
     *
     * Use Cases:
     * - AutomationRule: lastRunAt, totalProcessed, totalSuccess, totalFailed
@@ -329,9 +372,12 @@ class OptimisticLockingUtil {
     * @param {ClientSession} [session] - MongoDB session (transaction için)
     * @return {Promise<T>} Güncellenen doküman
     * @description
-    * Version tracking hook'unu bypass eder çünkü:
+    * EVU üretmez çünkü:
     * - Metadata değişiklikleri anlamlı veri değişikliği değildir
     * - Version increment gereksizdir
+    * (Mekanizma: findByIdAndUpdate bir sorgu yazımıdır; base.schema EVU'yu yalnız post('save')'de
+    * üretir, sorgu yazımları için kanca yoktur. "Bypass" edilen bir kanca yok — EVU'yu bu metod
+    * aşağıda yalnız `version` verildiğinde açıkça yazar.)
     *
     * NOT: updateFields içinde version set edilmişse (FOREIGN entity sync gibi),
     * EntityVersionUpdated event publish eder — sync servisi haberdar olur.

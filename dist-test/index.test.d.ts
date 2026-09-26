@@ -345,6 +345,7 @@ export declare const logger: {
 };
 export declare const OptimisticLockingUtil: {
     saveWithRetry: jest.Mock<any, any, any>;
+    publishVersionEvent: jest.Mock<any, any, any>;
     updateWithRetry: jest.Mock<any, any, any>;
     updateMetadataWithRetry: jest.Mock<any, any, any>;
     applyVersionedUpdate: jest.Mock<any, any, any>;

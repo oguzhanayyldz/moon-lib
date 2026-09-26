@@ -100,6 +100,25 @@ export declare class OptimisticLockingUtil {
     */
     static updateWithRetry<T>(Model: any, id: string, updateFields: any, options?: any, operationName?: string, session?: ClientSession): Promise<T>;
     /**
+     * Sürümü SORGUYLA ilerleten yazım (ör. `findOneAndUpdate(..., { $inc: { version: 1 } })`) için
+     * EntityVersionUpdated'ı AÇIKÇA yazar. Sorgu yazımlarında EVU kancası yoktur (base.schema yalnız
+     * post('save')'de üretir); util dışındaki ham sorgu yazımı sync'e bu yardımcıyla haber verir.
+     *
+     * - Sürüm: `options.version` verilmişse o, yoksa `doc.version` (post-image). `new: false` ile
+     *   dönen ön görüntüde çağıran yeni sürümü kendisi verir: `{ version: (pre.version ?? 0) + 1 }`.
+     *   `previousVersion = version - 1`.
+     * - `options.session`: Outbox satırı bu session ile yazılır (transaction abort'unda EVU da geri alınır).
+     * - Model sürüm izlemeli değilse sessizce `false` döner.
+     * - HATA FIRLATMAZ: yayın hatası loglanır ve `false` döner; yazımı geri almaz, farkı sync döngüsü yakalar.
+     *
+     * @returns Outbox'a EVU yazıldıysa true
+     */
+    static publishVersionEvent(Model: any, doc: any, options?: {
+        version?: number;
+        session?: ClientSession;
+        source?: string;
+    }): Promise<boolean>;
+    /**
      * updateWithRetry için EntityVersionUpdated event publish eder
      * @private
      */
@@ -123,7 +142,7 @@ export declare class OptimisticLockingUtil {
     * Metadata güncelleme - VERSION TRACKING OLMADAN
     *
     * Scheduler job'lar, istatistik güncellemeleri ve metadata-only operasyonlar için.
-    * Version tracking hook'larını tetiklemez, version increment yapmaz.
+    * Version increment yapmaz; `version` verilmedikçe EntityVersionUpdated yazmaz.
     *
     * Use Cases:
     * - AutomationRule: lastRunAt, totalProcessed, totalSuccess, totalFailed
@@ -141,9 +160,12 @@ export declare class OptimisticLockingUtil {
     * @param {ClientSession} [session] - MongoDB session (transaction için)
     * @return {Promise<T>} Güncellenen doküman
     * @description
-    * Version tracking hook'unu bypass eder çünkü:
+    * EVU üretmez çünkü:
     * - Metadata değişiklikleri anlamlı veri değişikliği değildir
     * - Version increment gereksizdir
+    * (Mekanizma: findByIdAndUpdate bir sorgu yazımıdır; base.schema EVU'yu yalnız post('save')'de
+    * üretir, sorgu yazımları için kanca yoktur. "Bypass" edilen bir kanca yok — EVU'yu bu metod
+    * aşağıda yalnız `version` verildiğinde açıkça yazar.)
     *
     * NOT: updateFields içinde version set edilmişse (FOREIGN entity sync gibi),
     * EntityVersionUpdated event publish eder — sync servisi haberdar olur.
