@@ -44,7 +44,7 @@ export declare class IntegrationRequestLogService {
     getUserLogs(userId: string, integrationName?: ResourceName, page?: number, limit?: number, sortField?: string, sortOrder?: string, filters?: {
         operationType?: OperationType;
         method?: string;
-        success?: boolean;
+        success?: boolean | 'partial';
         search?: string;
         advancedSearch?: string;
         startDate?: Date;
@@ -94,7 +94,7 @@ export declare class IntegrationRequestLogService {
         userId?: string;
         operationType?: OperationType;
         method?: string;
-        success?: boolean;
+        success?: boolean | 'partial';
         search?: string;
         advancedSearch?: string;
     }): Promise<{

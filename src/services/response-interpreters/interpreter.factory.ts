@@ -3,6 +3,7 @@ import { BaseResponseInterpreter } from './base.interpreter';
 import { TrendyolResponseInterpreter } from './trendyol.interpreter';
 import { ShopifyResponseInterpreter } from './shopify.interpreter';
 import { HepsiburadaResponseInterpreter } from './hepsiburada.interpreter';
+import { IdefixResponseInterpreter } from './idefix.interpreter';
 import { IkasResponseInterpreter } from './ikas.interpreter';
 import { N11ResponseInterpreter } from './n11.interpreter';
 import { IdeaSoftResponseInterpreter } from './ideasoft.interpreter';
@@ -42,6 +43,10 @@ export class ResponseInterpreterFactory {
 
             case ResourceName.Hepsiburada:
                 interpreter = new HepsiburadaResponseInterpreter();
+                break;
+
+            case ResourceName.Idefix:
+                interpreter = new IdefixResponseInterpreter();
                 break;
 
             case ResourceName.Ikas:

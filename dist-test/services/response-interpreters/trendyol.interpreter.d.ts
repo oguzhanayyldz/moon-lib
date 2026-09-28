@@ -13,9 +13,19 @@ export declare class TrendyolResponseInterpreter extends BaseResponseInterpreter
     private interpretBatchRequest;
     /**
      * Batch status yanıtını yorumla
-     * Örnek response: { items: [{status: "SUCCESS"}, {status: "FAILED"}] }
+     *
+     * trendyolBatch.service.ts `processBatchResults`'ın IntegrationRequestLog'a yazdığı gövde,
+     * Trendyol'un ham API cevabı (`{ items: [...] }`) DEĞİL — servisin kendi ürettiği özet:
+     * { batchRequestId, status, summary: { total, success, failed }, successItems, failedItems,
+     *   attempts, createdAt, completedAt }
+     * Ham `items` alanı bu gövdede hiç yok; onu aramak her zaman 0/0 üretir.
      */
     private interpretBatchStatus;
+    /**
+     * trendyolBatch.service.ts'in `processBatchResults`'ta ürettiği özet gövdesini yorumla.
+     * Format: { batchRequestId, status, summary: { total, success, failed }, successItems, failedItems }
+     */
+    private interpretBatchSummaryFormat;
     /**
      * Kategori listesi yanıtını yorumla
      */
