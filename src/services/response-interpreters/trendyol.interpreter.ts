@@ -128,8 +128,12 @@ export class TrendyolResponseInterpreter extends BaseResponseInterpreter {
         const failureCount = summary.failed || 0;
         const totalCount = summary.total || (successCount + failureCount);
 
+        // Sayaçlar, servisin bildirdiği status alanından önceliklidir: bir batch
+        // status='COMPLETED' desin, summary.failed>0 ise gerçekte kısmen başarılıdır.
         let interpretedStatus: 'completed' | 'partial' | 'failed' | 'pending' = 'pending';
-        if (status === 'COMPLETED') interpretedStatus = 'completed';
+        if (failureCount > 0 && successCount > 0) interpretedStatus = 'partial';
+        else if (failureCount > 0 && successCount === 0) interpretedStatus = 'failed';
+        else if (status === 'COMPLETED') interpretedStatus = 'completed';
         else if (status === 'PARTIAL') interpretedStatus = 'partial';
         else if (status === 'FAILED' || status === 'TIMEOUT' || status === 'MAX_ATTEMPTS_EXCEEDED') interpretedStatus = 'failed';
 

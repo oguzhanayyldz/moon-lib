@@ -101,11 +101,19 @@ class N11ResponseInterpreter extends base_interpreter_1.BaseResponseInterpreter 
         };
     }
     /**
-     * Task Details yanıtı (POST /ms/product/task-details/page-query)
-     * N11: { taskId, skus: { content: [{ itemCode, status: "SUCCESS"|"FAIL", sku: {...} }] }, status: "PROCESSED" }
+     * Task Details yanıtı (GET_BATCH_STATUS)
+     *
+     * n11Batch.service.ts `checkBatchStatus`'un IntegrationRequestLog'a yazdığı gövde,
+     * N11'in ham task-details API cevabı ({ skus: { content: [...] } }) DEĞİL — servisin
+     * kendi ürettiği özet: { batchRequestId, status, summary: { total, success, failed },
+     * successItems, failedItems, attempts, createdAt, completedAt } (Trendyol/İdefix ile aynı şekil).
      */
     interpretTaskDetails(response) {
         var _a, _b;
+        if ((response === null || response === void 0 ? void 0 : response.summary) && typeof response.summary === 'object') {
+            return this.interpretBatchSummaryFormat(response);
+        }
+        // Geriye dönük uyumluluk: ham `{ skus: { content: [...] } }` biçimi.
         const taskStatus = response === null || response === void 0 ? void 0 : response.status; // PROCESSED, IN_QUEUE, REJECT
         const content = ((_a = response === null || response === void 0 ? void 0 : response.skus) === null || _a === void 0 ? void 0 : _a.content) || [];
         const successCount = content.filter((item) => item.status === 'SUCCESS').length;
@@ -139,6 +147,59 @@ class N11ResponseInterpreter extends base_interpreter_1.BaseResponseInterpreter 
                 status: taskStatus,
                 totalElements: (_b = response === null || response === void 0 ? void 0 : response.skus) === null || _b === void 0 ? void 0 : _b.totalElements,
                 failedItems: failedItems.length > 0 ? failedItems : undefined
+            },
+            parsedAt: new Date()
+        };
+    }
+    /**
+     * n11Batch.service.ts'in `checkBatchStatus`'ta ürettiği özet gövdesini yorumla.
+     * Format: { batchRequestId, status, summary: { total, success, failed }, successItems, failedItems }
+     */
+    interpretBatchSummaryFormat(response) {
+        var _a, _b;
+        const summary = response.summary || {};
+        const status = response.status; // COMPLETED, PARTIAL, FAILED, TIMEOUT, MAX_ATTEMPTS_EXCEEDED
+        const successCount = summary.success || 0;
+        const failureCount = summary.failed || 0;
+        const totalCount = summary.total || (successCount + failureCount);
+        // Sayaçlar, servisin bildirdiği status alanından önceliklidir: bir batch
+        // status='COMPLETED' desin, summary.failed>0 ise gerçekte kısmen başarılıdır.
+        let interpretedStatus = 'pending';
+        if (failureCount > 0 && successCount > 0)
+            interpretedStatus = 'partial';
+        else if (failureCount > 0 && successCount === 0)
+            interpretedStatus = 'failed';
+        else if (status === 'COMPLETED')
+            interpretedStatus = 'completed';
+        else if (status === 'PARTIAL')
+            interpretedStatus = 'partial';
+        else if (status === 'FAILED' || status === 'TIMEOUT' || status === 'MAX_ATTEMPTS_EXCEEDED')
+            interpretedStatus = 'failed';
+        let summaryMessage = '';
+        if (interpretedStatus === 'completed') {
+            summaryMessage = `Task tamamlandı: ${successCount} ürün başarılı`;
+        }
+        else if (interpretedStatus === 'failed') {
+            summaryMessage = status === 'TIMEOUT' || status === 'MAX_ATTEMPTS_EXCEEDED'
+                ? `Task zaman aşımına uğradı: N11 bu toplu işlemin bittiğini bildirmedi (${failureCount} sonucu belirsiz)`
+                : `Task başarısız: ${failureCount} ürün reddedildi`;
+        }
+        else if (interpretedStatus === 'partial') {
+            summaryMessage = `Task kısmen başarılı: ${successCount} başarılı, ${failureCount} başarısız`;
+        }
+        else {
+            summaryMessage = 'Task durumu: İşleniyor...';
+        }
+        return {
+            summary: summaryMessage,
+            success: failureCount === 0 && interpretedStatus !== 'failed',
+            successCount,
+            failureCount,
+            details: {
+                total: totalCount,
+                status: interpretedStatus,
+                successItems: ((_a = response.successItems) === null || _a === void 0 ? void 0 : _a.slice(0, 20)) || [],
+                failedItems: ((_b = response.failedItems) === null || _b === void 0 ? void 0 : _b.slice(0, 20)) || []
             },
             parsedAt: new Date()
         };

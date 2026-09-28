@@ -120,10 +120,19 @@ export class N11ResponseInterpreter extends BaseResponseInterpreter {
     }
 
     /**
-     * Task Details yanıtı (POST /ms/product/task-details/page-query)
-     * N11: { taskId, skus: { content: [{ itemCode, status: "SUCCESS"|"FAIL", sku: {...} }] }, status: "PROCESSED" }
+     * Task Details yanıtı (GET_BATCH_STATUS)
+     *
+     * n11Batch.service.ts `checkBatchStatus`'un IntegrationRequestLog'a yazdığı gövde,
+     * N11'in ham task-details API cevabı ({ skus: { content: [...] } }) DEĞİL — servisin
+     * kendi ürettiği özet: { batchRequestId, status, summary: { total, success, failed },
+     * successItems, failedItems, attempts, createdAt, completedAt } (Trendyol/İdefix ile aynı şekil).
      */
     private interpretTaskDetails(response: any): InterpretedResponse {
+        if (response?.summary && typeof response.summary === 'object') {
+            return this.interpretBatchSummaryFormat(response);
+        }
+
+        // Geriye dönük uyumluluk: ham `{ skus: { content: [...] } }` biçimi.
         const taskStatus = response?.status; // PROCESSED, IN_QUEUE, REJECT
         const content = response?.skus?.content || [];
 
@@ -158,6 +167,54 @@ export class N11ResponseInterpreter extends BaseResponseInterpreter {
                 status: taskStatus,
                 totalElements: response?.skus?.totalElements,
                 failedItems: failedItems.length > 0 ? failedItems : undefined
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * n11Batch.service.ts'in `checkBatchStatus`'ta ürettiği özet gövdesini yorumla.
+     * Format: { batchRequestId, status, summary: { total, success, failed }, successItems, failedItems }
+     */
+    private interpretBatchSummaryFormat(response: any): InterpretedResponse {
+        const summary = response.summary || {};
+        const status = response.status; // COMPLETED, PARTIAL, FAILED, TIMEOUT, MAX_ATTEMPTS_EXCEEDED
+        const successCount = summary.success || 0;
+        const failureCount = summary.failed || 0;
+        const totalCount = summary.total || (successCount + failureCount);
+
+        // Sayaçlar, servisin bildirdiği status alanından önceliklidir: bir batch
+        // status='COMPLETED' desin, summary.failed>0 ise gerçekte kısmen başarılıdır.
+        let interpretedStatus: 'completed' | 'partial' | 'failed' | 'pending' = 'pending';
+        if (failureCount > 0 && successCount > 0) interpretedStatus = 'partial';
+        else if (failureCount > 0 && successCount === 0) interpretedStatus = 'failed';
+        else if (status === 'COMPLETED') interpretedStatus = 'completed';
+        else if (status === 'PARTIAL') interpretedStatus = 'partial';
+        else if (status === 'FAILED' || status === 'TIMEOUT' || status === 'MAX_ATTEMPTS_EXCEEDED') interpretedStatus = 'failed';
+
+        let summaryMessage = '';
+        if (interpretedStatus === 'completed') {
+            summaryMessage = `Task tamamlandı: ${successCount} ürün başarılı`;
+        } else if (interpretedStatus === 'failed') {
+            summaryMessage = status === 'TIMEOUT' || status === 'MAX_ATTEMPTS_EXCEEDED'
+                ? `Task zaman aşımına uğradı: N11 bu toplu işlemin bittiğini bildirmedi (${failureCount} sonucu belirsiz)`
+                : `Task başarısız: ${failureCount} ürün reddedildi`;
+        } else if (interpretedStatus === 'partial') {
+            summaryMessage = `Task kısmen başarılı: ${successCount} başarılı, ${failureCount} başarısız`;
+        } else {
+            summaryMessage = 'Task durumu: İşleniyor...';
+        }
+
+        return {
+            summary: summaryMessage,
+            success: failureCount === 0 && interpretedStatus !== 'failed',
+            successCount,
+            failureCount,
+            details: {
+                total: totalCount,
+                status: interpretedStatus,
+                successItems: response.successItems?.slice(0, 20) || [],
+                failedItems: response.failedItems?.slice(0, 20) || []
             },
             parsedAt: new Date()
         };

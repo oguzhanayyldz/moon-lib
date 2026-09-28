@@ -47,6 +47,18 @@ describe('TrendyolResponseInterpreter.interpret(GET_BATCH_STATUS) — özet göv
         expect(result!.successCount).toBe(1);
         expect(result!.failureCount).toBe(1);
     });
+
+    it('status:COMPLETED ama summary.failed>0 ise özet "kısmen" içerir (sayaç, status\'tan önceliklidir)', () => {
+        const interpreter = new TrendyolResponseInterpreter();
+        const result = interpreter.interpret(
+            { status: 'COMPLETED', summary: { total: 3, success: 2, failed: 1 } },
+            OperationType.GET_BATCH_STATUS
+        );
+
+        expect(result!.summary).toContain('kısmen');
+        expect(result!.success).toBe(false);
+        expect(result!.details?.status).toBe('partial');
+    });
 });
 
 describe('IdefixResponseInterpreter.interpret(GET_BATCH_STATUS) — daha önce hiç yoktu', () => {
@@ -71,5 +83,17 @@ describe('IdefixResponseInterpreter.interpret(GET_BATCH_STATUS) — daha önce h
 
         expect(result!.success).toBe(true);
         expect(result!.successCount).toBe(10);
+    });
+
+    it('status:COMPLETED ama summary.failed>0 ise özet "kısmen" içerir (sayaç, status\'tan önceliklidir)', () => {
+        const interpreter = new IdefixResponseInterpreter();
+        const result = interpreter.interpret(
+            { status: 'COMPLETED', summary: { total: 3, success: 2, failed: 1 } },
+            OperationType.GET_BATCH_STATUS
+        );
+
+        expect(result!.summary).toContain('kısmen');
+        expect(result!.success).toBe(false);
+        expect(result!.details?.status).toBe('partial');
     });
 });

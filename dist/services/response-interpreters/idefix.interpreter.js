@@ -73,8 +73,14 @@ class IdefixResponseInterpreter extends base_interpreter_1.BaseResponseInterpret
         const successCount = summary.success || 0;
         const failureCount = summary.failed || 0;
         const totalCount = summary.total || (successCount + failureCount);
+        // Sayaçlar, servisin bildirdiği status alanından önceliklidir: bir batch
+        // status='COMPLETED' desin, summary.failed>0 ise gerçekte kısmen başarılıdır.
         let interpretedStatus = 'pending';
-        if (status === 'COMPLETED')
+        if (failureCount > 0 && successCount > 0)
+            interpretedStatus = 'partial';
+        else if (failureCount > 0 && successCount === 0)
+            interpretedStatus = 'failed';
+        else if (status === 'COMPLETED')
             interpretedStatus = 'completed';
         else if (status === 'PARTIAL')
             interpretedStatus = 'partial';

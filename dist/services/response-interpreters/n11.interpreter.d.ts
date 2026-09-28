@@ -22,10 +22,19 @@ export declare class N11ResponseInterpreter extends BaseResponseInterpreter {
      */
     private interpretProductTask;
     /**
-     * Task Details yanıtı (POST /ms/product/task-details/page-query)
-     * N11: { taskId, skus: { content: [{ itemCode, status: "SUCCESS"|"FAIL", sku: {...} }] }, status: "PROCESSED" }
+     * Task Details yanıtı (GET_BATCH_STATUS)
+     *
+     * n11Batch.service.ts `checkBatchStatus`'un IntegrationRequestLog'a yazdığı gövde,
+     * N11'in ham task-details API cevabı ({ skus: { content: [...] } }) DEĞİL — servisin
+     * kendi ürettiği özet: { batchRequestId, status, summary: { total, success, failed },
+     * successItems, failedItems, attempts, createdAt, completedAt } (Trendyol/İdefix ile aynı şekil).
      */
     private interpretTaskDetails;
+    /**
+     * n11Batch.service.ts'in `checkBatchStatus`'ta ürettiği özet gövdesini yorumla.
+     * Format: { batchRequestId, status, summary: { total, success, failed }, successItems, failedItems }
+     */
+    private interpretBatchSummaryFormat;
     /**
      * Fiyat/Stok güncelleme task yanıtı
      * N11: { id: taskId, type: "SKU_UPDATE", status: "IN_QUEUE"|"REJECT", reasons: [...] }
