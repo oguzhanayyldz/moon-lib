@@ -5,6 +5,7 @@ const common_1 = require("../../common");
 const trendyol_interpreter_1 = require("./trendyol.interpreter");
 const shopify_interpreter_1 = require("./shopify.interpreter");
 const hepsiburada_interpreter_1 = require("./hepsiburada.interpreter");
+const idefix_interpreter_1 = require("./idefix.interpreter");
 const ikas_interpreter_1 = require("./ikas.interpreter");
 const n11_interpreter_1 = require("./n11.interpreter");
 const ideasoft_interpreter_1 = require("./ideasoft.interpreter");
@@ -37,6 +38,9 @@ class ResponseInterpreterFactory {
                 break;
             case common_1.ResourceName.Hepsiburada:
                 interpreter = new hepsiburada_interpreter_1.HepsiburadaResponseInterpreter();
+                break;
+            case common_1.ResourceName.Idefix:
+                interpreter = new idefix_interpreter_1.IdefixResponseInterpreter();
                 break;
             case common_1.ResourceName.Ikas:
                 interpreter = new ikas_interpreter_1.IkasResponseInterpreter();

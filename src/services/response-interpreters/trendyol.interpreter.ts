@@ -73,9 +73,20 @@ export class TrendyolResponseInterpreter extends BaseResponseInterpreter {
 
     /**
      * Batch status yanıtını yorumla
-     * Örnek response: { items: [{status: "SUCCESS"}, {status: "FAILED"}] }
+     *
+     * trendyolBatch.service.ts `processBatchResults`'ın IntegrationRequestLog'a yazdığı gövde,
+     * Trendyol'un ham API cevabı (`{ items: [...] }`) DEĞİL — servisin kendi ürettiği özet:
+     * { batchRequestId, status, summary: { total, success, failed }, successItems, failedItems,
+     *   attempts, createdAt, completedAt }
+     * Ham `items` alanı bu gövdede hiç yok; onu aramak her zaman 0/0 üretir.
      */
     private interpretBatchStatus(response: any): InterpretedResponse {
+        if (response?.summary && typeof response.summary === 'object') {
+            return this.interpretBatchSummaryFormat(response);
+        }
+
+        // Geriye dönük uyumluluk: ham `{ items: [...] }` biçimi hiçbir üretim yolunda
+        // loglanmıyor, ama savunma amaçlı bırakıldı.
         const items = response?.items || [];
         const successCount = items.filter((item: any) => item.status === 'SUCCESS').length;
         const failureCount = items.filter((item: any) => item.status === 'FAILED' || item.status === 'ERROR').length;
@@ -101,6 +112,50 @@ export class TrendyolResponseInterpreter extends BaseResponseInterpreter {
                     status: item.status,
                     failureReasons: item.failureReasons
                 }))
+            },
+            parsedAt: new Date()
+        };
+    }
+
+    /**
+     * trendyolBatch.service.ts'in `processBatchResults`'ta ürettiği özet gövdesini yorumla.
+     * Format: { batchRequestId, status, summary: { total, success, failed }, successItems, failedItems }
+     */
+    private interpretBatchSummaryFormat(response: any): InterpretedResponse {
+        const summary = response.summary || {};
+        const status = response.status; // COMPLETED, PARTIAL, FAILED, TIMEOUT, MAX_ATTEMPTS_EXCEEDED
+        const successCount = summary.success || 0;
+        const failureCount = summary.failed || 0;
+        const totalCount = summary.total || (successCount + failureCount);
+
+        let interpretedStatus: 'completed' | 'partial' | 'failed' | 'pending' = 'pending';
+        if (status === 'COMPLETED') interpretedStatus = 'completed';
+        else if (status === 'PARTIAL') interpretedStatus = 'partial';
+        else if (status === 'FAILED' || status === 'TIMEOUT' || status === 'MAX_ATTEMPTS_EXCEEDED') interpretedStatus = 'failed';
+
+        let summaryMessage = '';
+        if (interpretedStatus === 'completed') {
+            summaryMessage = `Batch tamamlandı: ${successCount} ürün başarılı`;
+        } else if (interpretedStatus === 'failed') {
+            summaryMessage = status === 'TIMEOUT' || status === 'MAX_ATTEMPTS_EXCEEDED'
+                ? `Batch zaman aşımına uğradı: Trendyol bu toplu işlemin bittiğini bildirmedi (${failureCount} sonucu belirsiz)`
+                : `Batch başarısız: ${failureCount} ürün reddedildi`;
+        } else if (interpretedStatus === 'partial') {
+            summaryMessage = `Batch kısmen başarılı: ${successCount} başarılı, ${failureCount} başarısız`;
+        } else {
+            summaryMessage = 'Batch durumu: İşleniyor...';
+        }
+
+        return {
+            summary: summaryMessage,
+            success: failureCount === 0 && interpretedStatus !== 'failed',
+            successCount,
+            failureCount,
+            details: {
+                total: totalCount,
+                status: interpretedStatus,
+                successItems: response.successItems?.slice(0, 20) || [],
+                failedItems: response.failedItems?.slice(0, 20) || []
             },
             parsedAt: new Date()
         };

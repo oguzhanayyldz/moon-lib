@@ -176,9 +176,14 @@ class IntegrationRequestLogService {
                     query.method = filters.method;
                 }
                 if ((filters === null || filters === void 0 ? void 0 : filters.success) !== undefined) {
-                    // Success is a virtual field, filter by responseStatus instead
-                    if (filters.success) {
-                        query.responseStatus = { $gte: 200, $lt: 300 };
+                    // Success is a virtual field, filter by responseStatus instead.
+                    // 207 (Multi-Status) kısmi başarıdır — ne "success" ne "failed" filtresine dahil,
+                    // ayrı "partial" değeriyle sorgulanır (batch toplu gönderim özet düzeltmesi — Parça 2).
+                    if (filters.success === 'partial') {
+                        query.responseStatus = 207;
+                    }
+                    else if (filters.success) {
+                        query.responseStatus = { $gte: 200, $lt: 300, $ne: 207 };
                     }
                     else {
                         // $or search filtresiyle aynı anahtarı ezmemesi için $and'e itiliyor (issue #877 ek bulgu 3)
@@ -369,9 +374,13 @@ class IntegrationRequestLogService {
                     query.method = filters.method;
                 }
                 if ((filters === null || filters === void 0 ? void 0 : filters.success) !== undefined) {
-                    // Success is a virtual field, filter by responseStatus instead
-                    if (filters.success) {
-                        query.responseStatus = { $gte: 200, $lt: 300 };
+                    // Success is a virtual field, filter by responseStatus instead.
+                    // 207 (Multi-Status) kısmi başarıdır — ayrı "partial" değeriyle sorgulanır.
+                    if (filters.success === 'partial') {
+                        query.responseStatus = 207;
+                    }
+                    else if (filters.success) {
+                        query.responseStatus = { $gte: 200, $lt: 300, $ne: 207 };
                     }
                     else {
                         // $or search filtresiyle aynı anahtarı ezmemesi için $and'e itiliyor (issue #877 ek bulgu 3)

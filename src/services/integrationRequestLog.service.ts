@@ -195,7 +195,7 @@ export class IntegrationRequestLogService {
         filters?: {
             operationType?: OperationType;
             method?: string;
-            success?: boolean;
+            success?: boolean | 'partial';
             search?: string;
             advancedSearch?: string; // Body/params içinde arama
             startDate?: Date;
@@ -218,9 +218,13 @@ export class IntegrationRequestLogService {
             }
 
             if (filters?.success !== undefined) {
-                // Success is a virtual field, filter by responseStatus instead
-                if (filters.success) {
-                    query.responseStatus = { $gte: 200, $lt: 300 };
+                // Success is a virtual field, filter by responseStatus instead.
+                // 207 (Multi-Status) kısmi başarıdır — ne "success" ne "failed" filtresine dahil,
+                // ayrı "partial" değeriyle sorgulanır (batch toplu gönderim özet düzeltmesi — Parça 2).
+                if (filters.success === 'partial') {
+                    query.responseStatus = 207;
+                } else if (filters.success) {
+                    query.responseStatus = { $gte: 200, $lt: 300, $ne: 207 };
                 } else {
                     // $or search filtresiyle aynı anahtarı ezmemesi için $and'e itiliyor (issue #877 ek bulgu 3)
                     query.$and = query.$and || [];
@@ -420,7 +424,7 @@ export class IntegrationRequestLogService {
             userId?: string;
             operationType?: OperationType;
             method?: string;
-            success?: boolean;
+            success?: boolean | 'partial';
             search?: string;
             advancedSearch?: string;
         }
@@ -445,9 +449,12 @@ export class IntegrationRequestLogService {
             }
 
             if (filters?.success !== undefined) {
-                // Success is a virtual field, filter by responseStatus instead
-                if (filters.success) {
-                    query.responseStatus = { $gte: 200, $lt: 300 };
+                // Success is a virtual field, filter by responseStatus instead.
+                // 207 (Multi-Status) kısmi başarıdır — ayrı "partial" değeriyle sorgulanır.
+                if (filters.success === 'partial') {
+                    query.responseStatus = 207;
+                } else if (filters.success) {
+                    query.responseStatus = { $gte: 200, $lt: 300, $ne: 207 };
                 } else {
                     // $or search filtresiyle aynı anahtarı ezmemesi için $and'e itiliyor (issue #877 ek bulgu 3)
                     query.$and = query.$and || [];
