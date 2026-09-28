@@ -60,6 +60,7 @@ export interface CommonInvoiceExport {
         discountTotal: number;
         shippingTotal: number;
         shippingTaxRate?: number;
+        shippingRefundAmount?: number;
         total: number;
         currency: CurrencyCode;
     };
