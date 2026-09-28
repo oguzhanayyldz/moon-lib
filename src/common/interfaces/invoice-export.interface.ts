@@ -86,8 +86,9 @@ export interface CommonInvoiceExport {
     subtotal: number;               // KDV hariç toplam
     taxTotal: number;               // KDV toplamı
     discountTotal: number;          // İndirim toplamı
-    shippingTotal: number;          // Kargo ücreti
+    shippingTotal: number;          // Kargo ücreti (ham, iadesiz)
     shippingTaxRate?: number;       // Kargo KDV oranı
+    shippingRefundAmount?: number;  // Kargodan iade edilen tutar (kısmi iptal) — fatura satırı max(0, shippingTotal - shippingRefundAmount) yazmalı
     total: number;                  // Genel toplam (KDV dahil)
     currency: CurrencyCode;         // Para birimi
   };
