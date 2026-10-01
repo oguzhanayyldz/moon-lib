@@ -22,6 +22,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const redisWrapper_service_1 = require("../services/redisWrapper.service");
 const logger_service_1 = require("../services/logger.service");
 const EventMetrics_1 = require("../metrics/EventMetrics");
+const duplicateKeyError_util_1 = require("../utils/duplicateKeyError.util");
 const deadLetterReplayRegistry_1 = require("./deadLetterReplayRegistry");
 /**
  * Retry özellikli temel listener sınıfı
@@ -250,8 +251,8 @@ class RetryableListener extends common_1.Listener {
                     status: 'error'
                 });
                 // MongoDB duplicate key hatası kontrolü
-                const isDuplicateKeyError = this.isDuplicateKeyError(error);
-                if (isDuplicateKeyError) {
+                const isDuplicate = (0, duplicateKeyError_util_1.isDuplicateKeyError)(error);
+                if (isDuplicate) {
                     // Unique constraint hatası - retry yapmayacağız
                     logger_service_1.logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
                     span.setTag('error.retry_skipped', true);
@@ -389,7 +390,7 @@ class RetryableListener extends common_1.Listener {
                     logger_service_1.logger.info(`Dead letter replay postponed, processing could not start: ${eventType}:${eventId}: ${this.describeError(error)}`);
                     return 'busy';
                 }
-                if (this.isDuplicateKeyError(error)) {
+                if ((0, duplicateKeyError_util_1.isDuplicateKeyError)(error)) {
                     logger_service_1.logger.info(`Dead letter replay treated as processed - duplicate key: ${eventType}:${eventId}`);
                     return 'processed';
                 }
@@ -658,26 +659,6 @@ class RetryableListener extends common_1.Listener {
     describeError(error) {
         const message = error === null || error === void 0 ? void 0 : error.message;
         return (typeof message === 'string' && message) || String(error) || 'Unknown error';
-    }
-    /**
-     * MongoDB duplicate key hatası olup olmadığını kontrol eder
-     */
-    isDuplicateKeyError(error) {
-        // MongoDB duplicate key hata mesajı kontrolü
-        if (error instanceof Error) {
-            // MongoDB hata kodu 11000 duplicate key hatası
-            if (error.name === 'MongoError' && error.code === 11000) {
-                return true;
-            }
-            // Hata mesajında duplicate key ifadesi var mı?
-            if (error.message.includes('duplicate key') ||
-                error.message.includes('E11000') ||
-                error.message.includes('duplicate') ||
-                error.message.includes('uniqueCode')) {
-                return true;
-            }
-        }
-        return false;
     }
 }
 exports.RetryableListener = RetryableListener;
