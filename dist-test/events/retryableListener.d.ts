@@ -114,10 +114,6 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      * DeadLetter şemasında `error` zorunlu alandır ve boş metin kaydı geçersiz kılar.
      */
     private describeError;
-    /**
-     * MongoDB duplicate key hatası olup olmadığını kontrol eder
-     */
-    private isDuplicateKeyError;
 }
 export {};
 //# sourceMappingURL=retryableListener.d.ts.map

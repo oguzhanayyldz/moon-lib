@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import { redisWrapper } from '../services/redisWrapper.service';
 import { logger } from '../services/logger.service';
 import { EventMetrics } from '../metrics/EventMetrics';
+import { isDuplicateKeyError } from '../utils/duplicateKeyError.util';
 import { buildListenerKey, deadLetterReplayRegistry, DeadLetterReplayResult } from './deadLetterReplayRegistry';
 
 // Mevcut RetryOptions'a yeni özellikler ekle
@@ -289,9 +290,9 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             });
 
             // MongoDB duplicate key hatası kontrolü
-            const isDuplicateKeyError = this.isDuplicateKeyError(error);
+            const isDuplicate = isDuplicateKeyError(error);
 
-            if (isDuplicateKeyError) {
+            if (isDuplicate) {
                 // Unique constraint hatası - retry yapmayacağız
                 logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
                 span.setTag('error.retry_skipped', true);
@@ -432,7 +433,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                 logger.info(`Dead letter replay postponed, processing could not start: ${eventType}:${eventId}: ${this.describeError(error)}`);
                 return 'busy';
             }
-            if (this.isDuplicateKeyError(error)) {
+            if (isDuplicateKeyError(error)) {
                 logger.info(`Dead letter replay treated as processed - duplicate key: ${eventType}:${eventId}`);
                 return 'processed';
             }
@@ -732,27 +733,5 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     private describeError(error: unknown): string {
         const message = (error as { message?: unknown } | null | undefined)?.message;
         return (typeof message === 'string' && message) || String(error) || 'Unknown error';
-    }
-
-    /**
-     * MongoDB duplicate key hatası olup olmadığını kontrol eder
-     */
-    private isDuplicateKeyError(error: unknown): boolean {
-        // MongoDB duplicate key hata mesajı kontrolü
-        if (error instanceof Error) {
-            // MongoDB hata kodu 11000 duplicate key hatası
-            if (error.name === 'MongoError' && (error as any).code === 11000) {
-                return true;
-            }
-
-            // Hata mesajında duplicate key ifadesi var mı?
-            if (error.message.includes('duplicate key') ||
-                error.message.includes('E11000') ||
-                error.message.includes('duplicate') ||
-                error.message.includes('uniqueCode')) {
-                return true;
-            }
-        }
-        return false;
     }
 }
