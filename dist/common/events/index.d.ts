@@ -87,6 +87,7 @@ export * from './subscription-invoice-created-event';
 export * from './price-processing-completed-event';
 export * from './integration-auth-failure-exceeded-event';
 export * from './stock-update-confirmed-event';
+export * from './product-pre-match-updated-event';
 export * from './stock-count-started-event';
 export * from './stock-count-finished-event';
 export * from './types/stock-count-status';
