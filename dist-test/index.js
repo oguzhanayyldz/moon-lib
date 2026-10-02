@@ -119,6 +119,7 @@ __exportStar(require("./events/publishers/productIntegrationSynced.publisher"), 
 __exportStar(require("./events/publishers/integrationCommand.publisher"), exports);
 __exportStar(require("./events/publishers/integrationCommandResult.publisher"), exports);
 __exportStar(require("./events/publishers/stockUpdateConfirmed.publisher"), exports);
+__exportStar(require("./events/publishers/productPreMatchUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockCreated.publisher"), exports);
 __exportStar(require("./events/publishers/productStockUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/stockCreated.publisher"), exports);

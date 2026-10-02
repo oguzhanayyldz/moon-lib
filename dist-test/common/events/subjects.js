@@ -91,6 +91,9 @@ var Subjects;
     // Stock Update Confirmation (issue #567)
     // Entegrasyon → catalog: stok platforma GERÇEKTEN yazıldı teyidi (async batch/sync sonucu)
     Subjects["StockUpdateConfirmed"] = "stock:update:confirmed";
+    // Eşleşen ürün (HB PRE_MATCHED) onayı (TASK-MURHHI9UCDMZW)
+    // Entegrasyon → catalog: eşleşme verisi + karar durumu (CatalogMapping.preMatch)
+    Subjects["ProductPreMatchUpdated"] = "product:pre-match:updated";
     // Depo sayimi (issue #637)
     // inventory → integration + orders: sayim basladi/bitti.
     // Kilit paylasilan Redis anahtariyla TASINAMAZ — Redis her serviste izole

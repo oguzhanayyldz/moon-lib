@@ -73,6 +73,7 @@ import { SubscriptionInvoiceCreatedPublisher } from '../events/publishers/subscr
 import { PriceProcessingCompletedPublisher } from '../events/publishers/priceProcessingCompleted.publisher';
 import { IntegrationAuthFailureExceededPublisher } from '../events/publishers/integrationAuthFailureExceeded.publisher';
 import { StockUpdateConfirmedPublisher } from '../events/publishers/stockUpdateConfirmed.publisher';
+import { ProductPreMatchUpdatedPublisher } from '../events/publishers/productPreMatchUpdated.publisher';
 import { StockCountStartedPublisher } from '../events/publishers/stockCountStarted.publisher';
 import { StockCountFinishedPublisher } from '../events/publishers/stockCountFinished.publisher';
 
@@ -846,6 +847,10 @@ export class EventPublisherJob {
                 break;
             case Subjects.StockUpdateConfirmed:
                 await new StockUpdateConfirmedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case Subjects.ProductPreMatchUpdated:
+                await new ProductPreMatchUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case Subjects.StockCountStarted:

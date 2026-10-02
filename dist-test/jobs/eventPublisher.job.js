@@ -74,6 +74,7 @@ const subscriptionInvoiceCreated_publisher_1 = require("../events/publishers/sub
 const priceProcessingCompleted_publisher_1 = require("../events/publishers/priceProcessingCompleted.publisher");
 const integrationAuthFailureExceeded_publisher_1 = require("../events/publishers/integrationAuthFailureExceeded.publisher");
 const stockUpdateConfirmed_publisher_1 = require("../events/publishers/stockUpdateConfirmed.publisher");
+const productPreMatchUpdated_publisher_1 = require("../events/publishers/productPreMatchUpdated.publisher");
 const stockCountStarted_publisher_1 = require("../events/publishers/stockCountStarted.publisher");
 const stockCountFinished_publisher_1 = require("../events/publishers/stockCountFinished.publisher");
 class EventPublisherJob {
@@ -741,6 +742,10 @@ class EventPublisherJob {
                 break;
             case common_1.Subjects.StockUpdateConfirmed:
                 await new stockUpdateConfirmed_publisher_1.StockUpdateConfirmedPublisher(this.natsClient)
+                    .publish(event.payload);
+                break;
+            case common_1.Subjects.ProductPreMatchUpdated:
+                await new productPreMatchUpdated_publisher_1.ProductPreMatchUpdatedPublisher(this.natsClient)
                     .publish(event.payload);
                 break;
             case common_1.Subjects.StockCountStarted:
