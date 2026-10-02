@@ -87,6 +87,7 @@ export interface InvoiceCreated {
         discountTotal: number; // discountTotal - İndirim toplamı
         shippingTotal: number; // shippingTotal - Kargo ücreti
         shippingTaxRate?: number; // shippingTaxRate - Kargo KDV oranı
+        shippingRefundAmount?: number; // Kargodan iade edilen tutar (kısmi iptal) — kargo satırı max(0, shippingTotal - shippingRefundAmount)
         total: number; // total - Genel toplam (KDV dahil)
         currency: CurrencyCode;
     };
