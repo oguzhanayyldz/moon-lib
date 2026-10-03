@@ -111,17 +111,17 @@ const expectAbsent = (text: string, secrets: string[]): void => {
 
 describe('IntegrationLog credential redaction — Ticimax SOAP (596-F)', () => {
     it('masks a namespaced <tem:UyeKodu> in a SOAP request and keeps the other elements', async () => {
-        const uyeKodu = fake('UYEKODU');
+        const memberCode = fake('UYEKODU');
         const envelope =
             '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">' +
             '<soapenv:Body><tem:SelectUrun>' +
-            `<tem:UyeKodu>${uyeKodu}</tem:UyeKodu>` +
+            `<tem:UyeKodu>${memberCode}</tem:UyeKodu>` +
             '<tem:f><tem:UrunKartiID>4242</tem:UrunKartiID></tem:f>' +
             '</tem:SelectUrun></soapenv:Body></soapenv:Envelope>';
 
         const { request, text } = await sendAndCapture({ headers: { 'Content-Type': 'text/xml' }, data: envelope });
 
-        expectAbsent(text, [uyeKodu]);
+        expectAbsent(text, [memberCode]);
         const logged = JSON.parse(request.requestBody as string).body;
         expect(logged).toContain(`<tem:UyeKodu>${MASK}</tem:UyeKodu>`);
         expect(logged).toContain('<tem:UrunKartiID>4242</tem:UrunKartiID>');
@@ -140,12 +140,12 @@ describe('IntegrationLog credential redaction — Ticimax SOAP (596-F)', () => {
     });
 
     it('masks an element that carries attributes and a multi-line value', async () => {
-        const uyeKodu = fake('UYEKODU');
-        const envelope = `<Body><UyeKodu xsi:type="xsd:string">\n  ${uyeKodu}\n</UyeKodu><Adet>3</Adet></Body>`;
+        const memberCode = fake('UYEKODU');
+        const envelope = `<Body><UyeKodu xsi:type="xsd:string">\n  ${memberCode}\n</UyeKodu><Adet>3</Adet></Body>`;
 
         const { request, text } = await sendAndCapture({ headers: { 'Content-Type': 'text/xml' }, data: envelope });
 
-        expectAbsent(text, [uyeKodu]);
+        expectAbsent(text, [memberCode]);
         expect(JSON.parse(request.requestBody as string).body).toBe(
             `<Body><UyeKodu xsi:type="xsd:string">${MASK}</UyeKodu><Adet>3</Adet></Body>`
         );
