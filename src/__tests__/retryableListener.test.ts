@@ -314,6 +314,37 @@ describe('RetryableListener', () => {
         });
     });
 
+    describe('Duplicate key kablolaması (onMessage)', () => {
+        const testData: TestEvent['data'] = { list: [{ id: 'dup-1', user: 'u' }] };
+
+        class FailingListener extends TestListener {
+            constructor(client: any, conn: any, private readonly toThrow: Error) {
+                super(client, { enableLock: false }, conn);
+            }
+            protected async processEvent(): Promise<void> {
+                throw this.toThrow;
+            }
+        }
+
+        const run = async (error: Error) => {
+            const l = new FailingListener(mockClient, mockConnection, error);
+            await l.onMessage(testData, mockMessage);
+            return (l as any).retryManager as { incrementRetryCount: jest.Mock };
+        };
+
+        it('gerçek E11000 (code 11000) → ack edilir, yeniden deneme sayacı artmaz', async () => {
+            const retry = await run(Object.assign(new Error('E11000 duplicate key error collection: x'), { name: 'MongoServerError', code: 11000 }));
+            expect(mockMessage.ack).toHaveBeenCalledTimes(1);
+            expect(retry.incrementRetryCount).not.toHaveBeenCalled();
+        });
+
+        it('mesajında "duplicate" geçen ama kodu farklı hata → yeniden deneme yoluna girer, ack edilmez', async () => {
+            const retry = await run(Object.assign(new Error('duplicate delivery of upstream call'), { code: 5 }));
+            expect(retry.incrementRetryCount).toHaveBeenCalledTimes(1);
+            expect(mockMessage.ack).not.toHaveBeenCalled();
+        });
+    });
+
     describe('Lock Disabled', () => {
         const testData: TestEvent['data'] = {
             list: [{ id: 'test-123', user: 'user-456' }]
