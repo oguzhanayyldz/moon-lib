@@ -20,18 +20,18 @@ const cost_source_1 = require("../common/types/cost-source");
 function canOverrideCost(current, incoming) {
     if (!current)
         return true;
-    const mevcut = cost_source_1.costSourcePrecedence[current];
-    const gelen = cost_source_1.costSourcePrecedence[incoming];
+    const currentRank = cost_source_1.costSourcePrecedence[current];
+    const incomingRank = cost_source_1.costSourcePrecedence[incoming];
     // Haritada karsiligi olmayan bir deger (eski kayit, elle bozulmus veri, haritaya
     // yazilmadan eklenmis yeni kaynak) sessizce `undefined` uretirdi ve her iki
     // karsilastirma da `false` donerdi — alan bir daha HIC guncellenemezdi, Manual bile
     // yazamazdi. Bu bir "yazma kaybi" olarak gorunur, hata olarak degil.
-    if (typeof mevcut !== 'number') {
+    if (typeof currentRank !== 'number') {
         // Mevcut deger taninmiyor: yeni ve gecerli bir kaynak yazabilmeli
-        return typeof gelen === 'number';
+        return typeof incomingRank === 'number';
     }
-    if (typeof gelen !== 'number')
+    if (typeof incomingRank !== 'number')
         return false;
-    return gelen >= mevcut;
+    return incomingRank >= currentRank;
 }
 //# sourceMappingURL=costSource.util.js.map

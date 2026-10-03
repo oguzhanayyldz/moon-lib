@@ -61,8 +61,8 @@ describe('canOverrideCost', () => {
     it('tum ikili kombinasyonlar precedence haritasiyla tutarli', () => {
         for (const current of allSources) {
             for (const incoming of allSources) {
-                const beklenen = costSourcePrecedence[incoming] >= costSourcePrecedence[current];
-                expect(canOverrideCost(current, incoming)).toBe(beklenen);
+                const expected = costSourcePrecedence[incoming] >= costSourcePrecedence[current];
+                expect(canOverrideCost(current, incoming)).toBe(expected);
             }
         }
     });
