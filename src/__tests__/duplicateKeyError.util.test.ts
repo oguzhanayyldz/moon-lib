@@ -31,6 +31,31 @@ describe('isDuplicateKeyError', () => {
         expect(isDuplicateKeyError(err)).toBe(false);
     });
 
+    it('karışık toplu hata [121, 11000] (ilk hata 11000 değil) → false (yeniden deneme yolu)', () => {
+        const err = Object.assign(new Error('bulk'), { name: 'MongoBulkWriteError', code: 121, writeErrors: [{ code: 121 }, { code: 11000 }] });
+        expect(isDuplicateKeyError(err)).toBe(false);
+    });
+
+    it('karışık toplu hata result.writeErrors [{err 121}, {err 11000}] → false', () => {
+        const err = Object.assign(new Error('bulk'), { result: { writeErrors: [{ err: { code: 121 } }, { err: { code: 11000 } }] } });
+        expect(isDuplicateKeyError(err)).toBe(false);
+    });
+
+    it('toplu hatada tüm yazım hataları 11000 → true', () => {
+        const err = Object.assign(new Error('bulk'), { writeErrors: [{ code: 11000 }, { code: 11000 }] });
+        expect(isDuplicateKeyError(err)).toBe(true);
+    });
+
+    it('toplu hatada tek yazım hatası 11000 → true', () => {
+        const err = Object.assign(new Error('bulk'), { writeErrors: [{ code: 11000 }] });
+        expect(isDuplicateKeyError(err)).toBe(true);
+    });
+
+    it('boş writeErrors dizisi → true sayılmaz', () => {
+        const err = Object.assign(new Error('bulk'), { writeErrors: [] });
+        expect(isDuplicateKeyError(err)).toBe(false);
+    });
+
     it.each([
         'E11000 duplicate key error collection: x index: y',
         'insertDocument :: caused by :: 11000 E11000 foo',
