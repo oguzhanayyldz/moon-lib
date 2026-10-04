@@ -115,6 +115,12 @@ export declare class MicroserviceSecurityService {
      */
     getJwtCsrfProtectionMiddleware(): (req: Request, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
     /**
+     * CSRF imza anahtarı. Dağıtımlarda yalnız JWT_KEY tanımlı olduğundan ondan, oturum JWT'siyle
+     * karışmayacak şekilde HMAC ile türetilir (oturum JWT'si CSRF belirteci olarak geçmez).
+     * Açık CSRF_SECRET / JWT_SECRET varsa o kullanılır. Hiçbiri yoksa (yalnız yerel/test) sabit değer.
+     */
+    private static resolveCsrfSecret;
+    /**
      * CSRF token oluşturma (auth servisi için)
      *
      * @param userId Kullanıcı ID'si (opsiyonel)

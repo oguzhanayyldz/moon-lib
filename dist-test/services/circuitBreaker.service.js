@@ -67,6 +67,11 @@ class CircuitBreaker {
             this.halfOpenCallCount = 0;
             this.logEvent('Circuit breaker closed after successful call');
         }
+        else if (this.state === api_client_types_1.CircuitBreakerState.CLOSED) {
+            // Kapalı durumda sayaç ardışık hatayı ölçmeli; başarı sayacı sıfırlamazsa uzun işlerde
+            // binlerce başarı arasına serpilmiş az sayıda 5xx devreyi açar.
+            this.failureCount = 0;
+        }
         this.successCount++;
     }
     onFailure(error, slotRound) {

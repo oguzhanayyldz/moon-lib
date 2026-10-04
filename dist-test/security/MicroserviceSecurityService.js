@@ -43,6 +43,7 @@ const SecurityManager_1 = require("./SecurityManager");
 const bad_request_error_1 = require("../common/errors/bad-request-error");
 const logSafety_util_1 = require("../utils/logSafety.util");
 const jwt = __importStar(require("jsonwebtoken"));
+const crypto_1 = require("crypto");
 /**
  * Merkezi Mikroservis Güvenlik Servisi
  *
@@ -324,9 +325,8 @@ class MicroserviceSecurityService {
                 });
             }
             try {
-                // Token doğrula - tüm mikroservislerin aynı JWT_SECRET değişkenini kullanması gerekir
-                const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
-                const decoded = jwt.verify(csrfToken, jwtSecret);
+                // Token doğrula - tüm mikroservisler aynı anahtarı türetmeli (bkz. resolveCsrfSecret)
+                const decoded = jwt.verify(csrfToken, MicroserviceSecurityService.resolveCsrfSecret());
                 // CSRF token verisini request nesnesine ekle
                 req.csrfTokenData = decoded;
                 next();
@@ -343,6 +343,20 @@ class MicroserviceSecurityService {
         };
     }
     /**
+     * CSRF imza anahtarı. Dağıtımlarda yalnız JWT_KEY tanımlı olduğundan ondan, oturum JWT'siyle
+     * karışmayacak şekilde HMAC ile türetilir (oturum JWT'si CSRF belirteci olarak geçmez).
+     * Açık CSRF_SECRET / JWT_SECRET varsa o kullanılır. Hiçbiri yoksa (yalnız yerel/test) sabit değer.
+     */
+    static resolveCsrfSecret() {
+        const explicit = process.env.CSRF_SECRET || process.env.JWT_SECRET;
+        if (explicit)
+            return explicit;
+        const sessionKey = process.env.JWT_KEY;
+        if (sessionKey)
+            return (0, crypto_1.createHmac)('sha256', sessionKey).update('moon-csrf-v1').digest('hex');
+        return 'moon-security-secret';
+    }
+    /**
      * CSRF token oluşturma (auth servisi için)
      *
      * @param userId Kullanıcı ID'si (opsiyonel)
@@ -350,7 +364,7 @@ class MicroserviceSecurityService {
      * @returns JWT formatında CSRF token
      */
     generateCsrfToken(userId, fingerprint) {
-        const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
+        const jwtSecret = MicroserviceSecurityService.resolveCsrfSecret();
         const token = jwt.sign({
             userId: userId || 'anonymous',
             fingerprint: fingerprint || 'generic',
