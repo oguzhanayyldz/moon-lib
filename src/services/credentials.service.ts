@@ -153,8 +153,13 @@ export class CredentialsService {
                 if (typeof value === 'string' && EncryptionUtil.isEncrypted(value)) {
                     try {
                         merged[key] = EncryptionUtil.decrypt(value);
-                    } catch {
-                        // Decrypt başarısız olursa orijinal değeri koru (backward compat)
+                    } catch (err) {
+                        // Decrypt başarısız olursa orijinal değeri koru (backward compat); sessiz kalma:
+                        // şifreli metin API'ye gideceği için anahtar adıyla uyar (değer loglanmaz)
+                        logger.warn('CredentialsService - credential decrypt başarısız, şifreli değer korundu', {
+                            key,
+                            error: err instanceof Error ? err.message : 'unknown'
+                        });
                     }
                 }
             }
@@ -186,7 +191,8 @@ export class CredentialsService {
         if (isUpdatedSettings && merged.price_update_settings) {
             merged.price_update_settings = this.parsePriceUpdateSettings(
                 merged.price_update_settings,
-                integrationName
+                integrationName,
+                integrationId
             );
         }
 
@@ -194,7 +200,8 @@ export class CredentialsService {
         if (isUpdatedSettings && merged.stock_update_settings) {
             merged.stock_update_settings = this.parseStockUpdateSettings(
                 merged.stock_update_settings,
-                integrationName
+                integrationName,
+                integrationId
             );
         }
 
@@ -202,7 +209,8 @@ export class CredentialsService {
         if (isUpdatedSettings && merged.order_update_settings) {
             const { settings, syncAdvanced } = this.parseOrderUpdateSettings(
                 merged.order_update_settings,
-                integrationName
+                integrationName,
+                integrationId
             );
             merged.order_update_settings = settings;
 
@@ -293,7 +301,12 @@ export class CredentialsService {
      * Source eşleşmesi — yeni `integrationName` veya eski `name` field'ına bakar.
      * UI migration sırasında her iki field da kullanımda olabilir.
      */
-    private static matchesIntegration(source: any, integrationName: string): boolean {
+    private static matchesIntegration(source: any, integrationName: string, integrationId?: string): boolean {
+        // Kaynak integrationId taşıyorsa yalnız ona göre eşle: aynı platformdan ikinci mağaza
+        // birincinin ayarını almasın. Eski kayıtlar (id yok) ada göre eşlenmeye devam eder.
+        if (source?.integrationId && integrationId) {
+            return String(source.integrationId) === String(integrationId);
+        }
         return source?.integrationName === integrationName || source?.name === integrationName;
     }
 
@@ -307,7 +320,8 @@ export class CredentialsService {
      */
     private static parsePriceUpdateSettings(
         raw: string | any,
-        integrationName: string
+        integrationName: string,
+        integrationId?: string
     ): ParsedPriceUpdateSettings {
         const settings = this.safeJsonParse(raw);
 
@@ -315,12 +329,12 @@ export class CredentialsService {
             return { enabled: false, sources: [] };
         }
 
-        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName));
+        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName, integrationId));
 
         return {
             ...settings,
             enabled: matchingSource ? Boolean(matchingSource.enabled) : false,
-            sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName))
+            sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName, integrationId))
         };
     }
 
@@ -333,7 +347,8 @@ export class CredentialsService {
      */
     private static parseStockUpdateSettings(
         raw: string | any,
-        integrationName: string
+        integrationName: string,
+        integrationId?: string
     ): ParsedStockUpdateSettings {
         const settings = this.safeJsonParse(raw);
 
@@ -341,12 +356,12 @@ export class CredentialsService {
             return { enabled: false, sources: [] };
         }
 
-        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName));
+        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName, integrationId));
 
         return {
             ...settings,
             enabled: matchingSource ? Boolean(matchingSource.enabled) : false,
-            sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName))
+            sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName, integrationId))
         };
     }
 
@@ -355,7 +370,8 @@ export class CredentialsService {
      */
     private static parseOrderUpdateSettings(
         raw: string | any,
-        integrationName: string
+        integrationName: string,
+        integrationId?: string
     ): { settings: ParsedOrderUpdateSettings; syncAdvanced?: any } {
         const settings = this.safeJsonParse(raw);
 
@@ -363,13 +379,13 @@ export class CredentialsService {
             return { settings: { enabled: false, sources: [] }, syncAdvanced: undefined };
         }
 
-        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName));
+        const matchingSource = settings.sources.find((s: any) => this.matchesIntegration(s, integrationName, integrationId));
 
         return {
             settings: {
                 ...settings,
                 enabled: matchingSource ? Boolean(matchingSource.enabled) : false,
-                sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName))
+                sources: settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName, integrationId))
             },
             syncAdvanced: matchingSource?.syncAdvanced
         };
@@ -402,7 +418,7 @@ export class CredentialsService {
         }
 
         const matchingSource = settings.sources?.find(
-            (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+            (s: any) => this.matchesIntegration(s, integrationName, integrationId)
         );
 
         const rootFields = {
@@ -423,7 +439,7 @@ export class CredentialsService {
             enabledForThisIntegration: matchingSource?.enabled ?? false,
             currentSource: matchingSource || null,
             sources: settings.sources?.filter(
-                (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+                (s: any) => this.matchesIntegration(s, integrationName, integrationId)
             ) || []
         };
 
@@ -456,7 +472,7 @@ export class CredentialsService {
         }
 
         const matchingSource = settings.sources?.find(
-            (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+            (s: any) => this.matchesIntegration(s, integrationName, integrationId)
         );
 
         const rootFields = {
@@ -478,7 +494,7 @@ export class CredentialsService {
             printWaitTimeout: settings.printWaitTimeout ?? 8000,
             sellerInfo: settings.sellerInfo || null,
             sources: settings.sources?.filter(
-                (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+                (s: any) => this.matchesIntegration(s, integrationName, integrationId)
             ) || []
         };
 

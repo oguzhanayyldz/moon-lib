@@ -48,8 +48,13 @@ class CredentialsService {
                     try {
                         merged[key] = encryption_util_1.EncryptionUtil.decrypt(value);
                     }
-                    catch (_a) {
-                        // Decrypt başarısız olursa orijinal değeri koru (backward compat)
+                    catch (err) {
+                        // Decrypt başarısız olursa orijinal değeri koru (backward compat); sessiz kalma:
+                        // şifreli metin API'ye gideceği için anahtar adıyla uyar (değer loglanmaz)
+                        logger_service_1.logger.warn('CredentialsService - credential decrypt başarısız, şifreli değer korundu', {
+                            key,
+                            error: err instanceof Error ? err.message : 'unknown'
+                        });
                     }
                 }
             }
@@ -74,15 +79,15 @@ class CredentialsService {
         }
         // MARKETPLACE/ECOMMERCE: Price update settings
         if (isUpdatedSettings && merged.price_update_settings) {
-            merged.price_update_settings = this.parsePriceUpdateSettings(merged.price_update_settings, integrationName);
+            merged.price_update_settings = this.parsePriceUpdateSettings(merged.price_update_settings, integrationName, integrationId);
         }
         // MARKETPLACE/ECOMMERCE: Stock update settings
         if (isUpdatedSettings && merged.stock_update_settings) {
-            merged.stock_update_settings = this.parseStockUpdateSettings(merged.stock_update_settings, integrationName);
+            merged.stock_update_settings = this.parseStockUpdateSettings(merged.stock_update_settings, integrationName, integrationId);
         }
         // MARKETPLACE/ECOMMERCE: Order update settings
         if (isUpdatedSettings && merged.order_update_settings) {
-            const { settings, syncAdvanced } = this.parseOrderUpdateSettings(merged.order_update_settings, integrationName);
+            const { settings, syncAdvanced } = this.parseOrderUpdateSettings(merged.order_update_settings, integrationName, integrationId);
             merged.order_update_settings = settings;
             // syncAdvanced -> root level mapping
             if (syncAdvanced) {
@@ -155,7 +160,12 @@ class CredentialsService {
      * Source eşleşmesi — yeni `integrationName` veya eski `name` field'ına bakar.
      * UI migration sırasında her iki field da kullanımda olabilir.
      */
-    static matchesIntegration(source, integrationName) {
+    static matchesIntegration(source, integrationName, integrationId) {
+        // Kaynak integrationId taşıyorsa yalnız ona göre eşle: aynı platformdan ikinci mağaza
+        // birincinin ayarını almasın. Eski kayıtlar (id yok) ada göre eşlenmeye devam eder.
+        if ((source === null || source === void 0 ? void 0 : source.integrationId) && integrationId) {
+            return String(source.integrationId) === String(integrationId);
+        }
         return (source === null || source === void 0 ? void 0 : source.integrationName) === integrationName || (source === null || source === void 0 ? void 0 : source.name) === integrationName;
     }
     /**
@@ -166,13 +176,13 @@ class CredentialsService {
      * sonrası `enabled` field'ı bu integration için doğru değeri verir, böylece her
      * entegrasyon servisi tek bir field'a bakarak source-level karar verir.
      */
-    static parsePriceUpdateSettings(raw, integrationName) {
+    static parsePriceUpdateSettings(raw, integrationName, integrationId) {
         const settings = this.safeJsonParse(raw);
         if (!settings || !settings.sources) {
             return { enabled: false, sources: [] };
         }
-        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName));
-        return Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName)) });
+        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName, integrationId));
+        return Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName, integrationId)) });
     }
     /**
      * Stock update settings parse ve filter
@@ -181,25 +191,25 @@ class CredentialsService {
      * Issue #560: master `enabled: true` + WC source `enabled: false` durumunda updateStocks
      * skip ediliyordu çünkü parse sonrası master flag aynen geçiyordu.
      */
-    static parseStockUpdateSettings(raw, integrationName) {
+    static parseStockUpdateSettings(raw, integrationName, integrationId) {
         const settings = this.safeJsonParse(raw);
         if (!settings || !settings.sources) {
             return { enabled: false, sources: [] };
         }
-        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName));
-        return Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName)) });
+        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName, integrationId));
+        return Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName, integrationId)) });
     }
     /**
      * Order update settings parse ve filter
      */
-    static parseOrderUpdateSettings(raw, integrationName) {
+    static parseOrderUpdateSettings(raw, integrationName, integrationId) {
         const settings = this.safeJsonParse(raw);
         if (!settings || !settings.sources) {
             return { settings: { enabled: false, sources: [] }, syncAdvanced: undefined };
         }
-        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName));
+        const matchingSource = settings.sources.find((s) => this.matchesIntegration(s, integrationName, integrationId));
         return {
-            settings: Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName)) }),
+            settings: Object.assign(Object.assign({}, settings), { enabled: matchingSource ? Boolean(matchingSource.enabled) : false, sources: settings.sources.filter((s) => this.matchesIntegration(s, integrationName, integrationId)) }),
             syncAdvanced: matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.syncAdvanced
         };
     }
@@ -224,7 +234,7 @@ class CredentialsService {
                 }
             };
         }
-        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => s.integrationId === integrationId.toString() || s.name === integrationName);
+        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => this.matchesIntegration(s, integrationName, integrationId));
         const rootFields = {
             shipmentEnabled: (_b = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _b !== void 0 ? _b : false,
             useIntegrationCargoLabel: (_c = settings.useIntegrationCargoLabel) !== null && _c !== void 0 ? _c : true,
@@ -235,7 +245,7 @@ class CredentialsService {
             fallbackCargoIntegrationId: settings.fallbackCargoIntegrationId || null,
             fallbackCargoName: settings.fallbackCargoName || null
         };
-        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_e = settings.enabled) !== null && _e !== void 0 ? _e : false, useIntegrationCargoLabel: (_f = settings.useIntegrationCargoLabel) !== null && _f !== void 0 ? _f : true, enabledForThisIntegration: (_g = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _g !== void 0 ? _g : false, currentSource: matchingSource || null, sources: ((_h = settings.sources) === null || _h === void 0 ? void 0 : _h.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
+        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_e = settings.enabled) !== null && _e !== void 0 ? _e : false, useIntegrationCargoLabel: (_f = settings.useIntegrationCargoLabel) !== null && _f !== void 0 ? _f : true, enabledForThisIntegration: (_g = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _g !== void 0 ? _g : false, currentSource: matchingSource || null, sources: ((_h = settings.sources) === null || _h === void 0 ? void 0 : _h.filter((s) => this.matchesIntegration(s, integrationName, integrationId))) || [] });
         return { settings: parsedSettings, rootFields };
     }
     /**
@@ -258,7 +268,7 @@ class CredentialsService {
                 }
             };
         }
-        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => s.integrationId === integrationId.toString() || s.name === integrationName);
+        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => this.matchesIntegration(s, integrationName, integrationId));
         const rootFields = {
             invoiceEnabled: (_b = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _b !== void 0 ? _b : false,
             invoiceAutoFormalize: (_e = (_c = settings.autoFormalize) !== null && _c !== void 0 ? _c : (_d = settings.invoiceCreation) === null || _d === void 0 ? void 0 : _d.autoFormalize) !== null && _e !== void 0 ? _e : false,
@@ -268,7 +278,7 @@ class CredentialsService {
             invoicePrintWaitTimeout: (_g = settings.printWaitTimeout) !== null && _g !== void 0 ? _g : 8000,
             invoiceSellerInfo: settings.sellerInfo || null
         };
-        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_h = settings.enabled) !== null && _h !== void 0 ? _h : false, enabledForThisIntegration: (_j = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _j !== void 0 ? _j : false, currentSource: matchingSource || null, printFromErp: (_k = settings.printFromErp) !== null && _k !== void 0 ? _k : false, printWaitTimeout: (_l = settings.printWaitTimeout) !== null && _l !== void 0 ? _l : 8000, sellerInfo: settings.sellerInfo || null, sources: ((_m = settings.sources) === null || _m === void 0 ? void 0 : _m.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
+        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_h = settings.enabled) !== null && _h !== void 0 ? _h : false, enabledForThisIntegration: (_j = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _j !== void 0 ? _j : false, currentSource: matchingSource || null, printFromErp: (_k = settings.printFromErp) !== null && _k !== void 0 ? _k : false, printWaitTimeout: (_l = settings.printWaitTimeout) !== null && _l !== void 0 ? _l : 8000, sellerInfo: settings.sellerInfo || null, sources: ((_m = settings.sources) === null || _m === void 0 ? void 0 : _m.filter((s) => this.matchesIntegration(s, integrationName, integrationId))) || [] });
         return { settings: parsedSettings, rootFields };
     }
 }
