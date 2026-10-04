@@ -186,7 +186,7 @@ class BaseApiClient {
             // once the deadline fires, nothing else is sent for this call.
             const abortController = new AbortController();
             const executionConfig = Object.assign(Object.assign({}, finalConfig), { signal: abortController.signal });
-            const response = await this.queue.add(() => this.runWithDeadline(abortController, async () => {
+            const response = await this.queue.add(() => this.runWithDeadline(abortController, this.resolveDeadlineMs(finalConfig), async () => {
                 if (!finalConfig.skipCircuitBreaker) {
                     return this.getCircuitBreaker(operationType).execute(() => this.executeRequest(executionConfig, abortController.signal));
                 }
@@ -244,7 +244,8 @@ class BaseApiClient {
                         logId = await this.logRequest(requestConfig);
                     }
                     // Enhanced error parsing - child classes (like ShopifyApiClient) may return structured error objects
-                    let responseStatus = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.status) || 500; // Default to 500 instead of 0
+                    // Default to 500 instead of 0; a deadline abort is logged as a gateway timeout.
+                    let responseStatus = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.status) || (error instanceof api_client_types_1.ApiRequestTimeoutError ? 504 : 500);
                     let responseBody = ((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || error.message;
                     // Try to parse enhanced error objects (JSON-stringified errors from child classes)
                     if (error.message && !(error.response)) {
@@ -367,12 +368,31 @@ class BaseApiClient {
         }
     }
     /**
-     * Runs `work` under the queue deadline. When the deadline passes, the request is
+     * Deadline for one call: `queue.timeout`, extended to the call's own `timeout` when that
+     * is longer (e.g. 60 s product uploads on a client whose queue timeout is 30 s). Without
+     * the extension those uploads would be cut at the queue timeout and could never finish.
+     *
+     * No extra margin is added on purpose. The deadline timer starts before the HTTP request
+     * is sent, so it always fires before axios' own `timeout` of the same length: the caller
+     * gets ApiRequestTimeoutError, the socket is cut and no retry is sent. A margin would let
+     * axios time out first and the retry loop would send the same (possibly non-idempotent)
+     * upload again. Consequence: axios' per-attempt timeout never fires while a deadline is
+     * set; to retry slow attempts, set the request timeout below the queue timeout.
+     */
+    resolveDeadlineMs(requestConfig) {
+        const queueTimeoutMs = this.queueTimeoutMs;
+        if (!queueTimeoutMs) {
+            return undefined;
+        }
+        const requestTimeoutMs = requestConfig.timeout;
+        return requestTimeoutMs && requestTimeoutMs > queueTimeoutMs ? requestTimeoutMs : queueTimeoutMs;
+    }
+    /**
+     * Runs `work` under the call deadline. When the deadline passes, the request is
      * aborted (in-flight HTTP call cancelled, retry loop stopped) and the caller gets an
      * ApiRequestTimeoutError instead of p-queue's silent `undefined`.
      */
-    runWithDeadline(abortController, work) {
-        const timeoutMs = this.queueTimeoutMs;
+    runWithDeadline(abortController, timeoutMs, work) {
         if (!timeoutMs) {
             return work();
         }

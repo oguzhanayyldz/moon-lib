@@ -69,7 +69,8 @@ export abstract class BaseApiClient implements IApiClient {
   protected rateLimiterGroups: Map<string, RateLimiterMemory> = new Map();
   protected queue!: any;
   /**
-   * Per-request deadline taken from `queue.timeout`. Enforced by BaseApiClient itself
+   * Default per-call deadline taken from `queue.timeout` (a longer per-call `timeout`
+   * extends it, see resolveDeadlineMs). Enforced by BaseApiClient itself
    * (not by p-queue): p-queue's timeout resolves with `undefined` and leaves the task
    * running, so the HTTP request and its retries kept going after the caller gave up.
    */
@@ -312,7 +313,7 @@ export abstract class BaseApiClient implements IApiClient {
       const abortController = new AbortController();
       const executionConfig = { ...finalConfig, signal: abortController.signal } as RequestConfig;
       const response = await this.queue.add(() =>
-        this.runWithDeadline(abortController, async () => {
+        this.runWithDeadline(abortController, this.resolveDeadlineMs(finalConfig), async () => {
           if (!finalConfig.skipCircuitBreaker) {
             return this.getCircuitBreaker(operationType).execute(() =>
               this.executeRequest<T>(executionConfig, abortController.signal)
@@ -377,7 +378,9 @@ export abstract class BaseApiClient implements IApiClient {
           }
 
           // Enhanced error parsing - child classes (like ShopifyApiClient) may return structured error objects
-          let responseStatus = (error as AxiosError).response?.status || 500; // Default to 500 instead of 0
+          // Default to 500 instead of 0; a deadline abort is logged as a gateway timeout.
+          let responseStatus =
+            (error as AxiosError).response?.status || (error instanceof ApiRequestTimeoutError ? 504 : 500);
           let responseBody: any = (error as AxiosError).response?.data || (error as Error).message;
 
           // Try to parse enhanced error objects (JSON-stringified errors from child classes)
@@ -519,12 +522,36 @@ export abstract class BaseApiClient implements IApiClient {
   }
 
   /**
-   * Runs `work` under the queue deadline. When the deadline passes, the request is
+   * Deadline for one call: `queue.timeout`, extended to the call's own `timeout` when that
+   * is longer (e.g. 60 s product uploads on a client whose queue timeout is 30 s). Without
+   * the extension those uploads would be cut at the queue timeout and could never finish.
+   *
+   * No extra margin is added on purpose. The deadline timer starts before the HTTP request
+   * is sent, so it always fires before axios' own `timeout` of the same length: the caller
+   * gets ApiRequestTimeoutError, the socket is cut and no retry is sent. A margin would let
+   * axios time out first and the retry loop would send the same (possibly non-idempotent)
+   * upload again. Consequence: axios' per-attempt timeout never fires while a deadline is
+   * set; to retry slow attempts, set the request timeout below the queue timeout.
+   */
+  private resolveDeadlineMs(requestConfig: RequestConfig): number | undefined {
+    const queueTimeoutMs = this.queueTimeoutMs;
+    if (!queueTimeoutMs) {
+      return undefined;
+    }
+    const requestTimeoutMs = requestConfig.timeout;
+    return requestTimeoutMs && requestTimeoutMs > queueTimeoutMs ? requestTimeoutMs : queueTimeoutMs;
+  }
+
+  /**
+   * Runs `work` under the call deadline. When the deadline passes, the request is
    * aborted (in-flight HTTP call cancelled, retry loop stopped) and the caller gets an
    * ApiRequestTimeoutError instead of p-queue's silent `undefined`.
    */
-  private runWithDeadline<R>(abortController: AbortController, work: () => Promise<R>): Promise<R> {
-    const timeoutMs = this.queueTimeoutMs;
+  private runWithDeadline<R>(
+    abortController: AbortController,
+    timeoutMs: number | undefined,
+    work: () => Promise<R>
+  ): Promise<R> {
     if (!timeoutMs) {
       return work();
     }

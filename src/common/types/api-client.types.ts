@@ -156,6 +156,10 @@ export class CircuitBreakerOpenError extends BaseApiError {
  * `code` matches axios' own timeout code so existing error categorizers treat it as a
  * timeout. The message deliberately avoids the word "timeout": command listeners retry
  * whole commands on `message.includes('timeout')`, and this change must not widen that.
+ *
+ * `isRetryable` only holds for idempotent calls. The server may already have applied the
+ * request when it was aborted, so for non-idempotent calls (`skipRetry`) the outcome is
+ * unknown and must be reconciled instead of retried.
  */
 export class ApiRequestTimeoutError extends BaseApiError {
   category = 'TIMEOUT';

@@ -38,6 +38,7 @@ interface ClientOptions {
     queueTimeout?: number;
     maxRetries?: number;
     retryDelay?: number;
+    maxRetryDelay?: number;
 }
 
 function makeClient(opts: ClientOptions = {}): TestApiClient {
@@ -56,7 +57,7 @@ function makeClient(opts: ClientOptions = {}): TestApiClient {
         retries: {
             maxRetries: opts.maxRetries ?? 3,
             initialDelay: opts.retryDelay ?? 20,
-            maxDelay: 1000,
+            maxDelay: opts.maxRetryDelay ?? 1000,
             backoffFactor: 1,
             retryableErrors: []
         }
@@ -206,6 +207,129 @@ describe('BaseApiClient — queue deadline aborts the request and its retries', 
         await wait(250);
         expect(transport.calls[0].signal?.aborted).toBe(false);
         expect(unhandled).toEqual([]);
+    });
+
+    describe('per-call timeout longer than queue.timeout (fake clock)', () => {
+        // Hepsiburada/idefix product uploads pass `timeout: 60000` on a client whose
+        // queue.timeout is 30000. The call deadline must follow the longer request timeout.
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        function settleState<T>(promise: Promise<T>) {
+            const state: { settled: boolean; value?: T; error?: any } = { settled: false };
+            promise.then(
+                (value) => { state.settled = true; state.value = value; },
+                (error) => { state.settled = true; state.error = error; }
+            );
+            return state;
+        }
+
+        it('60 s call on a 30 s queue is not cut at 30 s and completes', async () => {
+            const client = makeClient({ queueTimeout: 30000 });
+            const transport = fakeTransport(45000, () => ({ status: 200, data: { uploaded: true }, headers: {} }));
+            client.setHttpClient({ request: transport.request });
+
+            const state = settleState(client.post('/products/import', {}, { ...REQ, timeout: 60000 }));
+
+            await jest.advanceTimersByTimeAsync(30001);
+            expect(state.settled).toBe(false);
+            expect(transport.calls[0].signal?.aborted).toBe(false);
+
+            await jest.advanceTimersByTimeAsync(15000);
+            expect(state).toEqual({ settled: true, value: { uploaded: true } });
+            expect(transport.request).toHaveBeenCalledTimes(1);
+        });
+
+        it('60 s call is aborted at 60 s with the 60 s deadline, without a retry', async () => {
+            const client = makeClient({ queueTimeout: 30000, maxRetries: 3, retryDelay: 1000 });
+            const transport = fakeTransport(90000, () => ({ status: 200, data: {}, headers: {} }));
+            client.setHttpClient({ request: transport.request });
+
+            const state = settleState(client.post('/products/import', {}, { ...REQ, timeout: 60000 }));
+
+            await jest.advanceTimersByTimeAsync(59999);
+            expect(state.settled).toBe(false);
+
+            await jest.advanceTimersByTimeAsync(1);
+            expect(state.error).toBeInstanceOf(ApiRequestTimeoutError);
+            expect(state.error.timeoutMs).toBe(60000);
+            expect(transport.calls[0].signal?.aborted).toBe(true);
+
+            await jest.advanceTimersByTimeAsync(60000);
+            expect(transport.request).toHaveBeenCalledTimes(1);
+        });
+
+        it('call without its own timeout is still aborted at the 30 s queue deadline', async () => {
+            const client = makeClient({ queueTimeout: 30000 });
+            const transport = fakeTransport(45000, () => ({ status: 200, data: {}, headers: {} }));
+            client.setHttpClient({ request: transport.request });
+
+            const state = settleState(client.get('/orders', REQ));
+
+            await jest.advanceTimersByTimeAsync(29999);
+            expect(state.settled).toBe(false);
+
+            await jest.advanceTimersByTimeAsync(1);
+            expect(state.error).toBeInstanceOf(ApiRequestTimeoutError);
+            expect(state.error.timeoutMs).toBe(30000);
+            expect(transport.calls[0].signal?.aborted).toBe(true);
+        });
+
+        it('a per-call timeout shorter than queue.timeout does not shorten the deadline', async () => {
+            const client = makeClient({ queueTimeout: 30000 });
+            const transport = fakeTransport(20000, () => ({ status: 200, data: { ok: true }, headers: {} }));
+            client.setHttpClient({ request: transport.request });
+
+            const state = settleState(client.get('/orders', { ...REQ, timeout: 10000 }));
+
+            await jest.advanceTimersByTimeAsync(20000);
+            expect(state).toEqual({ settled: true, value: { ok: true } });
+        });
+
+        it('deadline during a retry delay: executeRequest settles at the deadline, not after the delay', async () => {
+            // Attempt 1 fails at 25 s, the retry sleep would last until 35 s; deadline is 30 s.
+            const client = makeClient({ queueTimeout: 30000, maxRetries: 3, retryDelay: 10000, maxRetryDelay: 10000 });
+            client.setHttpClient({ request: fakeTransport(25000, () => { throw networkError(); }).request });
+            const executeSpy = jest.spyOn(client as any, 'executeRequest');
+
+            const caller = settleState(client.get('/orders', REQ));
+            await jest.advanceTimersByTimeAsync(25000);
+            const inner = settleState(executeSpy.mock.results[0].value as Promise<unknown>);
+
+            await jest.advanceTimersByTimeAsync(5000);
+            expect(caller.error).toBeInstanceOf(ApiRequestTimeoutError);
+            // The retry sleep is cancelled by the abort; the breaker slot is released now.
+            expect(inner.settled).toBe(true);
+        });
+
+        it('a deadline abort is logged as 504, not as a generic 500', async () => {
+            const client = makeClient({ queueTimeout: 30000 });
+            client.setHttpClient({ request: fakeTransport(45000, () => ({ status: 200, data: {}, headers: {} })).request });
+            const logService = {
+                logRequest: jest.fn().mockResolvedValue('log-1'),
+                logResponse: jest.fn().mockResolvedValue(undefined),
+            };
+            (client as any).logService = logService;
+
+            const state = settleState(client.get('/orders', { skipRateLimit: true }));
+            await jest.advanceTimersByTimeAsync(30000);
+
+            expect(state.error).toBeInstanceOf(ApiRequestTimeoutError);
+            expect(logService.logResponse).toHaveBeenCalledWith('log-1', expect.objectContaining({ responseStatus: 504 }));
+        });
+
+        it('fast failure clears the deadline timer', async () => {
+            const client = makeClient({ queueTimeout: 30000 });
+            const badRequest: any = new Error('Request failed with status code 400');
+            badRequest.response = { status: 400, data: {}, headers: {} };
+            client.setHttpClient({ request: fakeTransport(10, () => { throw badRequest; }).request });
+
+            const state = settleState(client.get('/orders', REQ));
+            await jest.advanceTimersByTimeAsync(10);
+
+            expect(state.error).toBe(badRequest);
+            expect(jest.getTimerCount()).toBe(0);
+        });
     });
 
     describe('with real axios against a local HTTP server', () => {

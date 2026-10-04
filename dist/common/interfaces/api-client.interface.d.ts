@@ -52,6 +52,8 @@ export interface RequestConfig extends AxiosRequestConfig {
     /**
      * Send the request at most once: the client-level retry loop is skipped.
      * Use for non-idempotent calls (e.g. approve/reject) where a duplicate would be harmful.
+     * Note: a deadline abort (ApiRequestTimeoutError) does not undo anything on the server.
+     * For such calls a timeout means "outcome unknown", not "failed": reconcile before resending.
      */
     skipRetry?: boolean;
     logRequest?: boolean;
