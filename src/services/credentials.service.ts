@@ -418,7 +418,7 @@ export class CredentialsService {
         }
 
         const matchingSource = settings.sources?.find(
-            (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+            (s: any) => this.matchesIntegration(s, integrationName, integrationId)
         );
 
         const rootFields = {
@@ -439,7 +439,7 @@ export class CredentialsService {
             enabledForThisIntegration: matchingSource?.enabled ?? false,
             currentSource: matchingSource || null,
             sources: settings.sources?.filter(
-                (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+                (s: any) => this.matchesIntegration(s, integrationName, integrationId)
             ) || []
         };
 
@@ -472,7 +472,7 @@ export class CredentialsService {
         }
 
         const matchingSource = settings.sources?.find(
-            (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+            (s: any) => this.matchesIntegration(s, integrationName, integrationId)
         );
 
         const rootFields = {
@@ -494,7 +494,7 @@ export class CredentialsService {
             printWaitTimeout: settings.printWaitTimeout ?? 8000,
             sellerInfo: settings.sellerInfo || null,
             sources: settings.sources?.filter(
-                (s: any) => s.integrationId === integrationId.toString() || s.name === integrationName
+                (s: any) => this.matchesIntegration(s, integrationName, integrationId)
             ) || []
         };
 

@@ -234,7 +234,7 @@ class CredentialsService {
                 }
             };
         }
-        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => s.integrationId === integrationId.toString() || s.name === integrationName);
+        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => this.matchesIntegration(s, integrationName, integrationId));
         const rootFields = {
             shipmentEnabled: (_b = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _b !== void 0 ? _b : false,
             useIntegrationCargoLabel: (_c = settings.useIntegrationCargoLabel) !== null && _c !== void 0 ? _c : true,
@@ -245,7 +245,7 @@ class CredentialsService {
             fallbackCargoIntegrationId: settings.fallbackCargoIntegrationId || null,
             fallbackCargoName: settings.fallbackCargoName || null
         };
-        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_e = settings.enabled) !== null && _e !== void 0 ? _e : false, useIntegrationCargoLabel: (_f = settings.useIntegrationCargoLabel) !== null && _f !== void 0 ? _f : true, enabledForThisIntegration: (_g = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _g !== void 0 ? _g : false, currentSource: matchingSource || null, sources: ((_h = settings.sources) === null || _h === void 0 ? void 0 : _h.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
+        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_e = settings.enabled) !== null && _e !== void 0 ? _e : false, useIntegrationCargoLabel: (_f = settings.useIntegrationCargoLabel) !== null && _f !== void 0 ? _f : true, enabledForThisIntegration: (_g = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _g !== void 0 ? _g : false, currentSource: matchingSource || null, sources: ((_h = settings.sources) === null || _h === void 0 ? void 0 : _h.filter((s) => this.matchesIntegration(s, integrationName, integrationId))) || [] });
         return { settings: parsedSettings, rootFields };
     }
     /**
@@ -268,7 +268,7 @@ class CredentialsService {
                 }
             };
         }
-        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => s.integrationId === integrationId.toString() || s.name === integrationName);
+        const matchingSource = (_a = settings.sources) === null || _a === void 0 ? void 0 : _a.find((s) => this.matchesIntegration(s, integrationName, integrationId));
         const rootFields = {
             invoiceEnabled: (_b = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _b !== void 0 ? _b : false,
             invoiceAutoFormalize: (_e = (_c = settings.autoFormalize) !== null && _c !== void 0 ? _c : (_d = settings.invoiceCreation) === null || _d === void 0 ? void 0 : _d.autoFormalize) !== null && _e !== void 0 ? _e : false,
@@ -278,7 +278,7 @@ class CredentialsService {
             invoicePrintWaitTimeout: (_g = settings.printWaitTimeout) !== null && _g !== void 0 ? _g : 8000,
             invoiceSellerInfo: settings.sellerInfo || null
         };
-        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_h = settings.enabled) !== null && _h !== void 0 ? _h : false, enabledForThisIntegration: (_j = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _j !== void 0 ? _j : false, currentSource: matchingSource || null, printFromErp: (_k = settings.printFromErp) !== null && _k !== void 0 ? _k : false, printWaitTimeout: (_l = settings.printWaitTimeout) !== null && _l !== void 0 ? _l : 8000, sellerInfo: settings.sellerInfo || null, sources: ((_m = settings.sources) === null || _m === void 0 ? void 0 : _m.filter((s) => s.integrationId === integrationId.toString() || s.name === integrationName)) || [] });
+        const parsedSettings = Object.assign(Object.assign({}, settings), { enabled: (_h = settings.enabled) !== null && _h !== void 0 ? _h : false, enabledForThisIntegration: (_j = matchingSource === null || matchingSource === void 0 ? void 0 : matchingSource.enabled) !== null && _j !== void 0 ? _j : false, currentSource: matchingSource || null, printFromErp: (_k = settings.printFromErp) !== null && _k !== void 0 ? _k : false, printWaitTimeout: (_l = settings.printWaitTimeout) !== null && _l !== void 0 ? _l : 8000, sellerInfo: settings.sellerInfo || null, sources: ((_m = settings.sources) === null || _m === void 0 ? void 0 : _m.filter((s) => this.matchesIntegration(s, integrationName, integrationId))) || [] });
         return { settings: parsedSettings, rootFields };
     }
 }
