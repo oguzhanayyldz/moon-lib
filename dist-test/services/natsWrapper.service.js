@@ -11,9 +11,8 @@ const logSafety_util_1 = require("../utils/logSafety.util");
 class NatsWrapper {
     constructor() {
         this._isConnected = false;
-        this._reconnectInterval = 5000;
-        this._reconnectAttempts = 0;
-        this._maxReconnectAttempts = 10;
+        this._closing = false;
+        this._connectionLostCallbacks = [];
     }
     get client() {
         if (!this._client) {
@@ -24,52 +23,74 @@ class NatsWrapper {
     get isConnected() {
         return this._isConnected;
     }
+    /**
+     * Kalıcı bağlantı kaybında (kapanış dışındaki Stan 'close') bir kez çağrılır.
+     * Kısa kopmaları nats.js AYNI istemciyle kendisi toparlar ('disconnect' → 'reconnect').
+     * Stan 'close' ise istemcinin kalıcı öldüğü anlamına gelir: dinleyiciler, EventPublisherJob ve istemciyi
+     * değer olarak tutan her şey ölüdür. Servis bu durumda süreci kapatmalı, k8s yeniden başlatır.
+     */
+    onConnectionLost(callback) {
+        this._connectionLostCallbacks.push(callback);
+    }
+    /**
+     * Kapanışta istemciyi kapatır; bu yoldan gelen 'close' onConnectionLost'u tetiklemez.
+     */
+    close() {
+        var _a;
+        this._closing = true;
+        (_a = this._client) === null || _a === void 0 ? void 0 : _a.close();
+    }
     async connect(clusterId, clientId, url) {
+        let client;
         try {
-            this._client = node_nats_streaming_1.default.connect(clusterId, clientId, { url });
-            this._client.on('connect', () => {
-                logger_service_1.logger.info('Connected to NATS');
-                this._isConnected = true;
-                this._reconnectAttempts = 0; // Reset reconnection attempts on successful connection
-            });
-            this._client.on('disconnect', () => {
-                logger_service_1.logger.info('Disconnected from NATS');
-                this._isConnected = false;
-                this.attemptReconnect(clusterId, clientId, url);
-            });
-            return new Promise((resolve, reject) => {
-                this.client.on('connect', () => resolve());
-                // The raw error carries the address (ERR_INVALID_URL etc.); never reject with it directly.
-                this.client.on('error', (err) => reject((0, logSafety_util_1.toSafeError)((0, logSafety_util_1.sanitizeConnectionError)(err))));
-            });
+            client = node_nats_streaming_1.default.connect(clusterId, clientId, { url });
         }
         catch (error) {
             // An invalid URL error (ERR_INVALID_URL) carries the address in `input`; never log the raw error.
-            logger_service_1.logger.error('Failed to connect to NATS:', (0, logSafety_util_1.sanitizeConnectionError)(error));
-            this.attemptReconnect(clusterId, clientId, url);
+            const safeError = (0, logSafety_util_1.sanitizeConnectionError)(error);
+            logger_service_1.logger.error('Failed to connect to NATS:', safeError);
+            throw (0, logSafety_util_1.toSafeError)(safeError);
         }
-    }
-    attemptReconnect(clusterId, clientId, url) {
-        // Check if max reconnection attempts reached
-        if (this._reconnectAttempts >= this._maxReconnectAttempts) {
-            logger_service_1.logger.error(`❌ Max reconnect attempts (${this._maxReconnectAttempts}) reached. Stopping reconnection.`);
-            logger_service_1.logger.error('⚠️ Service may be degraded. Please check NATS server status.');
-            return;
-        }
-        this._reconnectAttempts++;
-        // Exponential backoff: increase delay with each attempt (max 30 seconds)
-        const backoffTime = Math.min(this._reconnectInterval * this._reconnectAttempts, 30000);
-        setTimeout(() => {
-            logger_service_1.logger.info(`🔄 Attempting to reconnect to NATS (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})...`);
-            this.connect(clusterId, clientId, url)
-                .then(() => {
-                logger_service_1.logger.info('✅ NATS reconnection successful');
-            })
-                .catch(err => {
-                logger_service_1.logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, (0, logSafety_util_1.sanitizeConnectionError)(err));
-                // attemptReconnect will be called again from connect() error handler if needed
+        this._client = client;
+        this._closing = false;
+        let connectedOnce = false;
+        let connectionLostNotified = false;
+        client.on('disconnect', () => {
+            // nats.js reconnects this same client by itself (stan maxReconnectAttempts=-1); never open a second client here.
+            logger_service_1.logger.info('Disconnected from NATS');
+            this._isConnected = false;
+        });
+        client.on('reconnect', () => {
+            logger_service_1.logger.info('Reconnected to NATS (same client)');
+            this._isConnected = true;
+        });
+        client.on('close', () => {
+            this._isConnected = false;
+            // Stan can emit 'close' twice (closeWithError and the underlying nats close); notify once.
+            if (!connectedOnce || this._closing || connectionLostNotified) {
+                return;
+            }
+            connectionLostNotified = true;
+            logger_service_1.logger.error('NATS connection lost permanently (client closed)');
+            this._connectionLostCallbacks.forEach((callback) => callback());
+        });
+        return new Promise((resolve, reject) => {
+            client.on('connect', () => {
+                logger_service_1.logger.info('Connected to NATS');
+                connectedOnce = true;
+                this._isConnected = true;
+                resolve();
             });
-        }, backoffTime);
+            client.on('error', (err) => {
+                // The raw error carries the address (ERR_INVALID_URL etc.); never reject with or log it directly.
+                const safeError = (0, logSafety_util_1.sanitizeConnectionError)(err);
+                if (connectedOnce) {
+                    logger_service_1.logger.error('NATS client error:', safeError);
+                    return;
+                }
+                reject((0, logSafety_util_1.toSafeError)(safeError));
+            });
+        });
     }
     /**
      * Request-Reply pattern implementasyonu
