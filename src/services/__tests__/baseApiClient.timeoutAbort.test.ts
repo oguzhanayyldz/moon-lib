@@ -127,9 +127,11 @@ describe('BaseApiClient — queue deadline aborts the request and its retries', 
         const caught: any = await client.post('/approve', { id: 1 }, REQ).catch((e) => e);
 
         expect(caught).toBeInstanceOf(ApiRequestTimeoutError);
-        expect(caught.code).toBe('ETIMEDOUT');
+        expect(caught.code).toBe('ECONNABORTED');
         expect(caught.timeoutMs).toBe(100);
-        expect(caught.message).toBe('Hepsiburada API request timeout: no response within 100 ms, request aborted');
+        expect(caught.message).toBe('Hepsiburada API request timed out after 100 ms; request aborted');
+        // Command listeners retry whole commands when the message contains "timeout".
+        expect(caught.message).not.toContain('timeout');
         expect(caught.message).not.toContain('Cannot read properties');
         expect(caught.message).not.toContain('/approve');
 

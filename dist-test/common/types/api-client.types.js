@@ -29,16 +29,20 @@ exports.CircuitBreakerOpenError = CircuitBreakerOpenError;
  * The underlying HTTP request and its retry loop are aborted at that moment, so no
  * further attempt is sent after this error reaches the caller. The message is safe
  * to show to users: it carries no URL, payload or raw runtime error text.
+ *
+ * `code` matches axios' own timeout code so existing error categorizers treat it as a
+ * timeout. The message deliberately avoids the word "timeout": command listeners retry
+ * whole commands on `message.includes('timeout')`, and this change must not widen that.
  */
 class ApiRequestTimeoutError extends BaseApiError {
     constructor(integrationName, timeoutMs) {
-        super(`${integrationName} API request timeout: no response within ${timeoutMs} ms, request aborted`);
+        super(`${integrationName} API request timed out after ${timeoutMs} ms; request aborted`);
         this.integrationName = integrationName;
         this.timeoutMs = timeoutMs;
         this.category = 'TIMEOUT';
         this.priority = 'MEDIUM';
         this.isRetryable = true;
-        this.code = 'ETIMEDOUT';
+        this.code = 'ECONNABORTED';
         Object.setPrototypeOf(this, ApiRequestTimeoutError.prototype);
     }
 }
