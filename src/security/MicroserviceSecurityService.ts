@@ -9,6 +9,7 @@ import { BadRequestError } from '../common/errors/bad-request-error';
 import { maskSensitiveValues } from '../utils/logSafety.util';
 import { UserPayload } from '../common/middlewares/current-user';
 import * as jwt from 'jsonwebtoken';
+import { createHmac } from 'crypto';
 
 // Genişletilmiş Express Request tipi
 interface ExtendedRequest extends Request {
@@ -358,9 +359,8 @@ export class MicroserviceSecurityService {
       }
       
       try {
-        // Token doğrula - tüm mikroservislerin aynı JWT_SECRET değişkenini kullanması gerekir
-        const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
-        const decoded = jwt.verify(csrfToken, jwtSecret);
+        // Token doğrula - tüm mikroservisler aynı anahtarı türetmeli (bkz. resolveCsrfSecret)
+        const decoded = jwt.verify(csrfToken, MicroserviceSecurityService.resolveCsrfSecret());
         
         // CSRF token verisini request nesnesine ekle
         (req as ExtendedRequest).csrfTokenData = decoded;
@@ -378,6 +378,19 @@ export class MicroserviceSecurityService {
   }
 
   /**
+   * CSRF imza anahtarı. Dağıtımlarda yalnız JWT_KEY tanımlı olduğundan ondan, oturum JWT'siyle
+   * karışmayacak şekilde HMAC ile türetilir (oturum JWT'si CSRF belirteci olarak geçmez).
+   * Açık CSRF_SECRET / JWT_SECRET varsa o kullanılır. Hiçbiri yoksa (yalnız yerel/test) sabit değer.
+   */
+  private static resolveCsrfSecret(): string {
+    const explicit = process.env.CSRF_SECRET || process.env.JWT_SECRET;
+    if (explicit) return explicit;
+    const sessionKey = process.env.JWT_KEY;
+    if (sessionKey) return createHmac('sha256', sessionKey).update('moon-csrf-v1').digest('hex');
+    return 'moon-security-secret';
+  }
+
+  /**
    * CSRF token oluşturma (auth servisi için)
    * 
    * @param userId Kullanıcı ID'si (opsiyonel)
@@ -385,7 +398,7 @@ export class MicroserviceSecurityService {
    * @returns JWT formatında CSRF token
    */
   generateCsrfToken(userId?: string, fingerprint?: string) {
-    const jwtSecret = process.env.JWT_SECRET || 'moon-security-secret';
+    const jwtSecret = MicroserviceSecurityService.resolveCsrfSecret();
     
     const token = jwt.sign({
       userId: userId || 'anonymous',
