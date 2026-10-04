@@ -147,6 +147,24 @@ export class CircuitBreakerOpenError extends BaseApiError {
   }
 }
 
+/**
+ * Thrown when a request exceeds the client's queue deadline (`queue.timeout`).
+ * The underlying HTTP request and its retry loop are aborted at that moment, so no
+ * further attempt is sent after this error reaches the caller. The message is safe
+ * to show to users: it carries no URL, payload or raw runtime error text.
+ */
+export class ApiRequestTimeoutError extends BaseApiError {
+  category = 'TIMEOUT';
+  priority: 'MEDIUM' = 'MEDIUM';
+  isRetryable = true;
+  code = 'ETIMEDOUT';
+
+  constructor(public readonly integrationName: string, public readonly timeoutMs: number) {
+    super(`${integrationName} API request timeout: no response within ${timeoutMs} ms, request aborted`);
+    Object.setPrototypeOf(this, ApiRequestTimeoutError.prototype);
+  }
+}
+
 export class RateLimitExceededError extends BaseApiError {
   category = 'RATE_LIMIT';
   priority: 'MEDIUM' = 'MEDIUM';

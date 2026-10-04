@@ -44,6 +44,7 @@ import {
   CircuitBreakerConfig,
   ApiRetryConfig,
   ApiRequestMetrics,
+  ApiRequestTimeoutError,
   RateLimitExceededError,
   ResponseProcessingConfig 
 } from '../common/types/api-client.types';
@@ -67,6 +68,12 @@ export abstract class BaseApiClient implements IApiClient {
    */
   protected rateLimiterGroups: Map<string, RateLimiterMemory> = new Map();
   protected queue!: any;
+  /**
+   * Per-request deadline taken from `queue.timeout`. Enforced by BaseApiClient itself
+   * (not by p-queue): p-queue's timeout resolves with `undefined` and leaves the task
+   * running, so the HTTP request and its retries kept going after the caller gave up.
+   */
+  private queueTimeoutMs?: number;
   /**
    * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
    * her operasyon turu (operationType) icin ayri breaker. Bir operasyon ust uste hata
@@ -300,13 +307,21 @@ export abstract class BaseApiClient implements IApiClient {
 
       // Add request to queue and execute with circuit breaker
       // Issue #566: Devre kesme operasyon bazinda — yalnizca ilgili operasyonun breaker'i kullanilir.
-      const response = await this.queue.add(async () => {
-        if (!finalConfig.skipCircuitBreaker) {
-          return this.getCircuitBreaker(operationType).execute(() => this.executeRequest<T>(finalConfig));
-        } else {
-          return this.executeRequest<T>(finalConfig);
-        }
-      }) as AxiosResponse<T>;
+      // The abort signal ties the HTTP request and the retry loop to the queue deadline:
+      // once the deadline fires, nothing else is sent for this call.
+      const abortController = new AbortController();
+      const executionConfig = { ...finalConfig, signal: abortController.signal } as RequestConfig;
+      const response = await this.queue.add(() =>
+        this.runWithDeadline(abortController, async () => {
+          if (!finalConfig.skipCircuitBreaker) {
+            return this.getCircuitBreaker(operationType).execute(() =>
+              this.executeRequest<T>(executionConfig, abortController.signal)
+            );
+          } else {
+            return this.executeRequest<T>(executionConfig, abortController.signal);
+          }
+        })
+      ) as AxiosResponse<T>;
 
       // Log successful request
       if (finalConfig.logRequest !== false && this.logService) {
@@ -503,12 +518,50 @@ export abstract class BaseApiClient implements IApiClient {
     }
   }
 
-  private async executeRequest<T>(requestConfig: RequestConfig): Promise<AxiosResponse<T>> {
+  /**
+   * Runs `work` under the queue deadline. When the deadline passes, the request is
+   * aborted (in-flight HTTP call cancelled, retry loop stopped) and the caller gets an
+   * ApiRequestTimeoutError instead of p-queue's silent `undefined`.
+   */
+  private runWithDeadline<R>(abortController: AbortController, work: () => Promise<R>): Promise<R> {
+    const timeoutMs = this.queueTimeoutMs;
+    if (!timeoutMs) {
+      return work();
+    }
+
+    return new Promise<R>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        abortController.abort();
+        reject(new ApiRequestTimeoutError(String(this.integrationName), timeoutMs));
+      }, timeoutMs);
+
+      Promise.resolve()
+        .then(work)
+        .then(
+          (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          (error) => {
+            clearTimeout(timer);
+            reject(error);
+          }
+        );
+    });
+  }
+
+  private async executeRequest<T>(requestConfig: RequestConfig, signal?: AbortSignal): Promise<AxiosResponse<T>> {
     let lastError: AxiosError;
     const retryConfig = this.config.retries;
+    const maxRetries = requestConfig.skipRetry ? 0 : (retryConfig?.maxRetries || 0);
     let retryCount = 0;
 
-    while (retryCount <= (retryConfig?.maxRetries || 0)) {
+    while (retryCount <= maxRetries) {
+      // The caller has already received a timeout error; never send another attempt.
+      if (signal?.aborted) {
+        throw lastError! ?? new Error('Request aborted before it was sent');
+      }
+
       try {
         const span = this.tracer?.startSpan(`api-request-${requestConfig.method?.toLowerCase()}`);
 
@@ -541,8 +594,12 @@ export abstract class BaseApiClient implements IApiClient {
           url: requestConfig.url,
           integrationName: this.integrationName,
           retryCount,
-          maxRetries: retryConfig?.maxRetries || 0
+          maxRetries
         });
+
+        if (signal?.aborted) {
+          throw lastError;
+        }
 
         // Handle rate limit errors specifically
         if (lastError.response?.status === 429) {
@@ -563,7 +620,7 @@ export abstract class BaseApiClient implements IApiClient {
         }
 
         // Check if this error should be retried
-        if (retryCount < (retryConfig?.maxRetries || 0) && this.shouldRetry(lastError)) {
+        if (retryCount < maxRetries && this.shouldRetry(lastError)) {
           retryCount++;
           const delay = this.calculateRetryDelay(retryCount, retryConfig);
 
@@ -574,7 +631,7 @@ export abstract class BaseApiClient implements IApiClient {
             integrationName: this.integrationName
           });
 
-          await this.sleep(delay);
+          await this.sleep(delay, signal);
           continue;
         }
 
@@ -717,8 +774,23 @@ export abstract class BaseApiClient implements IApiClient {
     this.metrics.averageResponseTime = (totalSuccessTime + responseTime) / this.metrics.totalRequests;
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  /** Resolves after `ms`, or immediately when `signal` is aborted. */
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      const onAbort = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   // Setup methods
@@ -806,11 +878,12 @@ export abstract class BaseApiClient implements IApiClient {
   }
 
   private setupQueue(config: QueueConfig): void {
+    // `timeout` is intentionally not passed to p-queue; see runWithDeadline.
+    this.queueTimeoutMs = config.timeout;
     this.queue = new PQueue({
       concurrency: config.concurrency,
       intervalCap: config.intervalCap,
       interval: config.interval,
-      timeout: config.timeout,
       carryoverConcurrencyCount: config.carryoverConcurrencyCount
     });
   }

@@ -28,6 +28,12 @@ export declare abstract class BaseApiClient implements IApiClient {
     protected rateLimiterGroups: Map<string, RateLimiterMemory>;
     protected queue: any;
     /**
+     * Per-request deadline taken from `queue.timeout`. Enforced by BaseApiClient itself
+     * (not by p-queue): p-queue's timeout resolves with `undefined` and leaves the task
+     * running, so the HTTP request and its retries kept going after the caller gave up.
+     */
+    private queueTimeoutMs?;
+    /**
      * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
      * her operasyon turu (operationType) icin ayri breaker. Bir operasyon ust uste hata
      * verirse SADECE o operasyonun devresi acilir; diger operasyonlar etkilenmez.
@@ -60,6 +66,12 @@ export declare abstract class BaseApiClient implements IApiClient {
     }): any;
     protected getGraphQLEndpoint?(): string;
     protected makeRequest<T>(requestConfig: RequestConfig): Promise<T>;
+    /**
+     * Runs `work` under the queue deadline. When the deadline passes, the request is
+     * aborted (in-flight HTTP call cancelled, retry loop stopped) and the caller gets an
+     * ApiRequestTimeoutError instead of p-queue's silent `undefined`.
+     */
+    private runWithDeadline;
     private executeRequest;
     /**
      * Issue #604: Bir istegin hangi servis-grubu limitine dahil oldugunu belirler.
@@ -83,6 +95,7 @@ export declare abstract class BaseApiClient implements IApiClient {
     private logResponse;
     private buildFullUrl;
     private updateMetrics;
+    /** Resolves after `ms`, or immediately when `signal` is aborted. */
     private sleep;
     private setupHttpClient;
     reconfigureHttpClient(): void;

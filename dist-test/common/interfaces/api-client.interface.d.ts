@@ -49,6 +49,11 @@ export interface ErrorMetadata {
 export interface RequestConfig extends AxiosRequestConfig {
     skipRateLimit?: boolean;
     skipCircuitBreaker?: boolean;
+    /**
+     * Send the request at most once: the client-level retry loop is skipped.
+     * Use for non-idempotent calls (e.g. approve/reject) where a duplicate would be harmful.
+     */
+    skipRetry?: boolean;
     logRequest?: boolean;
     operationType?: OperationType;
     method?: string;
