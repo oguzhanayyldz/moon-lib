@@ -71,6 +71,7 @@ import {
     PriceProcessingCompletedEvent,
     IntegrationAuthFailureExceededEvent,
     StockUpdateConfirmedEvent,
+    ProductPreMatchUpdatedEvent,
     NewsletterEmailRequestedEvent,
     UserSessionsRevokedEvent,
     StockCountStartedEvent,
@@ -146,6 +147,7 @@ interface EventPayloadMap {
     [Subjects.PriceProcessingCompleted]: PriceProcessingCompletedEvent['data'];
     [Subjects.IntegrationAuthFailureExceeded]: IntegrationAuthFailureExceededEvent['data'];
     [Subjects.StockUpdateConfirmed]: StockUpdateConfirmedEvent['data'];
+    [Subjects.ProductPreMatchUpdated]: ProductPreMatchUpdatedEvent['data'];
     [Subjects.NewsletterEmailRequested]: NewsletterEmailRequestedEvent['data'];
     [Subjects.UserSessionsRevoked]: UserSessionsRevokedEvent['data'];
     [Subjects.StockCountStarted]: StockCountStartedEvent['data'];
