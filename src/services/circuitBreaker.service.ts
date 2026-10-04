@@ -72,6 +72,10 @@ export class CircuitBreaker {
       this.failureCount = 0;
       this.halfOpenCallCount = 0;
       this.logEvent('Circuit breaker closed after successful call');
+    } else if (this.state === CircuitBreakerState.CLOSED) {
+      // Kapalı durumda sayaç ardışık hatayı ölçmeli; başarı sayacı sıfırlamazsa uzun işlerde
+      // binlerce başarı arasına serpilmiş az sayıda 5xx devreyi açar.
+      this.failureCount = 0;
     }
     
     this.successCount++;
