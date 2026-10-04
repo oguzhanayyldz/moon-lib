@@ -21,18 +21,18 @@ export function canOverrideCost(
 ): boolean {
     if (!current) return true;
 
-    const mevcut = costSourcePrecedence[current];
-    const gelen = costSourcePrecedence[incoming];
+    const currentRank = costSourcePrecedence[current];
+    const incomingRank = costSourcePrecedence[incoming];
 
     // Haritada karsiligi olmayan bir deger (eski kayit, elle bozulmus veri, haritaya
     // yazilmadan eklenmis yeni kaynak) sessizce `undefined` uretirdi ve her iki
     // karsilastirma da `false` donerdi — alan bir daha HIC guncellenemezdi, Manual bile
     // yazamazdi. Bu bir "yazma kaybi" olarak gorunur, hata olarak degil.
-    if (typeof mevcut !== 'number') {
+    if (typeof currentRank !== 'number') {
         // Mevcut deger taninmiyor: yeni ve gecerli bir kaynak yazabilmeli
-        return typeof gelen === 'number';
+        return typeof incomingRank === 'number';
     }
-    if (typeof gelen !== 'number') return false;
+    if (typeof incomingRank !== 'number') return false;
 
-    return gelen >= mevcut;
+    return incomingRank >= currentRank;
 }
