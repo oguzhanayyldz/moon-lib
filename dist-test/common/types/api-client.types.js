@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RateLimitExceededError = exports.CircuitBreakerOpenError = exports.BaseApiError = exports.CircuitBreakerState = void 0;
+exports.RateLimitExceededError = exports.ApiRequestTimeoutError = exports.CircuitBreakerOpenError = exports.BaseApiError = exports.CircuitBreakerState = void 0;
 var CircuitBreakerState;
 (function (CircuitBreakerState) {
     CircuitBreakerState["CLOSED"] = "CLOSED";
@@ -24,6 +24,33 @@ class CircuitBreakerOpenError extends BaseApiError {
     }
 }
 exports.CircuitBreakerOpenError = CircuitBreakerOpenError;
+/**
+ * Thrown when a request exceeds the client's queue deadline (`queue.timeout`).
+ * The underlying HTTP request and its retry loop are aborted at that moment, so no
+ * further attempt is sent after this error reaches the caller. The message is safe
+ * to show to users: it carries no URL, payload or raw runtime error text.
+ *
+ * `code` matches axios' own timeout code so existing error categorizers treat it as a
+ * timeout. The message deliberately avoids the word "timeout": command listeners retry
+ * whole commands on `message.includes('timeout')`, and this change must not widen that.
+ *
+ * `isRetryable` only holds for idempotent calls. The server may already have applied the
+ * request when it was aborted, so for non-idempotent calls (`skipRetry`) the outcome is
+ * unknown and must be reconciled instead of retried.
+ */
+class ApiRequestTimeoutError extends BaseApiError {
+    constructor(integrationName, timeoutMs) {
+        super(`${integrationName} API request timed out after ${timeoutMs} ms; request aborted`);
+        this.integrationName = integrationName;
+        this.timeoutMs = timeoutMs;
+        this.category = 'TIMEOUT';
+        this.priority = 'MEDIUM';
+        this.isRetryable = true;
+        this.code = 'ECONNABORTED';
+        Object.setPrototypeOf(this, ApiRequestTimeoutError.prototype);
+    }
+}
+exports.ApiRequestTimeoutError = ApiRequestTimeoutError;
 class RateLimitExceededError extends BaseApiError {
     constructor(retryAfter) {
         super(`Rate limit exceeded${retryAfter ? `, retry after ${retryAfter}ms` : ''}`);

@@ -59,6 +59,13 @@ export interface ErrorMetadata {
 export interface RequestConfig extends AxiosRequestConfig {
   skipRateLimit?: boolean;
   skipCircuitBreaker?: boolean;
+  /**
+   * Send the request at most once: the client-level retry loop is skipped.
+   * Use for non-idempotent calls (e.g. approve/reject) where a duplicate would be harmful.
+   * Note: a deadline abort (ApiRequestTimeoutError) does not undo anything on the server.
+   * For such calls a timeout means "outcome unknown", not "failed": reconcile before resending.
+   */
+  skipRetry?: boolean;
   logRequest?: boolean;
   operationType?: OperationType; // İşlem kategorisi (issue #566: any → OperationType)
   method?: string;

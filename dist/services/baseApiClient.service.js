@@ -18,9 +18,10 @@ const http_1 = __importDefault(require("http"));
 const https_1 = __importDefault(require("https"));
 const rate_limiter_flexible_1 = require("rate-limiter-flexible");
 const PQueue = require('p-queue').default;
+const api_client_types_1 = require("../common/types/api-client.types");
 const circuitBreaker_service_1 = require("./circuitBreaker.service");
 const logger_service_1 = require("./logger.service");
-const api_client_types_1 = require("../common/types/api-client.types");
+const api_client_types_2 = require("../common/types/api-client.types");
 const operation_type_enum_1 = require("../enums/operation-type.enum");
 const authFailureTracker_util_1 = require("../utils/authFailureTracker.util");
 class BaseApiClient {
@@ -201,14 +202,18 @@ class BaseApiClient {
                 }
                 // Add request to queue and execute with circuit breaker
                 // Issue #566: Devre kesme operasyon bazinda — yalnizca ilgili operasyonun breaker'i kullanilir.
-                const response = yield this.queue.add(() => __awaiter(this, void 0, void 0, function* () {
+                // The abort signal ties the HTTP request and the retry loop to the queue deadline:
+                // once the deadline fires, nothing else is sent for this call.
+                const abortController = new AbortController();
+                const executionConfig = Object.assign(Object.assign({}, finalConfig), { signal: abortController.signal });
+                const response = yield this.queue.add(() => this.runWithDeadline(abortController, this.resolveDeadlineMs(finalConfig), () => __awaiter(this, void 0, void 0, function* () {
                     if (!finalConfig.skipCircuitBreaker) {
-                        return this.getCircuitBreaker(operationType).execute(() => this.executeRequest(finalConfig));
+                        return this.getCircuitBreaker(operationType).execute(() => this.executeRequest(executionConfig, abortController.signal));
                     }
                     else {
-                        return this.executeRequest(finalConfig);
+                        return this.executeRequest(executionConfig, abortController.signal);
                     }
-                }));
+                })));
                 // Log successful request
                 if (finalConfig.logRequest !== false && this.logService) {
                     const duration = Date.now() - startTime;
@@ -259,7 +264,8 @@ class BaseApiClient {
                             logId = yield this.logRequest(requestConfig);
                         }
                         // Enhanced error parsing - child classes (like ShopifyApiClient) may return structured error objects
-                        let responseStatus = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.status) || 500; // Default to 500 instead of 0
+                        // Default to 500 instead of 0; a deadline abort is logged as a gateway timeout.
+                        let responseStatus = ((_c = error.response) === null || _c === void 0 ? void 0 : _c.status) || (error instanceof api_client_types_1.ApiRequestTimeoutError ? 504 : 500);
                         let responseBody = ((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || error.message;
                         // Try to parse enhanced error objects (JSON-stringified errors from child classes)
                         if (error.message && !(error.response)) {
@@ -382,15 +388,65 @@ class BaseApiClient {
             }
         });
     }
-    executeRequest(requestConfig) {
+    /**
+     * Deadline for one call: `queue.timeout`, extended to the call's own `timeout` when that
+     * is longer (e.g. 60 s product uploads on a client whose queue timeout is 30 s). Without
+     * the extension those uploads would be cut at the queue timeout and could never finish.
+     *
+     * No extra margin is added on purpose. The deadline timer starts before the HTTP request
+     * is sent, so it always fires before axios' own `timeout` of the same length: the caller
+     * gets ApiRequestTimeoutError, the socket is cut and no retry is sent. A margin would let
+     * axios time out first and the retry loop would send the same (possibly non-idempotent)
+     * upload again. Consequence: axios' per-attempt timeout never fires while a deadline is
+     * set; to retry slow attempts, set the request timeout below the queue timeout.
+     */
+    resolveDeadlineMs(requestConfig) {
+        const queueTimeoutMs = this.queueTimeoutMs;
+        if (!queueTimeoutMs) {
+            return undefined;
+        }
+        const requestTimeoutMs = requestConfig.timeout;
+        return requestTimeoutMs && requestTimeoutMs > queueTimeoutMs ? requestTimeoutMs : queueTimeoutMs;
+    }
+    /**
+     * Runs `work` under the call deadline. When the deadline passes, the request is
+     * aborted (in-flight HTTP call cancelled, retry loop stopped) and the caller gets an
+     * ApiRequestTimeoutError instead of p-queue's silent `undefined`.
+     */
+    runWithDeadline(abortController, timeoutMs, work) {
+        if (!timeoutMs) {
+            return work();
+        }
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                abortController.abort();
+                reject(new api_client_types_1.ApiRequestTimeoutError(String(this.integrationName), timeoutMs));
+            }, timeoutMs);
+            Promise.resolve()
+                .then(work)
+                .then((value) => {
+                clearTimeout(timer);
+                resolve(value);
+            }, (error) => {
+                clearTimeout(timer);
+                reject(error);
+            });
+        });
+    }
+    executeRequest(requestConfig, signal) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             let lastError;
             const retryConfig = this.config.retries;
+            const maxRetries = requestConfig.skipRetry ? 0 : ((retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries) || 0);
             let retryCount = 0;
-            while (retryCount <= ((retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries) || 0)) {
+            while (retryCount <= maxRetries) {
+                // The caller has already received a timeout error; never send another attempt.
+                if (signal === null || signal === void 0 ? void 0 : signal.aborted) {
+                    throw (_a = lastError) !== null && _a !== void 0 ? _a : new Error('Request aborted before it was sent');
+                }
                 try {
-                    const span = (_a = this.tracer) === null || _a === void 0 ? void 0 : _a.startSpan(`api-request-${(_b = requestConfig.method) === null || _b === void 0 ? void 0 : _b.toLowerCase()}`);
+                    const span = (_b = this.tracer) === null || _b === void 0 ? void 0 : _b.startSpan(`api-request-${(_c = requestConfig.method) === null || _c === void 0 ? void 0 : _c.toLowerCase()}`);
                     if (span) {
                         span.setTag('http.method', requestConfig.method);
                         span.setTag('http.url', requestConfig.url);
@@ -409,18 +465,21 @@ class BaseApiClient {
                     // Enhanced error logging with defensive checks
                     logger_service_1.logger.error('Request execution error', {
                         hasResponse: !!lastError.response,
-                        status: (_c = lastError.response) === null || _c === void 0 ? void 0 : _c.status,
-                        statusText: (_d = lastError.response) === null || _d === void 0 ? void 0 : _d.statusText,
+                        status: (_d = lastError.response) === null || _d === void 0 ? void 0 : _d.status,
+                        statusText: (_e = lastError.response) === null || _e === void 0 ? void 0 : _e.statusText,
                         code: lastError.code,
                         message: lastError.message,
                         method: requestConfig.method,
                         url: requestConfig.url,
                         integrationName: this.integrationName,
                         retryCount,
-                        maxRetries: (retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries) || 0
+                        maxRetries
                     });
+                    if (signal === null || signal === void 0 ? void 0 : signal.aborted) {
+                        throw lastError;
+                    }
                     // Handle rate limit errors specifically
-                    if (((_e = lastError.response) === null || _e === void 0 ? void 0 : _e.status) === 429) {
+                    if (((_f = lastError.response) === null || _f === void 0 ? void 0 : _f.status) === 429) {
                         logger_service_1.logger.warn('Rate limit detected (429), calling handleRateLimitError', {
                             integrationName: this.integrationName,
                             retryCount,
@@ -437,7 +496,7 @@ class BaseApiClient {
                         }
                     }
                     // Check if this error should be retried
-                    if (retryCount < ((retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries) || 0) && this.shouldRetry(lastError)) {
+                    if (retryCount < maxRetries && this.shouldRetry(lastError)) {
                         retryCount++;
                         const delay = this.calculateRetryDelay(retryCount, retryConfig);
                         logger_service_1.logger.info(`Retrying request (attempt ${retryCount}/${retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries}) after ${delay}ms`, {
@@ -446,7 +505,7 @@ class BaseApiClient {
                             error: lastError.message,
                             integrationName: this.integrationName
                         });
-                        yield this.sleep(delay);
+                        yield this.sleep(delay, signal);
                         continue;
                     }
                     throw lastError;
@@ -580,8 +639,23 @@ class BaseApiClient {
         const totalSuccessTime = this.metrics.averageResponseTime * (this.metrics.totalRequests - 1);
         this.metrics.averageResponseTime = (totalSuccessTime + responseTime) / this.metrics.totalRequests;
     }
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    /** Resolves after `ms`, or immediately when `signal` is aborted. */
+    sleep(ms, signal) {
+        return new Promise(resolve => {
+            if (signal === null || signal === void 0 ? void 0 : signal.aborted) {
+                resolve();
+                return;
+            }
+            const onAbort = () => {
+                clearTimeout(timer);
+                resolve();
+            };
+            const timer = setTimeout(() => {
+                signal === null || signal === void 0 ? void 0 : signal.removeEventListener('abort', onAbort);
+                resolve();
+            }, ms);
+            signal === null || signal === void 0 ? void 0 : signal.addEventListener('abort', onAbort, { once: true });
+        });
     }
     // Setup methods
     setupHttpClient(config) {
@@ -657,11 +731,12 @@ class BaseApiClient {
         }
     }
     setupQueue(config) {
+        // `timeout` is intentionally not passed to p-queue; see runWithDeadline.
+        this.queueTimeoutMs = config.timeout;
         this.queue = new PQueue({
             concurrency: config.concurrency,
             intervalCap: config.intervalCap,
             interval: config.interval,
-            timeout: config.timeout,
             carryoverConcurrencyCount: config.carryoverConcurrencyCount
         });
     }
@@ -749,11 +824,11 @@ class BaseApiClient {
         if (all.length === 0) {
             return BaseApiClient.defaultClosedMetrics();
         }
-        const state = all.some((m) => m.state === api_client_types_1.CircuitBreakerState.OPEN)
-            ? api_client_types_1.CircuitBreakerState.OPEN
-            : all.some((m) => m.state === api_client_types_1.CircuitBreakerState.HALF_OPEN)
-                ? api_client_types_1.CircuitBreakerState.HALF_OPEN
-                : api_client_types_1.CircuitBreakerState.CLOSED;
+        const state = all.some((m) => m.state === api_client_types_2.CircuitBreakerState.OPEN)
+            ? api_client_types_2.CircuitBreakerState.OPEN
+            : all.some((m) => m.state === api_client_types_2.CircuitBreakerState.HALF_OPEN)
+                ? api_client_types_2.CircuitBreakerState.HALF_OPEN
+                : api_client_types_2.CircuitBreakerState.CLOSED;
         return {
             state,
             failures: all.reduce((sum, m) => sum + m.failures, 0),
@@ -791,7 +866,7 @@ class BaseApiClient {
     }
     static defaultClosedMetrics() {
         return {
-            state: api_client_types_1.CircuitBreakerState.CLOSED,
+            state: api_client_types_2.CircuitBreakerState.CLOSED,
             failures: 0,
             successes: 0,
             timeouts: 0,

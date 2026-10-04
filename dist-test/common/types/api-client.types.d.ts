@@ -127,6 +127,29 @@ export declare class CircuitBreakerOpenError extends BaseApiError {
     isRetryable: boolean;
     constructor(serviceName: string);
 }
+/**
+ * Thrown when a request exceeds the client's queue deadline (`queue.timeout`).
+ * The underlying HTTP request and its retry loop are aborted at that moment, so no
+ * further attempt is sent after this error reaches the caller. The message is safe
+ * to show to users: it carries no URL, payload or raw runtime error text.
+ *
+ * `code` matches axios' own timeout code so existing error categorizers treat it as a
+ * timeout. The message deliberately avoids the word "timeout": command listeners retry
+ * whole commands on `message.includes('timeout')`, and this change must not widen that.
+ *
+ * `isRetryable` only holds for idempotent calls. The server may already have applied the
+ * request when it was aborted, so for non-idempotent calls (`skipRetry`) the outcome is
+ * unknown and must be reconciled instead of retried.
+ */
+export declare class ApiRequestTimeoutError extends BaseApiError {
+    readonly integrationName: string;
+    readonly timeoutMs: number;
+    category: string;
+    priority: 'MEDIUM';
+    isRetryable: boolean;
+    code: string;
+    constructor(integrationName: string, timeoutMs: number);
+}
 export declare class RateLimitExceededError extends BaseApiError {
     category: string;
     priority: 'MEDIUM';

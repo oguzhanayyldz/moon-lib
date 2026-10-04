@@ -28,6 +28,13 @@ export declare abstract class BaseApiClient implements IApiClient {
     protected rateLimiterGroups: Map<string, RateLimiterMemory>;
     protected queue: any;
     /**
+     * Default per-call deadline taken from `queue.timeout` (a longer per-call `timeout`
+     * extends it, see resolveDeadlineMs). Enforced by BaseApiClient itself
+     * (not by p-queue): p-queue's timeout resolves with `undefined` and leaves the task
+     * running, so the HTTP request and its retries kept going after the caller gave up.
+     */
+    private queueTimeoutMs?;
+    /**
      * Issue #566: Operasyon-farkindalikli devre kesme. Tek bir CircuitBreaker yerine
      * her operasyon turu (operationType) icin ayri breaker. Bir operasyon ust uste hata
      * verirse SADECE o operasyonun devresi acilir; diger operasyonlar etkilenmez.
@@ -60,6 +67,25 @@ export declare abstract class BaseApiClient implements IApiClient {
     }): any;
     protected getGraphQLEndpoint?(): string;
     protected makeRequest<T>(requestConfig: RequestConfig): Promise<T>;
+    /**
+     * Deadline for one call: `queue.timeout`, extended to the call's own `timeout` when that
+     * is longer (e.g. 60 s product uploads on a client whose queue timeout is 30 s). Without
+     * the extension those uploads would be cut at the queue timeout and could never finish.
+     *
+     * No extra margin is added on purpose. The deadline timer starts before the HTTP request
+     * is sent, so it always fires before axios' own `timeout` of the same length: the caller
+     * gets ApiRequestTimeoutError, the socket is cut and no retry is sent. A margin would let
+     * axios time out first and the retry loop would send the same (possibly non-idempotent)
+     * upload again. Consequence: axios' per-attempt timeout never fires while a deadline is
+     * set; to retry slow attempts, set the request timeout below the queue timeout.
+     */
+    private resolveDeadlineMs;
+    /**
+     * Runs `work` under the call deadline. When the deadline passes, the request is
+     * aborted (in-flight HTTP call cancelled, retry loop stopped) and the caller gets an
+     * ApiRequestTimeoutError instead of p-queue's silent `undefined`.
+     */
+    private runWithDeadline;
     private executeRequest;
     /**
      * Issue #604: Bir istegin hangi servis-grubu limitine dahil oldugunu belirler.
@@ -83,6 +109,7 @@ export declare abstract class BaseApiClient implements IApiClient {
     private logResponse;
     private buildFullUrl;
     private updateMetrics;
+    /** Resolves after `ms`, or immediately when `signal` is aborted. */
     private sleep;
     private setupHttpClient;
     reconfigureHttpClient(): void;
