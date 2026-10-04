@@ -740,6 +740,8 @@ exports.natsWrapper = {
     },
     connect: jest.fn().mockResolvedValue(undefined),
     isConnected: jest.fn().mockReturnValue(true),
+    onConnectionLost: jest.fn(),
+    close: jest.fn(),
 };
 // Logger - Centralized mock
 exports.logger = {

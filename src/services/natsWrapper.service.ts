@@ -6,9 +6,8 @@ import { sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
 export class NatsWrapper {
     private _client?: Stan;
     private _isConnected: boolean = false;
-    private _reconnectInterval: number = 5000;
-    private _reconnectAttempts: number = 0;
-    private _maxReconnectAttempts: number = 10;
+    private _closing: boolean = false;
+    private _connectionLostCallbacks: Array<() => void> = [];
 
     get client() {
         if (!this._client) {
@@ -21,58 +20,78 @@ export class NatsWrapper {
         return this._isConnected;
     }
 
-    async connect(clusterId: string, clientId: string, url: string) {
-        try {
-            this._client = nats.connect(clusterId, clientId, { url });
-
-            this._client.on('connect', () => {
-                logger.info('Connected to NATS');
-                this._isConnected = true;
-                this._reconnectAttempts = 0; // Reset reconnection attempts on successful connection
-            });
-
-            this._client.on('disconnect', () => {
-                logger.info('Disconnected from NATS');
-                this._isConnected = false;
-                this.attemptReconnect(clusterId, clientId, url);
-            });
-
-            return new Promise<void>((resolve, reject) => {
-                this.client!.on('connect', () => resolve());
-                // The raw error carries the address (ERR_INVALID_URL etc.); never reject with it directly.
-                this.client!.on('error', (err) => reject(toSafeError(sanitizeConnectionError(err))));
-            });
-        } catch (error) {
-            // An invalid URL error (ERR_INVALID_URL) carries the address in `input`; never log the raw error.
-            logger.error('Failed to connect to NATS:', sanitizeConnectionError(error));
-            this.attemptReconnect(clusterId, clientId, url);
-        }
+    /**
+     * Kalıcı bağlantı kaybında (kapanış dışındaki Stan 'close') bir kez çağrılır.
+     * Kısa kopmaları nats.js AYNI istemciyle kendisi toparlar ('disconnect' → 'reconnect').
+     * Stan 'close' ise istemcinin kalıcı öldüğü anlamına gelir: dinleyiciler, EventPublisherJob ve istemciyi
+     * değer olarak tutan her şey ölüdür. Servis bu durumda süreci kapatmalı, k8s yeniden başlatır.
+     */
+    onConnectionLost(callback: () => void): void {
+        this._connectionLostCallbacks.push(callback);
     }
 
-    private attemptReconnect(clusterId: string, clientId: string, url: string) {
-        // Check if max reconnection attempts reached
-        if (this._reconnectAttempts >= this._maxReconnectAttempts) {
-            logger.error(`❌ Max reconnect attempts (${this._maxReconnectAttempts}) reached. Stopping reconnection.`);
-            logger.error('⚠️ Service may be degraded. Please check NATS server status.');
-            return;
+    /**
+     * Kapanışta istemciyi kapatır; bu yoldan gelen 'close' onConnectionLost'u tetiklemez.
+     */
+    close(): void {
+        this._closing = true;
+        this._client?.close();
+    }
+
+    async connect(clusterId: string, clientId: string, url: string) {
+        let client: Stan;
+        try {
+            client = nats.connect(clusterId, clientId, { url });
+        } catch (error) {
+            // An invalid URL error (ERR_INVALID_URL) carries the address in `input`; never log the raw error.
+            const safeError = sanitizeConnectionError(error);
+            logger.error('Failed to connect to NATS:', safeError);
+            throw toSafeError(safeError);
         }
+        this._client = client;
+        this._closing = false;
+        let connectedOnce = false;
+        let connectionLostNotified = false;
 
-        this._reconnectAttempts++;
+        client.on('disconnect', () => {
+            // nats.js reconnects this same client by itself (stan maxReconnectAttempts=-1); never open a second client here.
+            logger.info('Disconnected from NATS');
+            this._isConnected = false;
+        });
 
-        // Exponential backoff: increase delay with each attempt (max 30 seconds)
-        const backoffTime = Math.min(this._reconnectInterval * this._reconnectAttempts, 30000);
+        client.on('reconnect', () => {
+            logger.info('Reconnected to NATS (same client)');
+            this._isConnected = true;
+        });
 
-        setTimeout(() => {
-            logger.info(`🔄 Attempting to reconnect to NATS (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})...`);
-            this.connect(clusterId, clientId, url)
-                .then(() => {
-                    logger.info('✅ NATS reconnection successful');
-                })
-                .catch(err => {
-                    logger.error(`❌ Reconnect attempt ${this._reconnectAttempts} failed:`, sanitizeConnectionError(err));
-                    // attemptReconnect will be called again from connect() error handler if needed
-                });
-        }, backoffTime);
+        client.on('close', () => {
+            this._isConnected = false;
+            // Stan can emit 'close' twice (closeWithError and the underlying nats close); notify once.
+            if (!connectedOnce || this._closing || connectionLostNotified) {
+                return;
+            }
+            connectionLostNotified = true;
+            logger.error('NATS connection lost permanently (client closed)');
+            this._connectionLostCallbacks.forEach((callback) => callback());
+        });
+
+        return new Promise<void>((resolve, reject) => {
+            client.on('connect', () => {
+                logger.info('Connected to NATS');
+                connectedOnce = true;
+                this._isConnected = true;
+                resolve();
+            });
+            client.on('error', (err) => {
+                // The raw error carries the address (ERR_INVALID_URL etc.); never reject with or log it directly.
+                const safeError = sanitizeConnectionError(err);
+                if (connectedOnce) {
+                    logger.error('NATS client error:', safeError);
+                    return;
+                }
+                reject(toSafeError(safeError));
+            });
+        });
     }
 
     /**

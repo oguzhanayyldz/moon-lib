@@ -72,8 +72,10 @@ describe('NatsWrapper log safety', () => {
         const invalidUrl = `${NATS}://:${FAKE_PASSWORD}/x@127.0.0.1:1`;
         mockConnect.mockImplementation(() => new URL(invalidUrl));
 
-        await expect(new NatsWrapper().connect('test-cluster', 'client-1', invalidUrl)).resolves.toBeUndefined();
+        const rejected = await new NatsWrapper().connect('test-cluster', 'client-1', invalidUrl).catch((e) => e);
 
+        expect(rejected).toMatchObject({ name: 'TypeError', code: 'ERR_INVALID_URL', message: 'Invalid URL' });
+        expect(inspect(rejected, { depth: 8, showHidden: true })).not.toContain(FAKE_PASSWORD);
         expect(mockedLogger.error).toHaveBeenCalledWith(
             'Failed to connect to NATS:',
             { name: 'TypeError', code: 'ERR_INVALID_URL', message: 'Invalid URL', input: `${NATS}://****` }
@@ -97,26 +99,21 @@ describe('NatsWrapper log safety', () => {
         expect(inspect(rejected, { depth: 8, showHidden: true })).not.toContain(FAKE_TOKEN);
     });
 
-    it('logs a sanitized error when a reconnect attempt fails', async () => {
+    it('logs a sanitized error when the client emits error after connect', async () => {
         const url = `${NATS}://${FAKE_TOKEN}@nats-srv:4222`;
-        const first = createFakeStan();
-        const second = createFakeStan();
-        mockConnect.mockReturnValueOnce(first).mockReturnValueOnce(second);
+        const stan = createFakeStan();
+        mockConnect.mockReturnValueOnce(stan);
         const wrapper = new NatsWrapper();
 
         const connecting = wrapper.connect('test-cluster', 'client-2', url);
-        first.emit('connect');
+        stan.emit('connect');
         await connecting;
 
-        first.emit('disconnect');
-        jest.advanceTimersByTime(5000);
-        await flushPromises();
-        second.emit('error', Object.assign(new Error(`Could not connect to server ${url}`), { code: 'CONN_ERR', url }));
+        stan.emit('error', Object.assign(new Error(`Could not connect to server ${url}`), { code: 'CONN_ERR', url }));
         await flushPromises();
 
-        expect(mockConnect).toHaveBeenCalledTimes(2);
         expect(mockedLogger.error).toHaveBeenCalledWith(
-            '❌ Reconnect attempt 1 failed:',
+            'NATS client error:',
             {
                 name: 'Error',
                 code: 'CONN_ERR',
@@ -125,5 +122,96 @@ describe('NatsWrapper log safety', () => {
             }
         );
         expect(loggedText()).not.toContain(FAKE_TOKEN);
+    });
+});
+
+// TASK-MUSZG82RPAZBC: kısa kopmayı nats.js aynı istemciyle toparlar; kalıcı kayıp (Stan 'close') servise bildirilir.
+describe('NatsWrapper connection lifecycle', () => {
+    const URL_PLAIN = `${NATS}://nats-srv:4222`;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockConnect.mockReset();
+        jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    });
+
+    afterEach(() => {
+        jest.clearAllTimers();
+        jest.useRealTimers();
+    });
+
+    const connected = async () => {
+        const stan = Object.assign(createFakeStan(), { close: jest.fn() });
+        mockConnect.mockReturnValueOnce(stan);
+        const wrapper = new NatsWrapper();
+        const connecting = wrapper.connect('test-cluster', 'client-1', URL_PLAIN);
+        stan.emit('connect');
+        await connecting;
+        return { wrapper, stan };
+    };
+
+    it('does not open a second client on disconnect and marks the wrapper disconnected', async () => {
+        const { wrapper, stan } = await connected();
+
+        stan.emit('disconnect');
+        jest.advanceTimersByTime(60000);
+        await flushPromises();
+
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+        expect(wrapper.isConnected).toBe(false);
+        expect(wrapper.client).toBe(stan);
+    });
+
+    it('restores isConnected on reconnect with the same client', async () => {
+        const { wrapper, stan } = await connected();
+
+        stan.emit('disconnect');
+        stan.emit('reconnect', stan);
+
+        expect(wrapper.isConnected).toBe(true);
+        expect(wrapper.client).toBe(stan);
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onConnectionLost exactly once when the client closes', async () => {
+        const { wrapper, stan } = await connected();
+        const lost = jest.fn();
+        wrapper.onConnectionLost(lost);
+
+        // Stan closeWithError emits 'close' and the underlying nats close emits it again.
+        stan.emit('close');
+        stan.emit('close');
+
+        expect(lost).toHaveBeenCalledTimes(1);
+        expect(wrapper.isConnected).toBe(false);
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call onConnectionLost when the close comes from wrapper.close() during shutdown', async () => {
+        const { wrapper, stan } = await connected();
+        const lost = jest.fn();
+        wrapper.onConnectionLost(lost);
+
+        wrapper.close();
+        stan.emit('close');
+
+        expect(stan.close).toHaveBeenCalledTimes(1);
+        expect(lost).not.toHaveBeenCalled();
+        expect(wrapper.isConnected).toBe(false);
+    });
+
+    it('does not call onConnectionLost when the initial connect fails (connect rejects instead)', async () => {
+        const stan = createFakeStan();
+        mockConnect.mockReturnValueOnce(stan);
+        const wrapper = new NatsWrapper();
+        const lost = jest.fn();
+        wrapper.onConnectionLost(lost);
+
+        const connecting = wrapper.connect('test-cluster', 'client-1', URL_PLAIN);
+        stan.emit('error', Object.assign(new Error('stan: clientID already registered'), { code: 'CONN_ERR' }));
+        stan.emit('close');
+
+        await expect(connecting).rejects.toMatchObject({ message: 'stan: clientID already registered' });
+        expect(lost).not.toHaveBeenCalled();
     });
 });

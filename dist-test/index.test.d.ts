@@ -335,6 +335,8 @@ export declare const natsWrapper: {
     };
     connect: jest.Mock<any, any, any>;
     isConnected: jest.Mock<any, any, any>;
+    onConnectionLost: jest.Mock<any, any, any>;
+    close: jest.Mock<any, any, any>;
 };
 export declare const logger: {
     info: jest.Mock<any, any, any>;
