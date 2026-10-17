@@ -377,6 +377,7 @@ export declare const RetryableListener: {
         processEvent(data: any): Promise<void>;
         getEventId(data: any): string;
     };
+    lockValueSuffix(payloadFingerprint?: string, deliverySequence?: number): string;
 };
 export declare const AuthFailureTracker: {
     initialize: jest.Mock<any, any, any>;

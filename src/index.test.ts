@@ -1009,6 +1009,12 @@ export const RetryableListener = class MockRetryableListener {
     subject = Subjects.EntityDeleted;
     queueGroupName = 'test-service';
 
+    // Gerçek sınıftaki kilit değeri soneki (heartbeat yapan alt sınıflar beklenen değeri bununla kurar)
+    static lockValueSuffix(payloadFingerprint?: string, deliverySequence?: number): string {
+        if (!payloadFingerprint) return '';
+        return deliverySequence !== undefined ? `@${deliverySequence}#${payloadFingerprint}` : `#${payloadFingerprint}`;
+    }
+
     // RetryableListener'ın retry mantığını simüle et
     async onMessage(data: any, msg: any) {
         const eventId = this.getEventId(data);
