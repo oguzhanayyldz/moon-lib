@@ -243,6 +243,43 @@ describe('RetryableListener', () => {
                 expect(listener.processEventCalls).toHaveLength(0);
             });
 
+            // TASK-MUTVW04QWWV01 (K1): kilit sahibinin işlediği mesajın yeniden teslimi (aynı sıra numarası) ack'lenirse
+            // sahibin mesajı onaylanmış olur; sahip sonra çökerse NATS mesajı bir daha teslim etmez.
+            it('should NOT ack message when the lock holder is processing this same message (redelivery, same sequence)', async () => {
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue(`other-pod@1#${fingerprintOf(testData)}`);
+
+                await listener.onMessage(testData, mockMessage);
+
+                expect(mockMessage.ack).not.toHaveBeenCalled();
+                expect(listener.processEventCalls).toHaveLength(0);
+            });
+
+            it('should ack message when the same payload is held under a different message sequence (separate duplicate message)', async () => {
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue(`other-pod@2#${fingerprintOf(testData)}`);
+
+                await listener.onMessage(testData, mockMessage);
+
+                expect(mockMessage.ack).toHaveBeenCalled();
+                expect(listener.processEventCalls).toHaveLength(0);
+            });
+
+            it('should not treat a sequence that merely ends with the same digits as the same message', async () => {
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue(`other-pod@11#${fingerprintOf(testData)}`);
+
+                await listener.onMessage(testData, mockMessage);
+
+                expect(mockMessage.ack).toHaveBeenCalled();
+            });
+
+            it('should keep the duplicate ack when the message has no readable sequence', async () => {
+                (mockMessage as any).getSequence = undefined;
+                (redisWrapper.client.get as jest.Mock).mockResolvedValue(`other-pod@1#${fingerprintOf(testData)}`);
+
+                await listener.onMessage(testData, mockMessage);
+
+                expect(mockMessage.ack).toHaveBeenCalled();
+            });
+
             it('should NOT ack message when the lock holder value has no payload fingerprint', async () => {
                 (redisWrapper.client.get as jest.Mock).mockResolvedValue('other-pod');
 
@@ -311,6 +348,81 @@ describe('RetryableListener', () => {
             const lockValue = (redisWrapper.client.set as jest.Mock).mock.calls[0][1];
             expect(lockValue.endsWith(`#${fingerprint}`)).toBe(true);
             expect((redisWrapper.client.eval as jest.Mock).mock.calls[0][1].arguments).toEqual([lockValue]);
+        });
+
+        it('should store the NATS message sequence before the payload fingerprint in the lock value', async () => {
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue('OK');
+            mockMessage.getSequence.mockReturnValue(42);
+            const fingerprint = crypto.createHash('sha1').update(JSON.stringify(testData)).digest('hex');
+
+            await listener.onMessage(testData, mockMessage);
+
+            const lockValue = (redisWrapper.client.set as jest.Mock).mock.calls[0][1];
+            expect(lockValue.endsWith(`@42#${fingerprint}`)).toBe(true);
+        });
+
+        it('should keep the sequence-less lock value when the message has no readable sequence', async () => {
+            (redisWrapper.client.set as jest.Mock).mockResolvedValue('OK');
+            (mockMessage as any).getSequence = jest.fn(() => { throw new Error('no seq'); });
+            const fingerprint = crypto.createHash('sha1').update(JSON.stringify(testData)).digest('hex');
+
+            await listener.onMessage(testData, mockMessage);
+
+            const lockValue = (redisWrapper.client.set as jest.Mock).mock.calls[0][1];
+            expect(lockValue).not.toContain('@');
+            expect(lockValue.endsWith(`#${fingerprint}`)).toBe(true);
+            expect(mockMessage.ack).toHaveBeenCalled();
+        });
+    });
+
+    // TASK-MUTVW04QWWV01 (K1): kilit sahibi pod çökünce yeniden teslim, kilit düştükten sonra işi devralmalı.
+    describe('Owner crash takeover (stateful lock store)', () => {
+        const testData: TestEvent['data'] = { list: [{ id: 'chunk-1', user: 'u' }] };
+        let store: Map<string, string>;
+
+        beforeEach(() => {
+            store = new Map();
+            (redisWrapper.client.set as jest.Mock).mockImplementation(async (k: string, v: string, o: any) => {
+                if (o?.NX && store.has(k)) return null;
+                store.set(k, v);
+                return 'OK';
+            });
+            (redisWrapper.client.get as jest.Mock).mockImplementation(async (k: string) => store.get(k) ?? null);
+            (redisWrapper.client.ttl as jest.Mock).mockImplementation(async (k: string) => (store.has(k) ? 100 : -2));
+            (redisWrapper.client.eval as jest.Mock).mockImplementation(async (_s: string, o: any) => {
+                if (store.get(o.keys[0]) === o.arguments[0]) { store.delete(o.keys[0]); return 1; }
+                return 0;
+            });
+        });
+
+        it('does not ack the redelivery while the owner holds the lock, and processes it once the lock expires', async () => {
+            const ownerMsg = { ack: jest.fn(), getSequence: () => 7 } as any;
+            const redelivery = { ack: jest.fn(), getSequence: () => 7 } as any;
+            const takeover = { ack: jest.fn(), getSequence: () => 7 } as any;
+
+            // Sahip işlemeye başlar ve hiç bitmez (pod öldü); kilit Redis'te kalır
+            class HangingListener extends TestListener {
+                hang = true;
+                protected async processEvent(data: TestEvent['data']): Promise<void> {
+                    if (this.hang) return new Promise<void>(() => undefined);
+                    return super.processEvent(data);
+                }
+            }
+            const owner = new HangingListener(mockClient, {}, mockConnection);
+            void owner.onMessage(testData, ownerMsg);
+            await new Promise(r => setImmediate(r));
+            expect(store.size).toBe(1);
+
+            const other = new TestListener(mockClient, {}, mockConnection);
+            await other.onMessage(testData, redelivery);
+            expect(redelivery.ack).not.toHaveBeenCalled();
+            expect(other.processEventCalls).toHaveLength(0);
+
+            store.clear(); // kilit TTL'i doldu
+            await other.onMessage(testData, takeover);
+            expect(other.processEventCalls).toHaveLength(1);
+            expect(takeover.ack).toHaveBeenCalled();
+            expect(ownerMsg.ack).not.toHaveBeenCalled();
         });
     });
 

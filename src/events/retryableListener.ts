@@ -70,7 +70,8 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     protected async processWithLock<R>(
         eventId: string,
         callback: () => Promise<R>,
-        payloadFingerprint?: string
+        payloadFingerprint?: string,
+        deliverySequence?: number
     ): Promise<R> {
         // Ortam kapsamlı kilit (ENV-ISO): ad yalnız çözülen ortam 'production' ise aynı kalır
         // (REDIS_KEY_ENV || NODE_ENV || 'production'). invoice ve shipment prod'da NODE_ENV=development
@@ -80,7 +81,9 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         const owner = process.env.POD_NAME || process.env.HOSTNAME || Math.random().toString();
         // Parmak izi kilit değerine yazılır: çatışan teslim, kilidi aynı içeriğin mi yoksa aynı eventId'yi
         // paylaşan başka bir olayın mı tuttuğunu buradan ayırt eder (TASK-MUD6C7R77TT38).
-        const lockValue = payloadFingerprint ? `${owner}#${payloadFingerprint}` : owner;
+        // NATS sıra numarası da yazılır: çatışan teslim, kilit sahibinin işlediği mesajın yeniden teslimi mi yoksa
+        // aynı içerikli ayrı bir mesaj mı, buradan ayırt eder (TASK-MUTVW04QWWV01).
+        const lockValue = `${owner}${RetryableListener.lockValueSuffix(payloadFingerprint, deliverySequence)}`;
 
         // Log ekleniyor
         logger.debug(`Attempting to acquire lock for ${this.subject}:${eventId}`);
@@ -103,6 +106,27 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             // İşlem tamamlandığında kilidi serbest bırak
             await this.releaseLock(lockKey, lockValue);
             logger.debug(`Lock released for ${this.subject}:${eventId}`);
+        }
+    }
+
+    /**
+     * Kilit değerinin sahip adından sonraki kısmı: `@<sıra>#<parmak izi>`, sıra yoksa `#<parmak izi>`, parmak izi yoksa boş.
+     * Kilidi uzatan alt sınıflar (heartbeat) beklenen değeri bununla kurar.
+     */
+    protected static lockValueSuffix(payloadFingerprint?: string, deliverySequence?: number): string {
+        if (!payloadFingerprint) return '';
+        return deliverySequence !== undefined ? `@${deliverySequence}#${payloadFingerprint}` : `#${payloadFingerprint}`;
+    }
+
+    /**
+     * Mesajın NATS sıra numarası; yeniden teslimde değişmez. Alınamazsa undefined.
+     */
+    private getDeliverySequence(msg: Message): number | undefined {
+        try {
+            const seq = typeof msg?.getSequence === 'function' ? msg.getSequence() : undefined;
+            return typeof seq === 'number' && Number.isFinite(seq) ? seq : undefined;
+        } catch {
+            return undefined;
         }
     }
 
@@ -160,11 +184,12 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             // Distributed lock ile işlemi gerçekleştir (etkinse)
             if (this.options.enableLock) {
                 const fingerprint = this.getPayloadFingerprint(data);
+                const sequence = this.getDeliverySequence(msg);
                 try {
                     await this.processWithLock(eventId, async () => {
                         await this.processEvent(data);
                         return;
-                    }, fingerprint);
+                    }, fingerprint, sequence);
 
                     // Başarılı işlemede retry sayacını sıfırla
                     await this.retryManager.resetRetryCount(eventType, eventId);
@@ -221,6 +246,15 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                             // Yalnız kilidi aynı içerik tutuyorsa bu teslim bir kopyadır ve ack'lenir; aksi halde ack'lemek
                             // farklı olayı hiç işlenmeden düşürür (TASK-MUD6C7R77TT38).
                             const holder = await redisWrapper.client.get(lockKey);
+                            // Kilit sahibi BU mesajı işliyorsa (aynı sıra numarası: ackWait aşıldı ya da sahip pod düştü ve
+                            // NATS mesajı yeniden dağıttı) ack'lemek sahibin mesajını onaylar; sahip sonra çökerse mesaj bir
+                            // daha gelmez. Ack'siz dönülür: sahip canlıysa kilidi tutar ve bitince kendisi ack'ler; sahip
+                            // öldüyse kilit TTL'inde düşer, sonraki yeniden teslim işi devralır (TASK-MUTVW04QWWV01).
+                            if (sequence !== undefined && holder?.endsWith(RetryableListener.lockValueSuffix(fingerprint, sequence))) {
+                                logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
+                                span.setTag('lock.same_message', true);
+                                return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
+                            }
                             if (holder?.endsWith(`#${fingerprint}`)) {
                                 logger.info(`Another instance actively processing the same payload (ttl: ${ttl}s): ${eventType}:${eventId}`);
                                 span.setTag('lock.active_processing', true);

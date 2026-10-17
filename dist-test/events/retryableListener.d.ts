@@ -29,7 +29,16 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
     /**
      * Distributed lock ile işlem yapmak için yardımcı metod
      */
-    protected processWithLock<R>(eventId: string, callback: () => Promise<R>, payloadFingerprint?: string): Promise<R>;
+    protected processWithLock<R>(eventId: string, callback: () => Promise<R>, payloadFingerprint?: string, deliverySequence?: number): Promise<R>;
+    /**
+     * Kilit değerinin sahip adından sonraki kısmı: `@<sıra>#<parmak izi>`, sıra yoksa `#<parmak izi>`, parmak izi yoksa boş.
+     * Kilidi uzatan alt sınıflar (heartbeat) beklenen değeri bununla kurar.
+     */
+    protected static lockValueSuffix(payloadFingerprint?: string, deliverySequence?: number): string;
+    /**
+     * Mesajın NATS sıra numarası; yeniden teslimde değişmez. Alınamazsa undefined.
+     */
+    private getDeliverySequence;
     /**
      * Redis'te lock almaya çalışır
      */
