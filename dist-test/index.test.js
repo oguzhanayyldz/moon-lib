@@ -938,6 +938,12 @@ const RetryableListener = class MockRetryableListener {
             enableDeadLetter: (options === null || options === void 0 ? void 0 : options.enableDeadLetter) !== false
         };
     }
+    // Gerçek sınıftaki kilit değeri soneki (heartbeat yapan alt sınıflar beklenen değeri bununla kurar)
+    static lockValueSuffix(payloadFingerprint, deliverySequence) {
+        if (!payloadFingerprint)
+            return '';
+        return deliverySequence !== undefined ? `@${deliverySequence}#${payloadFingerprint}` : `#${payloadFingerprint}`;
+    }
     // RetryableListener'ın retry mantığını simüle et
     async onMessage(data, msg) {
         const eventId = this.getEventId(data);
