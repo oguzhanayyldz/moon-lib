@@ -1,4 +1,4 @@
-import nats from 'node-nats-streaming';
+import nats, { Stan } from 'node-nats-streaming';
 export declare class NatsWrapper {
     private _client?;
     private _isConnected;
@@ -27,5 +27,14 @@ export declare class NatsWrapper {
         max?: number;
     }): Promise<T>;
 }
+/** Core NATS inbox öneki; replyTo bununla başlıyorsa istekçi yanıtı core NATS'te bekliyor demektir. */
+export declare const CORE_REPLY_PREFIX = "_INBOX.";
+/**
+ * request() ile gelen komutun yanıtını gönderir.
+ * Core NATS inbox'ında (`_INBOX.`) bekleyen istekçiye core NATS'ten, eski biçimdeki istekçiye
+ * (`<subject>.reply.<uuid>`) STAN kanalından yanıt verir. Yanıtlayanlar istekçilerden önce bu sürüme
+ * geçer (UC-950 Faz 1); istekçiler core inbox'a ancak tüm yanıtlayanlar canlıda güncellendikten sonra geçer (Faz 2).
+ */
+export declare const publishReply: (client: Stan, replyTo: string, data: string) => void;
 export declare const createNatsWrapper: () => NatsWrapper;
 //# sourceMappingURL=natsWrapper.service.d.ts.map
