@@ -13,6 +13,7 @@ import {
     ensureIntegrationRequestLogTtlIndex,
     INTEGRATION_REQUEST_LOG_TTL_SECONDS
 } from '../integrationRequestLog.schema';
+import { initializeModelsForIntegration } from '../../index';
 
 jest.setTimeout(60000);
 
@@ -129,5 +130,25 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
         const [index] = await requestTimeIndex(connection);
         expect(index.expireAfterSeconds).toBe(604800);
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('unchanged');
+    });
+    // Migrasyonun canlıdaki TEK tetikleyicisi initializeModelsForIntegration içindeki ensure çağrısıdır.
+    // Satır kaybolursa yeni şemanın autoIndex'i TTL'siz mevcut indekse karşı IndexOptionsConflict alır, mongoose
+    // bunu sessizce yutar ve TTL hiçbir DB'de uygulanmaz — ensure fonksiyonunun kendi testleri bunu yakalamaz.
+    it('initializeModelsForIntegration eski TTL\'siz indeksi kendisi dönüştürür', async () => {
+        const connection = await freshConnection(true);
+        // Canlıdaki durum: eski şemanın kurduğu TTL'siz düz indeks
+        await connection.db.collection(COLLECTION).createIndex({ requestTime: 1 });
+        expect((await requestTimeIndex(connection))[0].expireAfterSeconds).toBeUndefined();
+
+        initializeModelsForIntegration(connection);
+
+        // ensure fire-and-forget çalışır: en çok 10 sn yokla
+        let ttl: (number | undefined)[] = [];
+        for (let i = 0; i < 100; i++) {
+            ttl = (await requestTimeIndex(connection)).map(index => index.expireAfterSeconds);
+            if (ttl[0] === 604800) break;
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        expect(ttl).toEqual([604800]);
     });
 });
