@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createNatsWrapper = exports.NatsWrapper = void 0;
+exports.createNatsWrapper = exports.publishReply = exports.CORE_REPLY_PREFIX = exports.NatsWrapper = void 0;
 const node_nats_streaming_1 = __importDefault(require("node-nats-streaming"));
 const uuid_1 = require("uuid");
 const logger_service_1 = require("./logger.service");
@@ -141,5 +141,28 @@ class NatsWrapper {
     }
 }
 exports.NatsWrapper = NatsWrapper;
+/** Core NATS inbox öneki; replyTo bununla başlıyorsa istekçi yanıtı core NATS'te bekliyor demektir. */
+exports.CORE_REPLY_PREFIX = '_INBOX.';
+const coreConnection = (client) => {
+    const nc = client.nc;
+    if (!nc) {
+        throw new Error('NATS core connection is not available');
+    }
+    return nc;
+};
+/**
+ * request() ile gelen komutun yanıtını gönderir.
+ * Core NATS inbox'ında (`_INBOX.`) bekleyen istekçiye core NATS'ten, eski biçimdeki istekçiye
+ * (`<subject>.reply.<uuid>`) STAN kanalından yanıt verir. Yanıtlayanlar istekçilerden önce bu sürüme
+ * geçer (UC-950 Faz 1); istekçiler core inbox'a ancak tüm yanıtlayanlar canlıda güncellendikten sonra geçer (Faz 2).
+ */
+const publishReply = (client, replyTo, data) => {
+    if (replyTo.startsWith(exports.CORE_REPLY_PREFIX)) {
+        coreConnection(client).publish(replyTo, Buffer.from(data, 'utf8'));
+        return;
+    }
+    client.publish(replyTo, data);
+};
+exports.publishReply = publishReply;
 const createNatsWrapper = () => new NatsWrapper();
 exports.createNatsWrapper = createNatsWrapper;

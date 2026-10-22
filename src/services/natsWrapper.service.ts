@@ -139,4 +139,34 @@ export class NatsWrapper {
     }
 }
 
+/** Core NATS inbox öneki; replyTo bununla başlıyorsa istekçi yanıtı core NATS'te bekliyor demektir. */
+export const CORE_REPLY_PREFIX = '_INBOX.';
+
+// node-nats-streaming 0.3.x'in altındaki nats 1.x bağlantısı (Stan#nc); tiplerde yer almadığı için daraltılmış arayüz.
+interface CoreNatsConnection {
+    publish(subject: string, data: Buffer): void;
+}
+
+const coreConnection = (client: Stan): CoreNatsConnection => {
+    const nc = (client as unknown as { nc?: CoreNatsConnection }).nc;
+    if (!nc) {
+        throw new Error('NATS core connection is not available');
+    }
+    return nc;
+};
+
+/**
+ * request() ile gelen komutun yanıtını gönderir.
+ * Core NATS inbox'ında (`_INBOX.`) bekleyen istekçiye core NATS'ten, eski biçimdeki istekçiye
+ * (`<subject>.reply.<uuid>`) STAN kanalından yanıt verir. Yanıtlayanlar istekçilerden önce bu sürüme
+ * geçer (UC-950 Faz 1); istekçiler core inbox'a ancak tüm yanıtlayanlar canlıda güncellendikten sonra geçer (Faz 2).
+ */
+export const publishReply = (client: Stan, replyTo: string, data: string): void => {
+    if (replyTo.startsWith(CORE_REPLY_PREFIX)) {
+        coreConnection(client).publish(replyTo, Buffer.from(data, 'utf8'));
+        return;
+    }
+    client.publish(replyTo, data);
+};
+
 export const createNatsWrapper = () => new NatsWrapper();
