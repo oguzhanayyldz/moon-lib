@@ -124,6 +124,31 @@ describe('IntegrationRequestLogService — gövde üst sınırı (UC-962)', () =
         expect(stored).toContain('"apiSecret"');
     });
 
+    it('kesim noktası bir kimlik değerinin ortasına düşse de değerin başı açığa çıkmaz (önce maskele, sonra kırp)', async () => {
+        // Pretty JSON: `{\n  "filler": "` (15 bayt) + filler + `",\n  "apiSecret": "` (18 bayt) + değer —
+        // ham gövdede 64 KB sınırı değerin 20. baytına düşer; kırpılmış JSON ayrıştırılamaz, değer yarım kalır.
+        const credential = ['uc962', 'kesim', 'noktasi', 'degeri', 'abcdefghijklmnop'].join('-');
+        const body = { filler: 'z'.repeat(INTEGRATION_LOG_BODY_MAX_BYTES - 15 - 18 - 20), apiSecret: credential };
+        expect(Buffer.byteLength(JSON.stringify(body, null, 2), 'utf8')).toBeGreaterThan(INTEGRATION_LOG_BODY_MAX_BYTES);
+        const { connection, getCapturedUpdate } = createFakeConnection(baseEntry());
+        await new IntegrationRequestLogService(connection).logResponse('log-1', { responseStatus: 200, responseBody: body });
+
+        const stored: string = getCapturedUpdate().responseBody;
+        expect(stored).not.toContain(credential.slice(0, 12));
+        expect(stored).toContain('"apiSecret"');
+    });
+
+    it('sınıra denk gelen adsız JWT de maskelenir (JWT kuralı tam üç parçalı token ister)', async () => {
+        // Uydurma, imzasız demo token — kesilmiş hali JWT kuralına uymaz; bu yüzden maskeleme kırpmadan önce olmalı
+        const token = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ1Yzk2MiJ9', 'c2lnbmF0dXJlLWRlbW8'].join('.');
+        const body = 'z'.repeat(INTEGRATION_LOG_BODY_MAX_BYTES - 30) + ' ' + token + ' son';
+        const { connection, getCapturedUpdate } = createFakeConnection(baseEntry());
+        await new IntegrationRequestLogService(connection).logResponse('log-1', { responseStatus: 200, responseBody: body as any });
+
+        const stored: string = getCapturedUpdate().responseBody;
+        expect(stored).not.toContain(token.slice(0, 25));
+    });
+
     it('istek gövdesi (logRequest) de aynı sınırla saklanır', async () => {
         const body = { items: Array.from({ length: 2000 }, (_, i) => ({ barcode: `B-${i}`, title: 'Ürün başlığı '.repeat(5) })) };
         const { connection, getCapturedInsert } = createFakeConnection(baseEntry());

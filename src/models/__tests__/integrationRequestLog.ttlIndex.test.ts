@@ -98,6 +98,18 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('unchanged');
     });
 
+    it('koleksiyon düşürülmüş olsa da (NamespaceNotFound) hata atmaz, indeksi kurar', async () => {
+        const connection = await freshConnection(false);
+        createIntegrationRequestLogModel(connection);
+        // mongoose autoCreate koleksiyonu açmış olabilir: kesin "yok" durumu için düşür
+        await connection.model('IntegrationRequestLog').init();
+        await connection.db.dropCollection(COLLECTION).catch(() => undefined);
+
+        expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('created');
+        const [index] = await requestTimeIndex(connection);
+        expect(index.expireAfterSeconds).toBe(604800);
+    });
+
     it('bileşik requestTime indekslerine dokunmaz', async () => {
         const connection = await freshConnection(false);
         await connection.db.collection(COLLECTION).createIndex({ requestTime: 1 });
