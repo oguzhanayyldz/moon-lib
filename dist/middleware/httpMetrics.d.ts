@@ -31,6 +31,13 @@ export declare class HttpMetrics {
      */
     static readonly httpRequestDuration: Histogram<"method" | "route" | "service" | "status_code">;
     /**
+     * İstek sınırına takılıp 429 dönen istek sayacı (UC-970)
+     *
+     * Labels: service, route (kimlikler `:id`'ye indirgenmiş yol), scope (`user` | `ip`).
+     * Kullanıcı kimliği ve IP ETİKET OLMAZ (kardinalite + sızıntı).
+     */
+    static readonly httpRateLimitedTotal: Counter<"route" | "service" | "scope">;
+    /**
      * Returns the Prometheus registry containing all HTTP metrics
      */
     static getRegistry(): Registry;
@@ -40,6 +47,11 @@ export declare class HttpMetrics {
      */
     static reset(): void;
 }
+/**
+ * Replace UUID/ID patterns in a raw path to prevent high cardinality
+ * Example: /api/products/123 -> /api/products/:id
+ */
+export declare function normalizeRoutePath(path: string): string;
 /**
  * Express middleware for HTTP metrics collection
  *

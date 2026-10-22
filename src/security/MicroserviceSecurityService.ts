@@ -27,6 +27,12 @@ export interface MicroserviceSecurityConfig {
   allowedFileTypes: string[];       // İzin verilen dosya tipleri (mimetype)
   maxRequestsPerWindow: number;     // Belirli bir pencerede izin verilen maksimum istek sayısı
   requestWindowMs: number;          // İstek penceresi süresi (ms cinsinden)
+  /**
+   * Kimliği doğrulanmış kullanıcı için pencere başına limit (kullanıcı + uç başına, UC-970).
+   * Verilmezse RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS ya da DEFAULT_AUTHENTICATED_MAX_REQUESTS.
+   * Anonim (IP anahtarlı) istekler her zaman maxRequestsPerWindow'a tabidir.
+   */
+  authenticatedMaxRequestsPerWindow?: number;
   bruteForceMaxAttempts: number;    // Brute force maksimum deneme sayısı
   bruteForceBlockDurationMs: number;// Brute force engelleme süresi (ms cinsinden)
   bruteForceWindowMs: number;       // Brute force pencere süresi (ms cinsinden)
@@ -39,6 +45,19 @@ export interface MicroserviceSecurityConfig {
   enableXContentTypeOptions: boolean; // X-Content-Type-Options etkinleştirme
   maxInputLength: number;           // Maksimum girdi uzunluğu
 }
+
+/**
+ * Kimlikli kullanıcı limiti varsayılanı: kullanıcı + uç başına 15 dk'da 1500 istek (UC-970).
+ * Eski tek limit (servise göre 50–300) panel yoklamaları ve socket olaylarıyla tetiklenen
+ * yeniden çekimlerde canlı kullanıcıyı 15 dk kilitliyordu. Giriş/şifre sıfırlama gibi
+ * anonim uçlar IP limitinde + BruteForceProtection'da kalır.
+ */
+export const DEFAULT_AUTHENTICATED_MAX_REQUESTS = 1500;
+
+const resolveAuthenticatedMaxRequests = (): number => {
+  const fromEnv = parseInt(process.env.RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS || '', 10);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_AUTHENTICATED_MAX_REQUESTS;
+};
 
 /**
  * Merkezi Mikroservis Güvenlik Servisi
@@ -69,6 +88,7 @@ export class MicroserviceSecurityService {
       allowedFileTypes: ['application/json'],
       maxRequestsPerWindow: 100,
       requestWindowMs: 15 * 60 * 1000, // 15 dakika
+      authenticatedMaxRequestsPerWindow: resolveAuthenticatedMaxRequests(),
       bruteForceMaxAttempts: 5,
       bruteForceBlockDurationMs: 15 * 60 * 1000, // 15 dakika
       bruteForceWindowMs: 30 * 60 * 1000, // 30 dakika
@@ -84,6 +104,9 @@ export class MicroserviceSecurityService {
     
     // Default değerleri gelen config ile birleştir - tip güvenli yaklaşım
     this.config = { ...defaultConfig, ...config };
+    if (this.config.authenticatedMaxRequestsPerWindow === undefined) {
+      this.config.authenticatedMaxRequestsPerWindow = defaultConfig.authenticatedMaxRequestsPerWindow;
+    }
 
     // SecurityValidator başlat
     this.validator = new SecurityValidator({
@@ -101,13 +124,21 @@ export class MicroserviceSecurityService {
     this.rateLimiter = new RateLimiter(redis, {
       windowMs: this.config.requestWindowMs,
       maxRequests: this.config.maxRequestsPerWindow,
+      authenticatedMaxRequests: this.config.authenticatedMaxRequestsPerWindow,
+      serviceName: this.config.serviceName,
       keyGenerator: (req: ExtendedRequest) => {
         // Kullanıcı kimliği varsa kullan, yoksa IP
         const userId = req.currentUser?.id;
         const ip = req.ip || '0.0.0.0'; // IP için fallback değer
-        return userId 
-          ? `${this.config.serviceName}_rate_limit:user:${userId}` 
-          : `${this.config.serviceName}_rate_limit:ip:${ip}`;
+        if (!userId) {
+          return `${this.config.serviceName}_rate_limit:ip:${ip}`;
+        }
+        // Taklitte currentUser.id müşteridir; admin ayrı kovada sayılır ki
+        // destek çalışması müşterinin kendi kotasını tüketmesin (UC-970)
+        if (req.currentUser?.isImpersonating && req.currentUser.adminId) {
+          return `${this.config.serviceName}_rate_limit:user:${userId}:admin:${req.currentUser.adminId}`;
+        }
+        return `${this.config.serviceName}_rate_limit:user:${userId}`;
       },
       skipSuccessfulRequests: false,
       skipFailedRequests: false

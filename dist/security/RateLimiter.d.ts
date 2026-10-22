@@ -8,6 +8,14 @@ export interface RateLimitConfig {
     skipFailedRequests?: boolean;
     enabled?: boolean;
     message?: string;
+    /**
+     * Kimliği doğrulanmış isteklere (`req.currentUser.id`) uygulanan limit (UC-970).
+     * Verilmezse herkese `maxRequests` uygulanır. Anonim (IP anahtarlı) istekler —
+     * giriş, şifre sıfırlama gibi kaba kuvvet hedefleri — her zaman `maxRequests`'e tabidir.
+     */
+    authenticatedMaxRequests?: number;
+    /** 429 logu, yanıt gövdesi ve `http_rate_limited_total` etiketi için servis adı */
+    serviceName?: string;
 }
 export interface RateLimitResult {
     allowed: boolean;

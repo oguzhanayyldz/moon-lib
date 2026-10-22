@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HttpMetrics = void 0;
+exports.normalizeRoutePath = normalizeRoutePath;
 exports.httpMetricsMiddleware = httpMetricsMiddleware;
 const prom_client_1 = require("prom-client");
 /**
@@ -30,9 +31,11 @@ class HttpMetrics {
     static reset() {
         HttpMetrics.httpRequestsTotal.reset();
         HttpMetrics.httpRequestDuration.reset();
+        HttpMetrics.httpRateLimitedTotal.reset();
         HttpMetrics.registry.clear();
         HttpMetrics.registry.registerMetric(HttpMetrics.httpRequestsTotal);
         HttpMetrics.registry.registerMetric(HttpMetrics.httpRequestDuration);
+        HttpMetrics.registry.registerMetric(HttpMetrics.httpRateLimitedTotal);
     }
 }
 exports.HttpMetrics = HttpMetrics;
@@ -64,6 +67,18 @@ HttpMetrics.httpRequestDuration = new prom_client_1.Histogram({
     registers: [HttpMetrics.registry]
 });
 /**
+ * İstek sınırına takılıp 429 dönen istek sayacı (UC-970)
+ *
+ * Labels: service, route (kimlikler `:id`'ye indirgenmiş yol), scope (`user` | `ip`).
+ * Kullanıcı kimliği ve IP ETİKET OLMAZ (kardinalite + sızıntı).
+ */
+HttpMetrics.httpRateLimitedTotal = new prom_client_1.Counter({
+    name: 'http_rate_limited_total',
+    help: 'Total number of HTTP requests rejected with 429 by the service rate limiter',
+    labelNames: ['service', 'route', 'scope'],
+    registers: [HttpMetrics.registry]
+});
+/**
  * Extract route pattern from Express request
  *
  * Converts actual request path to route pattern for consistent metric labels.
@@ -76,11 +91,19 @@ function extractRoute(req) {
         return `${baseUrl}${req.route.path}`;
     }
     // Fallback to actual path (less ideal for metrics)
-    // Replace UUID/ID patterns to prevent high cardinality
-    return req.path
+    return normalizeRoutePath(req.path);
+}
+/**
+ * Replace UUID/ID patterns in a raw path to prevent high cardinality
+ * Example: /api/products/123 -> /api/products/:id
+ */
+function normalizeRoutePath(path) {
+    return path
         .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id') // UUID
-        .replace(/\/[0-9]+/g, '/:id') // Numeric IDs
-        .replace(/\/[0-9a-f]{24}/gi, '/:id'); // MongoDB ObjectId
+        // ObjectId sayısaldan ÖNCE: rakamla başlayan bir ObjectId'nin baştaki rakamlarını
+        // sayısal kural yiyip geri kalanı yolda bırakıyordu
+        .replace(/\/[0-9a-f]{24}(?=\/|$)/gi, '/:id') // MongoDB ObjectId
+        .replace(/\/[0-9]+(?=\/|$)/g, '/:id'); // Numeric IDs
 }
 /**
  * Express middleware for HTTP metrics collection
