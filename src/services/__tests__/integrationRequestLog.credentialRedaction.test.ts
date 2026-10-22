@@ -3,7 +3,7 @@ import { createServer } from 'http';
 import { AddressInfo } from 'net';
 import { performance } from 'perf_hooks';
 import { BaseApiClient } from '../baseApiClient.service';
-import { IntegrationRequestLogService } from '../integrationRequestLog.service';
+import { IntegrationRequestLogService, INTEGRATION_LOG_BODY_MAX_BYTES } from '../integrationRequestLog.service';
 import { ResourceName } from '../../common';
 
 /**
@@ -322,7 +322,10 @@ describe('IntegrationLog credential redaction — a hostile text response does n
             await new Promise((resolve) => server.close(resolve));
         }
 
-        expect(captured.response?.responseBody).toBe(reply);
+        // UC-962: saklanan gövde 64 KB ile sınırlı (ASCII yanıt → bayt = karakter)
+        expect(captured.response?.responseBody).toBe(
+            `${reply.slice(0, INTEGRATION_LOG_BODY_MAX_BYTES)}\n…(kırpıldı, toplam ${reply.length} bayt)`
+        );
         expect(maxGapMs).toBeLessThan(200);
     });
 });

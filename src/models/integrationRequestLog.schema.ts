@@ -55,6 +55,9 @@ export interface IntegrationRequestLogDoc extends BaseDoc {
 
 export interface IntegrationRequestLogModel extends BaseModel<IntegrationRequestLogDoc, IntegrationRequestLogAttrs> { }
 
+/** İstek loglarının saklama süresi (UC-962): 7 gün, `requestTime` TTL indeksiyle. */
+export const INTEGRATION_REQUEST_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 const integrationRequestLogSchemaDefinition = {
     integrationName: {
         type: String,
@@ -116,7 +119,9 @@ const integrationRequestLogSchemaDefinition = {
     requestTime: {
         type: Date,
         required: true,
-        index: true
+        // TTL (UC-962): Mongo kayıtları requestTime'dan 7 gün sonra kendisi siler.
+        // Mevcut veritabanlarında indeks TTL'siz kurulu; ensureIntegrationRequestLogTtlIndex collMod ile dönüştürür.
+        index: { expires: INTEGRATION_REQUEST_LOG_TTL_SECONDS }
     },
     responseTime: {
         type: Date
@@ -148,4 +153,52 @@ integrationRequestLogSchema.index({ operationType: 1, integrationName: 1, reques
 
 export function createIntegrationRequestLogModel(connection: mongoose.Connection): void {
     connection.model<IntegrationRequestLogDoc, IntegrationRequestLogModel>('IntegrationRequestLog', integrationRequestLogSchema);
+}
+
+export type RequestLogTtlIndexResult = 'unchanged' | 'modified' | 'created';
+
+/**
+ * `requestTime_1` indeksini TTL'li hale getirir (UC-962) — idempotent, her servis başlangıcında çalışır.
+ *
+ * Neden collMod: aynı anahtarla ikinci bir indeks açılamaz (IndexOptionsConflict) ve eski indeksi
+ * düşürüp yeniden kurmak 47 GB'lık koleksiyonda tam tarama demektir. collMod yalnız indeks
+ * kataloğunu günceller (Mongo ≥5.1; canlı 7.0.4).
+ *
+ * - İndeks TTL'li ve süre aynı → dokunmaz.
+ * - İndeks var, TTL yok ya da süre farklı → collMod.
+ * - Koleksiyon / indeks yok → TTL'li olarak oluşturur (şemanın autoIndex'i de aynısını yapar; eşdeğer, çakışmaz).
+ *
+ * Not: Bu sürümden önceki şema (`index: true`) TTL'li indekse karşı autoIndex'te IndexOptionsConflict alır;
+ * mongoose bunu sessizce yutar (servis açılır, diğer indeksler kurulur) — geri dönüşte TTL yerinde kalır.
+ */
+export async function ensureIntegrationRequestLogTtlIndex(
+    connection: mongoose.Connection,
+    expireAfterSeconds: number = INTEGRATION_REQUEST_LOG_TTL_SECONDS
+): Promise<RequestLogTtlIndexResult> {
+    const collection = connection.model('IntegrationRequestLog').collection;
+
+    let indexes: Array<{ name?: string; key: Record<string, unknown>; expireAfterSeconds?: number }> = [];
+    try {
+        indexes = (await collection.indexes()) as typeof indexes;
+    } catch (error: any) {
+        // Koleksiyon henüz yok (ilk kurulum): NamespaceNotFound
+        if (error?.code !== 26) throw error;
+    }
+
+    const existing = indexes.find(index => {
+        const keys = Object.keys(index.key);
+        return keys.length === 1 && keys[0] === 'requestTime' && index.key.requestTime === 1;
+    });
+
+    if (existing) {
+        if (existing.expireAfterSeconds === expireAfterSeconds) return 'unchanged';
+        await connection.db.command({
+            collMod: collection.collectionName,
+            index: { keyPattern: { requestTime: 1 }, expireAfterSeconds }
+        });
+        return 'modified';
+    }
+
+    await collection.createIndex({ requestTime: 1 }, { expireAfterSeconds });
+    return 'created';
 }

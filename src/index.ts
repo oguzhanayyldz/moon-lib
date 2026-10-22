@@ -5,7 +5,8 @@ import { createExcelJobModel } from './models/excelJob.schema';
 import { createIntegrationCategoryModel } from './models/integrationCategory.schema';
 import { createIntegrationBrandModel } from './models/integrationBrand.schema';
 import { createIntegrationCategoryAttributesModel } from './models/integrationCategoryAttributes.schema';
-import { createIntegrationRequestLogModel } from './models/integrationRequestLog.schema';
+import { createIntegrationRequestLogModel, ensureIntegrationRequestLogTtlIndex } from './models/integrationRequestLog.schema';
+import { logger as moonLogger } from './services/logger.service';
 
 // Models
 export * from './models/base/base.schema';
@@ -208,4 +209,10 @@ export const initializeModelsForIntegration = (connection: mongoose.Connection):
     createIntegrationBrandModel(connection);
     createIntegrationCategoryAttributesModel(connection);
     createIntegrationRequestLogModel(connection);
+    // UC-962: istek loglarına 7 günlük TTL — başlangıcı bekletmez, hata servisi durdurmaz
+    ensureIntegrationRequestLogTtlIndex(connection)
+        .then(result => moonLogger.info(`Integration request log TTL index: ${result}`))
+        .catch(error => moonLogger.warn('Integration request log TTL index could not be ensured', {
+            error: (error as Error)?.message
+        }));
 }

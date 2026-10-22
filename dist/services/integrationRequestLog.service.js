@@ -9,10 +9,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IntegrationRequestLogService = void 0;
+exports.IntegrationRequestLogService = exports.INTEGRATION_LOG_BODY_MAX_BYTES = void 0;
 const interpreter_factory_1 = require("./response-interpreters/interpreter.factory");
 const logger_service_1 = require("./logger.service");
 const logSafety_util_1 = require("../utils/logSafety.util");
+/** Loga yazılan istek/yanıt gövdesinin üst sınırı (UTF-8 bayt, UC-962). */
+exports.INTEGRATION_LOG_BODY_MAX_BYTES = 64 * 1024;
 class IntegrationRequestLogService {
     constructor(connection) {
         this.connection = connection;
@@ -672,18 +674,36 @@ class IntegrationRequestLogService {
         return body;
     }
     /**
-     * Request body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
+     * Saklanan gövdeyi üst sınırla kırpar (UC-962): tek bir sipariş yanıtı ~1,35 MB'tı ve
+     * `trendyol.integrationrequestlogs` 47 GB'a çıktı. Kırpma redaksiyondan SONRA yapılır,
+     * yarım kalan bir sır açığa çıkmaz. Sınır UTF-8 bayt üzerinden; çok baytlı karakter
+     * ortadan bölünmez.
+     */
+    static truncateForStorage(body) {
+        if (typeof body !== 'string')
+            return body;
+        const totalBytes = Buffer.byteLength(body, 'utf8');
+        if (totalBytes <= exports.INTEGRATION_LOG_BODY_MAX_BYTES)
+            return body;
+        const head = Buffer.from(body, 'utf8')
+            .subarray(0, exports.INTEGRATION_LOG_BODY_MAX_BYTES)
+            .toString('utf8')
+            .replace(/�+$/, '');
+        return `${head}\n…(kırpıldı, toplam ${totalBytes} bayt)`;
+    }
+    /**
+     * Request body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     static sanitizeRequestBody(body) {
-        return this.formatBodyForStorage(this.redactBody(body));
+        return this.truncateForStorage(this.formatBodyForStorage(this.redactBody(body)));
     }
     /**
-     * Response body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
+     * Response body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     static sanitizeResponseBody(body) {
-        return this.formatBodyForStorage(this.redactBody(body));
+        return this.truncateForStorage(this.formatBodyForStorage(this.redactBody(body)));
     }
     /**
      * Gövdedeki kimlik alanlarını maskeler (kural: `logSafety.util` → `isSensitiveFieldName`).

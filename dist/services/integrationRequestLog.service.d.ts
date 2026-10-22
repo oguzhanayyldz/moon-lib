@@ -2,6 +2,8 @@ import { IntegrationRequestLogDoc } from '../models/integrationRequestLog.schema
 import { ResourceName } from '../common';
 import { OperationType } from '../enums/operation-type.enum';
 import mongoose from 'mongoose';
+/** Loga yazılan istek/yanıt gövdesinin üst sınırı (UTF-8 bayt, UC-962). */
+export declare const INTEGRATION_LOG_BODY_MAX_BYTES: number;
 export interface LogIntegrationRequestOptions {
     integrationName: ResourceName;
     userId: string;
@@ -159,12 +161,19 @@ export declare class IntegrationRequestLogService {
      */
     private static formatBodyForStorage;
     /**
-     * Request body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
+     * Saklanan gövdeyi üst sınırla kırpar (UC-962): tek bir sipariş yanıtı ~1,35 MB'tı ve
+     * `trendyol.integrationrequestlogs` 47 GB'a çıktı. Kırpma redaksiyondan SONRA yapılır,
+     * yarım kalan bir sır açığa çıkmaz. Sınır UTF-8 bayt üzerinden; çok baytlı karakter
+     * ortadan bölünmez.
+     */
+    private static truncateForStorage;
+    /**
+     * Request body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeRequestBody;
     /**
-     * Response body'deki kimlik bilgilerini temizler ve pretty-print formatına dönüştürür
+     * Response body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeResponseBody;
