@@ -453,7 +453,8 @@ exports.PERSONAL_DATA_MASK = '***PII***';
 const PERSONAL_NAME_PARTS = [
     'firstname', 'lastname', 'fullname', 'surname', 'contactname', 'customername', 'receivername', 'recipientname',
     'address', 'adres', 'phone', 'telefon', 'gsm', 'email', 'mail', 'identitynumber', 'identityno', 'tckimlik',
-    'tcnumber', 'tckn', 'taxnumber', 'taxid', 'vergino', 'vergikimlik'
+    'tcnumber', 'tckn', 'taxnumber', 'taxid', 'vergino', 'vergikimlik',
+    'buyername', 'customerusername', 'recipientperson', 'receivercustname', 'customerip'
 ];
 /**
  * Whether a field or XML element name holds personal data (UC-979). Same normalization as
@@ -476,7 +477,7 @@ function redactPersonalData(value) {
     if (Array.isArray(value)) {
         return value.map((item) => redactPersonalData(item));
     }
-    if (typeof value !== 'object' || value === null) {
+    if (typeof value !== 'object' || value === null || value instanceof Date) {
         return value;
     }
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [

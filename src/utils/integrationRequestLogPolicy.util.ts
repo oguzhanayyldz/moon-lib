@@ -183,6 +183,16 @@ function parseJsonBody(body: unknown): unknown {
     }
 }
 
+/**
+ * Gövde bir JSON nesnesi/dizisi mi (nesne ya da JSON metni). Boş gövde de yapısal sayılır: özetlenecek bir şey
+ * kaybolmaz. 2xx okumada HTML/düz metin (WAF, bakım sayfası) gelirse gövde özetlenmez, tam saklanır.
+ */
+export function isStructuredResponseBody(body: unknown): boolean {
+    if (body === undefined || body === null || body === '') return true;
+    const parsed = parseJsonBody(body);
+    return parsed !== null && typeof parsed === 'object';
+}
+
 class KeyCollector {
     readonly keys: string[] = [];
     private readonly seen = new Set<string>();

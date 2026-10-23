@@ -47,6 +47,11 @@ export interface ResponseSummary {
     idsTruncated: boolean;
 }
 /**
+ * Gövde bir JSON nesnesi/dizisi mi (nesne ya da JSON metni). Boş gövde de yapısal sayılır: özetlenecek bir şey
+ * kaybolmaz. 2xx okumada HTML/düz metin (WAF, bakım sayfası) gelirse gövde özetlenmez, tam saklanır.
+ */
+export declare function isStructuredResponseBody(body: unknown): boolean;
+/**
  * Başarılı okuma yanıtının özeti: kayıt sayısı, sayfa bilgisi ve ilk 200 kimlik.
  * Platformun çıkarıcısı liste bulamazsa genel yedeğe düşer.
  */
