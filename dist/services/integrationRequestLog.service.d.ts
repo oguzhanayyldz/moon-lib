@@ -4,6 +4,29 @@ import { OperationType } from '../enums/operation-type.enum';
 import mongoose from 'mongoose';
 /** Loga yazılan istek/yanıt gövdesinin üst sınırı (UTF-8 bayt, UC-962). */
 export declare const INTEGRATION_LOG_BODY_MAX_BYTES: number;
+/**
+ * Liste uçlarının projeksiyonu (UC-979): gövde ve header'lar listede taşınmaz (sayfa başına 50 × 64 KB);
+ * detay ucu (`getLogDetail`) tam kaydı döner. Boyutlar `requestBytes`/`responseBytes` alanlarından gelir.
+ */
+export declare const INTEGRATION_LOG_LIST_PROJECTION: {
+    readonly requestBody: 0;
+    readonly responseBody: 0;
+    readonly requestHeaders: 0;
+    readonly responseHeaders: 0;
+    readonly searchKeys: 0;
+};
+/**
+ * Liste satırına boyut alanlarını ekler (rotaların eski gövde ölçümü yerine). UC-979 öncesi kayıtlarda
+ * bayt alanı yoktur: boyut null döner (istemci "-" gösterir; bu kayıtlar en geç 7 günde silinir).
+ */
+export declare function withIntegrationLogSizes<T extends {
+    requestBytes?: number;
+    responseBytes?: number;
+}>(log: T): T & {
+    requestSize: number | null;
+    responseSize: number | null;
+    totalSize: number | null;
+};
 export interface LogIntegrationRequestOptions {
     integrationName: ResourceName;
     userId: string;
@@ -155,8 +178,8 @@ export declare class IntegrationRequestLogService {
      */
     private static sanitizeHeaders;
     /**
-     * JSON body'yi pretty-print formatına dönüştürür (okunabilir hale getirir)
-     * String ise parse edip tekrar format eder
+     * JSON body'yi girintisiz JSON metnine dönüştürür (istemci görüntüleyicisi kendisi biçimlendirir)
+     * String ise parse edip tekrar serileştirir
      * MongoDB'de string olarak saklanır
      */
     private static formatBodyForStorage;
@@ -168,12 +191,12 @@ export declare class IntegrationRequestLogService {
      */
     private static truncateForStorage;
     /**
-     * Request body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
+     * Request body'deki kimlik ve kişisel veriyi maskeler, compact JSON'a dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeRequestBody;
     /**
-     * Response body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
+     * Response body'deki kimlik ve kişisel veriyi maskeler, compact JSON'a dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     private static sanitizeResponseBody;
@@ -185,4 +208,6 @@ export declare class IntegrationRequestLogService {
      * - String: JSON, XML/SOAP (`<tem:UyeKodu>` dahil) ya da URL-encoded olabilir; üçü de taranır.
      */
     private static redactBody;
+    /** 409 gövdesi `success: true` mı (idempotent işlem — istemci başarılı gösterir). */
+    private static bodyReportsSuccess;
 }

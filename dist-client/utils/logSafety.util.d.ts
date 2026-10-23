@@ -131,6 +131,28 @@ export declare function redactSensitiveFields<T>(value: T): T;
  * `"`, `<`, `>` or whitespace (an invalid URL: a parser reads it as the path) are not recognized.
  */
 export declare function redactSensitiveText(text: string): string;
+/** Marker written in place of a personal-data value (UC-979), kept apart from the credential marker. */
+export declare const PERSONAL_DATA_MASK = "***PII***";
+/**
+ * Whether a field or XML element name holds personal data (UC-979). Same normalization as
+ * `isSensitiveFieldName`, and fail-closed in the same way (`ipAddress` is masked too).
+ */
+export declare function isPersonalDataFieldName(name: string): boolean;
+/**
+ * Returns a copy of a JSON-shaped value in which every personal-data field (`isPersonalDataFieldName`)
+ * is replaced by `PERSONAL_DATA_MASK`, nested objects and arrays included. An empty value (null,
+ * undefined, '') is kept, so the log still shows the field was empty. Strings go through
+ * `redactPersonalDataText`. Credentials are not handled here: `redactSensitiveFields` runs first.
+ */
+export declare function redactPersonalData<T>(value: T): T;
+/**
+ * Masks personal data inside a text body: a JSON text structurally (returned unchanged when it holds
+ * none), otherwise XML elements and `"name": value` pairs in place.
+ * Known limits: form (`name=value`) and header (`Name: value`) pairs are not masked for personal data
+ * (in the integrations' payloads those shapes carry credentials, not buyer data), and in a text that
+ * is not JSON an address object (`"address": {…}`) keeps its inner fields other than the named ones.
+ */
+export declare function redactPersonalDataText(text: string): string;
 export declare function escapeRegExp(value: string): string;
 /** Upper bound of the serialized meta, in characters. Longer output is cut and marked. */
 export declare const MAX_LOG_META_LENGTH = 8192;

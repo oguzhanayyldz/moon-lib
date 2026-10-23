@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LOG_SERIALIZATION_ERROR = exports.MAX_LOG_META_LENGTH = exports.REDACTED_FIELD_MASK = void 0;
+exports.LOG_SERIALIZATION_ERROR = exports.MAX_LOG_META_LENGTH = exports.PERSONAL_DATA_MASK = exports.REDACTED_FIELD_MASK = void 0;
 exports.maskConnectionUriSecret = maskConnectionUriSecret;
 exports.maskConnectionUrisInText = maskConnectionUrisInText;
 exports.sanitizeConnectionError = sanitizeConnectionError;
@@ -20,6 +20,9 @@ exports.maskSensitiveValues = maskSensitiveValues;
 exports.isSensitiveFieldName = isSensitiveFieldName;
 exports.redactSensitiveFields = redactSensitiveFields;
 exports.redactSensitiveText = redactSensitiveText;
+exports.isPersonalDataFieldName = isPersonalDataFieldName;
+exports.redactPersonalData = redactPersonalData;
+exports.redactPersonalDataText = redactPersonalDataText;
 exports.escapeRegExp = escapeRegExp;
 exports.isLoggableError = isLoggableError;
 exports.toSafeLogError = toSafeLogError;
@@ -441,28 +444,91 @@ function normalizeFieldName(name) {
         .toLowerCase()
         .replace(NON_ALPHANUMERIC_PATTERN, '');
 }
-function redactXmlElements(text) {
+/** Marker written in place of a personal-data value (UC-979), kept apart from the credential marker. */
+exports.PERSONAL_DATA_MASK = '***PII***';
+// Personal data of a buyer or recipient (UC-979), matched anywhere inside the normalized name:
+// `firstName`, `customerfullName` (N11), `shippingAddress`, `customerContactMail` (İdefix),
+// `tcIdentityNumber` (N11), `customerTcNumber` (İdefix), `taxId`, `gsm`, `Telefon`.
+// An address or contact object is masked as one value.
+const PERSONAL_NAME_PARTS = [
+    'firstname', 'lastname', 'fullname', 'surname', 'contactname', 'customername', 'receivername', 'recipientname',
+    'address', 'adres', 'phone', 'telefon', 'gsm', 'email', 'mail', 'identitynumber', 'identityno', 'tckimlik',
+    'tcnumber', 'tckn', 'taxnumber', 'taxid', 'vergino', 'vergikimlik'
+];
+/**
+ * Whether a field or XML element name holds personal data (UC-979). Same normalization as
+ * `isSensitiveFieldName`, and fail-closed in the same way (`ipAddress` is masked too).
+ */
+function isPersonalDataFieldName(name) {
+    const normalized = normalizeFieldName(name);
+    return PERSONAL_NAME_PARTS.some((part) => normalized.includes(part));
+}
+/**
+ * Returns a copy of a JSON-shaped value in which every personal-data field (`isPersonalDataFieldName`)
+ * is replaced by `PERSONAL_DATA_MASK`, nested objects and arrays included. An empty value (null,
+ * undefined, '') is kept, so the log still shows the field was empty. Strings go through
+ * `redactPersonalDataText`. Credentials are not handled here: `redactSensitiveFields` runs first.
+ */
+function redactPersonalData(value) {
+    if (typeof value === 'string') {
+        return redactPersonalDataText(value);
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => redactPersonalData(item));
+    }
+    if (typeof value !== 'object' || value === null) {
+        return value;
+    }
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+        key,
+        isPersonalDataFieldName(key) && item !== null && item !== undefined && item !== ''
+            ? exports.PERSONAL_DATA_MASK
+            : redactPersonalData(item)
+    ]));
+}
+/**
+ * Masks personal data inside a text body: a JSON text structurally (returned unchanged when it holds
+ * none), otherwise XML elements and `"name": value` pairs in place.
+ * Known limits: form (`name=value`) and header (`Name: value`) pairs are not masked for personal data
+ * (in the integrations' payloads those shapes carry credentials, not buyer data), and in a text that
+ * is not JSON an address object (`"address": {…}`) keeps its inner fields other than the named ones.
+ */
+function redactPersonalDataText(text) {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            const redacted = JSON.stringify(redactPersonalData(parsed));
+            return redacted === JSON.stringify(parsed) ? text : redacted;
+        }
+        catch (_a) {
+            // Not JSON after all: fall through to the text rules.
+        }
+    }
+    return redactJsonPairs(redactXmlElements(text, isPersonalDataFieldName, exports.PERSONAL_DATA_MASK), isPersonalDataFieldName, exports.PERSONAL_DATA_MASK);
+}
+function redactXmlElements(text, isMaskedName = isSensitiveFieldName, mask = exports.REDACTED_FIELD_MASK) {
     const startTag = new RegExp(XML_START_TAG_PATTERN.source, 'g');
     let result = '';
     let copiedUpTo = 0;
     let match;
     while ((match = startTag.exec(text)) !== null) {
         const [tag, qualifiedName, localName, attributes] = match;
-        if ((attributes !== null && attributes !== void 0 ? attributes : '').endsWith('/') || !isSensitiveFieldName(localName)) {
+        if ((attributes !== null && attributes !== void 0 ? attributes : '').endsWith('/') || !isMaskedName(localName)) {
             continue;
         }
         const contentStart = match.index + tag.length;
         const closingTag = new RegExp(`</${escapeRegExp(qualifiedName)}\\s*>`, 'i');
         const closing = closingTag.exec(text.slice(contentStart));
         const contentEnd = closing ? contentStart + closing.index : text.length;
-        result += text.slice(copiedUpTo, contentStart) + exports.REDACTED_FIELD_MASK;
+        result += text.slice(copiedUpTo, contentStart) + mask;
         copiedUpTo = contentEnd;
         startTag.lastIndex = closing ? contentEnd + closing[0].length : text.length;
     }
     return result + text.slice(copiedUpTo);
 }
-function redactJsonPairs(text) {
-    return text.replace(JSON_PAIR_PATTERN, (pair, name, separator) => isSensitiveFieldName(name) ? `"${name}"${separator}"${exports.REDACTED_FIELD_MASK}"` : pair);
+function redactJsonPairs(text, isMaskedName = isSensitiveFieldName, mask = exports.REDACTED_FIELD_MASK) {
+    return text.replace(JSON_PAIR_PATTERN, (pair, name, separator) => isMaskedName(name) ? `"${name}"${separator}"${mask}"` : pair);
 }
 function redactFormPairs(text) {
     var _a;

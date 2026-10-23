@@ -1,11 +1,34 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IntegrationRequestLogService = exports.INTEGRATION_LOG_BODY_MAX_BYTES = void 0;
+exports.IntegrationRequestLogService = exports.INTEGRATION_LOG_LIST_PROJECTION = exports.INTEGRATION_LOG_BODY_MAX_BYTES = void 0;
+exports.withIntegrationLogSizes = withIntegrationLogSizes;
 const interpreter_factory_1 = require("./response-interpreters/interpreter.factory");
 const logger_service_1 = require("./logger.service");
 const logSafety_util_1 = require("../utils/logSafety.util");
+const integrationRequestLogPolicy_util_1 = require("../utils/integrationRequestLogPolicy.util");
 /** Loga yazılan istek/yanıt gövdesinin üst sınırı (UTF-8 bayt, UC-962). */
 exports.INTEGRATION_LOG_BODY_MAX_BYTES = 64 * 1024;
+/**
+ * Liste uçlarının projeksiyonu (UC-979): gövde ve header'lar listede taşınmaz (sayfa başına 50 × 64 KB);
+ * detay ucu (`getLogDetail`) tam kaydı döner. Boyutlar `requestBytes`/`responseBytes` alanlarından gelir.
+ */
+exports.INTEGRATION_LOG_LIST_PROJECTION = {
+    requestBody: 0,
+    responseBody: 0,
+    requestHeaders: 0,
+    responseHeaders: 0,
+    searchKeys: 0
+};
+/**
+ * Liste satırına boyut alanlarını ekler (rotaların eski gövde ölçümü yerine). UC-979 öncesi kayıtlarda
+ * bayt alanı yoktur: boyut null döner (istemci "-" gösterir; bu kayıtlar en geç 7 günde silinir).
+ */
+function withIntegrationLogSizes(log) {
+    const requestSize = typeof log.requestBytes === 'number' ? log.requestBytes : null;
+    const responseSize = typeof log.responseBytes === 'number' ? log.responseBytes : null;
+    const totalSize = requestSize === null && responseSize === null ? null : (requestSize !== null && requestSize !== void 0 ? requestSize : 0) + (responseSize !== null && responseSize !== void 0 ? responseSize : 0);
+    return Object.assign(Object.assign({}, log), { requestSize, responseSize, totalSize });
+}
 class IntegrationRequestLogService {
     constructor(connection) {
         this.connection = connection;
@@ -31,6 +54,11 @@ class IntegrationRequestLogService {
                 requestHeaders: sanitizedHeaders,
                 requestBody: sanitizedBody,
                 requestTime,
+                // UC-979: yanıt gelmezse (zaman aşımı, süreç çökmesi) kayıt hata sayılır; logResponse kesin süreyi yazar
+                expireAt: (0, integrationRequestLogPolicy_util_1.computeLogExpireAt)(requestTime, false),
+                // Kimlikler ham gövdeden: maskeli/kırpılmış gövdede eksik kalabilirler
+                searchKeys: (0, integrationRequestLogPolicy_util_1.extractLogSearchKeys)({ endpoint: options.endpoint, requestBody: options.requestBody }),
+                requestBytes: (0, integrationRequestLogPolicy_util_1.measureBodyBytes)(options.requestBody),
                 metadata: options.metadata
             };
             const logEntry = new this.IntegrationRequestLogModel(logData);
@@ -59,12 +87,11 @@ class IntegrationRequestLogService {
      * Note: For accurate HTTP request timing, caller should pass the real duration
      */
     async logResponse(logId, options) {
-        var _a;
+        var _a, _b, _c;
         try {
             const responseTime = new Date();
             // Hassas bilgileri temizle
             const sanitizedResponseHeaders = IntegrationRequestLogService.sanitizeHeaders(options.responseHeaders || {});
-            const sanitizedResponseBody = IntegrationRequestLogService.sanitizeResponseBody(options.responseBody || {});
             const logEntry = await this.IntegrationRequestLogModel.findById(logId);
             if (!logEntry) {
                 logger_service_1.logger.warn(`Integration request log not found for ID: ${logId}`);
@@ -74,14 +101,18 @@ class IntegrationRequestLogService {
             // Otherwise calculate from timestamps (backward compatibility)
             const duration = (_a = options.duration) !== null && _a !== void 0 ? _a : (responseTime.getTime() - logEntry.requestTime.getTime());
             // Metadata'yı da kaydet (rate limit bilgileri vs.)
+            const responseBytes = (0, integrationRequestLogPolicy_util_1.measureBodyBytes)(options.responseBody);
             const updateData = {
                 responseStatus: options.responseStatus,
                 responseHeaders: sanitizedResponseHeaders,
-                responseBody: sanitizedResponseBody,
                 errorMessage: options.errorMessage,
                 duration,
-                responseTime
+                responseTime,
+                responseBytes
             };
+            // Gövde sanitize'ı WAF önizlemesi ve tam saklama için gerekli; başarılı okumada hiç üretilmez
+            let sanitizedBodyCache;
+            const sanitizedResponseBody = () => sanitizedBodyCache !== null && sanitizedBodyCache !== void 0 ? sanitizedBodyCache : (sanitizedBodyCache = IntegrationRequestLogService.sanitizeResponseBody(options.responseBody || {}));
             // Metadata varsa ekle
             if (options.metadata) {
                 updateData.metadata = options.metadata;
@@ -100,7 +131,7 @@ class IntegrationRequestLogService {
                         details: {
                             responseStatus: options.responseStatus,
                             // Ham gövde değil: kimlik alanları maskelenmiş sürüm (responseBody ile aynı redaksiyon)
-                            bodyPreview: String(sanitizedResponseBody).slice(0, 300)
+                            bodyPreview: String(sanitizedResponseBody()).slice(0, 300)
                         },
                         parsedAt: new Date()
                     };
@@ -132,6 +163,36 @@ class IntegrationRequestLogService {
                         });
                     }
                 }
+            }
+            // UC-979 saklama politikası: sonucu sınıflandır, gövdeyi ya özetle ya tam sakla, süreyi ayarla
+            const blocked = IntegrationRequestLogService.looksLikeBlockedResponse(options.responseStatus, options.responseBody);
+            const success = (0, integrationRequestLogPolicy_util_1.isSuccessfulLogOutcome)({
+                responseStatus: options.responseStatus,
+                interpretedSuccess: (_b = updateData.interpretedResponse) === null || _b === void 0 ? void 0 : _b.success,
+                blocked,
+                errorMessage: options.errorMessage
+            });
+            let summaryIds;
+            if (success && (0, integrationRequestLogPolicy_util_1.isReadOperation)(logEntry.operationType)) {
+                const summary = (0, integrationRequestLogPolicy_util_1.summarizeReadResponse)(logEntry.integrationName, options.responseBody, responseBytes);
+                updateData.responseBody = null;
+                updateData.responseSummary = summary;
+                summaryIds = summary.ids;
+            }
+            else {
+                updateData.responseBody = sanitizedResponseBody();
+            }
+            updateData.expireAt = (0, integrationRequestLogPolicy_util_1.computeLogExpireAt)(logEntry.requestTime, success);
+            if (options.responseStatus === 409 && IntegrationRequestLogService.bodyReportsSuccess(options.responseBody)) {
+                updateData.idempotentSuccess = true;
+            }
+            const responseKeys = (0, integrationRequestLogPolicy_util_1.extractLogSearchKeys)({
+                summaryIds,
+                responseBody: summaryIds ? undefined : options.responseBody
+            });
+            if (responseKeys.length > 0) {
+                updateData.searchKeys = Array.from(new Set([...((_c = logEntry.searchKeys) !== null && _c !== void 0 ? _c : []), ...responseKeys]))
+                    .slice(0, integrationRequestLogPolicy_util_1.INTEGRATION_LOG_SEARCH_KEYS_MAX * 2);
             }
             await this.IntegrationRequestLogModel.findByIdAndUpdate(logId, updateData);
             logger_service_1.logger.debug(`Integration response logged`, {
@@ -195,19 +256,12 @@ class IntegrationRequestLogService {
                     ]
                 });
             }
-            // Advanced search: requestBody ve responseBody içinde JSON arama
-            if (filters === null || filters === void 0 ? void 0 : filters.advancedSearch) {
-                // MongoDB $where ile nested search yapmak yerine,
-                // text-based search yapalım (performans için)
-                const searchRegex = { $regex: (0, logSafety_util_1.escapeRegExp)(filters.advancedSearch), $options: 'i' };
+            // Gelişmiş arama (UC-979): gövde regex'i yerine kimlik listesinde (sipariş no, paket id, barkod) tam eşleşme —
+            // gövde taraması tam koleksiyon taramasıydı ve başarılı okumalarda gövde artık saklanmıyor.
+            // Endpoint'te serbest metin araması normal `search` filtresindedir.
+            if ((filters === null || filters === void 0 ? void 0 : filters.advancedSearch) && filters.advancedSearch.trim()) {
                 query.$and = query.$and || [];
-                query.$and.push({
-                    $or: [
-                        { requestBody: searchRegex },
-                        { responseBody: searchRegex },
-                        { endpoint: searchRegex }
-                    ]
-                });
+                query.$and.push((0, integrationRequestLogPolicy_util_1.buildSearchKeysQuery)(filters.advancedSearch));
             }
             // Tarih aralığı filtresi
             if ((filters === null || filters === void 0 ? void 0 : filters.startDate) || (filters === null || filters === void 0 ? void 0 : filters.endDate)) {
@@ -221,7 +275,7 @@ class IntegrationRequestLogService {
             const sortObj = {};
             sortObj[sortField] = sortOrder === 'asc' ? 1 : -1;
             const [logs, total] = await Promise.all([
-                this.IntegrationRequestLogModel.find(query)
+                this.IntegrationRequestLogModel.find(query, exports.INTEGRATION_LOG_LIST_PROJECTION)
                     .sort(sortObj)
                     .skip(skip)
                     .limit(limit)
@@ -264,7 +318,7 @@ class IntegrationRequestLogService {
             }
             const skip = (page - 1) * limit;
             const [logs, total] = await Promise.all([
-                this.IntegrationRequestLogModel.find(query)
+                this.IntegrationRequestLogModel.find(query, exports.INTEGRATION_LOG_LIST_PROJECTION)
                     .sort({ requestTime: -1 })
                     .skip(skip)
                     .limit(limit)
@@ -384,23 +438,18 @@ class IntegrationRequestLogService {
                     ]
                 });
             }
-            // Advanced search: requestBody ve responseBody içinde JSON arama
-            if (filters === null || filters === void 0 ? void 0 : filters.advancedSearch) {
-                const searchRegex = { $regex: (0, logSafety_util_1.escapeRegExp)(filters.advancedSearch), $options: 'i' };
+            // Gelişmiş arama (UC-979): gövde regex'i yerine kimlik listesinde (sipariş no, paket id, barkod) tam eşleşme —
+            // gövde taraması tam koleksiyon taramasıydı ve başarılı okumalarda gövde artık saklanmıyor.
+            // Endpoint'te serbest metin araması normal `search` filtresindedir.
+            if ((filters === null || filters === void 0 ? void 0 : filters.advancedSearch) && filters.advancedSearch.trim()) {
                 query.$and = query.$and || [];
-                query.$and.push({
-                    $or: [
-                        { requestBody: searchRegex },
-                        { responseBody: searchRegex },
-                        { endpoint: searchRegex }
-                    ]
-                });
+                query.$and.push((0, integrationRequestLogPolicy_util_1.buildSearchKeysQuery)(filters.advancedSearch));
             }
             const skip = (page - 1) * limit;
             const sortObj = {};
             sortObj[sortField] = sortOrder === 'asc' ? 1 : -1;
             const [logs, total] = await Promise.all([
-                this.IntegrationRequestLogModel.find(query)
+                this.IntegrationRequestLogModel.find(query, exports.INTEGRATION_LOG_LIST_PROJECTION)
                     .sort(sortObj)
                     .skip(skip)
                     .limit(limit)
@@ -613,8 +662,8 @@ class IntegrationRequestLogService {
         return sanitized;
     }
     /**
-     * JSON body'yi pretty-print formatına dönüştürür (okunabilir hale getirir)
-     * String ise parse edip tekrar format eder
+     * JSON body'yi girintisiz JSON metnine dönüştürür (istemci görüntüleyicisi kendisi biçimlendirir)
+     * String ise parse edip tekrar serileştirir
      * MongoDB'de string olarak saklanır
      */
     static formatBodyForStorage(body) {
@@ -630,10 +679,10 @@ class IntegrationRequestLogService {
                 return body;
             }
         }
-        // Object ise pretty-print JSON olarak döndür (2 space indentation)
+        // Object ise girintisiz (compact) JSON olarak döndür (UC-979: girinti gövdeyi ~%30 büyütüyordu)
         if (typeof body === 'object') {
             try {
-                return JSON.stringify(body, null, 2);
+                return JSON.stringify(body);
             }
             catch (_b) {
                 // Stringify edilemiyorsa toString kullan
@@ -661,14 +710,14 @@ class IntegrationRequestLogService {
         return `${head}\n…(kırpıldı, toplam ${totalBytes} bayt)`;
     }
     /**
-     * Request body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
+     * Request body'deki kimlik ve kişisel veriyi maskeler, compact JSON'a dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     static sanitizeRequestBody(body) {
         return this.truncateForStorage(this.formatBodyForStorage(this.redactBody(body)));
     }
     /**
-     * Response body'deki kimlik bilgilerini temizler, pretty-print formatına dönüştürür ve sınırlar
+     * Response body'deki kimlik ve kişisel veriyi maskeler, compact JSON'a dönüştürür ve sınırlar
      * MongoDB'de string olarak saklanır
      */
     static sanitizeResponseBody(body) {
@@ -684,11 +733,25 @@ class IntegrationRequestLogService {
     static redactBody(body) {
         if (!body)
             return body;
+        // UC-979: sır maskesinden sonra kişisel veri maskesi (ad, adres, telefon, e-posta, TCKN/VKN)
         if (typeof body === 'string')
-            return (0, logSafety_util_1.redactSensitiveText)(body);
+            return (0, logSafety_util_1.redactPersonalData)((0, logSafety_util_1.redactSensitiveText)(body));
         if (typeof body !== 'object')
             return body;
-        return (0, logSafety_util_1.redactSensitiveFields)(JSON.parse(JSON.stringify(body)));
+        return (0, logSafety_util_1.redactPersonalData)((0, logSafety_util_1.redactSensitiveFields)(JSON.parse(JSON.stringify(body))));
+    }
+    /** 409 gövdesi `success: true` mı (idempotent işlem — istemci başarılı gösterir). */
+    static bodyReportsSuccess(responseBody) {
+        let parsed = responseBody;
+        if (typeof responseBody === 'string') {
+            try {
+                parsed = JSON.parse(responseBody);
+            }
+            catch (_a) {
+                return false;
+            }
+        }
+        return !!parsed && typeof parsed === 'object' && parsed.success === true;
     }
 }
 exports.IntegrationRequestLogService = IntegrationRequestLogService;

@@ -10,7 +10,11 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const common_1 = require("../common");
 const operation_type_enum_1 = require("../enums/operation-type.enum");
 const base_schema_1 = require("./base/base.schema");
-/** İstek loglarının saklama süresi (UC-962): 7 gün, `requestTime` TTL indeksiyle. */
+/**
+ * İstek loglarının üst saklama süresi (UC-962): 7 gün, `requestTime` TTL indeksiyle.
+ * UC-979 Faz 1: asıl süre `expireAt` (başarı 3 / hata 14 gün); bu TTL güvenlik ağı olarak kalır ve
+ * expireAt'siz eski belgeleri siler. Faz 2 (ayrı PR) bu değeri 14 güne çeker — ön koşullar sonuç raporunda.
+ */
 exports.INTEGRATION_REQUEST_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
 const integrationRequestLogSchemaDefinition = {
     integrationName: {
@@ -82,6 +86,25 @@ const integrationRequestLogSchemaDefinition = {
     },
     metadata: {
         type: mongoose_1.default.Schema.Types.Mixed
+    },
+    expireAt: {
+        type: Date
+    },
+    responseSummary: {
+        type: mongoose_1.default.Schema.Types.Mixed
+    },
+    searchKeys: {
+        type: [String],
+        default: undefined
+    },
+    requestBytes: {
+        type: Number
+    },
+    responseBytes: {
+        type: Number
+    },
+    idempotentSuccess: {
+        type: Boolean
     }
 };
 const integrationRequestLogSchema = (0, base_schema_1.createBaseSchema)(integrationRequestLogSchemaDefinition);
@@ -101,6 +124,11 @@ integrationRequestLogSchema.index({ integrationName: 1, requestTime: -1 });
 // OperationType için yeni index'ler
 integrationRequestLogSchema.index({ operationType: 1, userId: 1, requestTime: -1 });
 integrationRequestLogSchema.index({ operationType: 1, integrationName: 1, requestTime: -1 });
+// UC-979: sonuca göre saklama süresi — belge expireAt anında silinir. expireAt'siz (eski) belgelere
+// dokunmaz; onları requestTime TTL'i (güvenlik ağı) siler.
+integrationRequestLogSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
+// UC-979: gelişmiş arama kimlik listesinde tam eşleşme (gövde regex'i yerine)
+integrationRequestLogSchema.index({ searchKeys: 1, requestTime: -1 });
 function createIntegrationRequestLogModel(connection) {
     connection.model('IntegrationRequestLog', integrationRequestLogSchema);
 }
