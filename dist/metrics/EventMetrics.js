@@ -1,7 +1,17 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventMetrics = void 0;
 const prom_client_1 = require("prom-client");
+const logger_service_1 = require("../services/logger.service");
 /**
  * Centralized Event Processing Metrics
  *
@@ -29,6 +39,29 @@ const prom_client_1 = require("prom-client");
  * ```
  */
 class EventMetrics {
+    /** EventPublisherJob kendi outbox'ının toplayıcısını kaydeder (süreçte bir yayıncı: sonuncusu geçerlidir). */
+    static setOutboxCollector(service, collect) {
+        EventMetrics.outboxCollector = { service, collect };
+        EventMetrics.pendingSnapshot = null;
+    }
+    static readOutboxSnapshot() {
+        const collector = EventMetrics.outboxCollector;
+        if (!collector)
+            return Promise.resolve(null);
+        const now = Date.now();
+        if (EventMetrics.pendingSnapshot && now - EventMetrics.pendingSnapshot.at < EventMetrics.SNAPSHOT_TTL_MS) {
+            return EventMetrics.pendingSnapshot.promise;
+        }
+        // Sorgu hatası scrape'i düşürmez: seri o turda yazılmaz (alarm "veri yok" ile değil eşikle çalışır)
+        const promise = collector.collect()
+            .then(snapshot => (Object.assign(Object.assign({}, snapshot), { service: collector.service })))
+            .catch(error => {
+            logger_service_1.logger.warn(`Outbox metrics collection failed: ${error instanceof Error ? error.message : String(error)}`);
+            return null;
+        });
+        EventMetrics.pendingSnapshot = { at: now, promise };
+        return promise;
+    }
     /**
      * Returns the Prometheus registry containing all event metrics
      *
@@ -71,6 +104,10 @@ class EventMetrics {
         EventMetrics.eventDlqTotal.reset();
         EventMetrics.eventDlqWriteErrorTotal.reset();
         EventMetrics.eventDlqReplayTotal.reset();
+        EventMetrics.outboxVersionEventsPublishedTotal.reset();
+        EventMetrics.versionEventWriteErrorsTotal.reset();
+        EventMetrics.outboxCollector = null;
+        EventMetrics.pendingSnapshot = null;
         // Note: Gauge values will remain until explicitly set again
         // Clear registry and re-register all metrics
         EventMetrics.registry.clear();
@@ -81,6 +118,11 @@ class EventMetrics {
         EventMetrics.registry.registerMetric(EventMetrics.eventDlqWriteErrorTotal);
         EventMetrics.registry.registerMetric(EventMetrics.eventDlqReplayTotal);
         EventMetrics.registry.registerMetric(EventMetrics.circuitBreakerState);
+        EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
+        EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);
+        EventMetrics.registry.registerMetric(EventMetrics.outboxVersionRecords);
+        EventMetrics.registry.registerMetric(EventMetrics.outboxVersionOldestPendingAge);
+        EventMetrics.registry.registerMetric(EventMetrics.outboxUnrecoveredRecords);
     }
 }
 exports.EventMetrics = EventMetrics;
@@ -177,3 +219,91 @@ EventMetrics.circuitBreakerState = new prom_client_1.Gauge({
     labelNames: ['service', 'circuit_breaker_name'],
     registers: [EventMetrics.registry]
 });
+/**
+ * Yayınlanan sürüm olayı sayısı (Counter) — UC-984
+ *
+ * EventPublisherJob toplu sürüm yayınında NATS onayı alınan her olay için artar. sync tarafındaki
+ * sync_version_updates_total ile karşılaştırılır: üretilen = sync'e ulaşan.
+ * Labels: service (yayıncı servis)
+ */
+EventMetrics.outboxVersionEventsPublishedTotal = new prom_client_1.Counter({
+    name: 'outbox_version_events_published_total',
+    help: 'Total number of entity version events published to NATS',
+    labelNames: ['service'],
+    registers: [EventMetrics.registry]
+});
+/**
+ * Outbox'a yazılamayan sürüm olayı (Counter) — UC-984
+ *
+ * base şemanın post-save kancası Outbox kaydını ayrı yazar; yazım hata verirse olay kaybolur.
+ * Bu sayaç sıfırdan büyükse sync'teki sürüm o varlık için bir sonraki kayda kadar geride kalır.
+ * Labels: service, entity_type
+ */
+EventMetrics.versionEventWriteErrorsTotal = new prom_client_1.Counter({
+    name: 'version_event_write_errors_total',
+    help: 'Total number of entity version events that could not be written to the outbox',
+    labelNames: ['service', 'entity_type'],
+    registers: [EventMetrics.registry]
+});
+/**
+ * Outbox durumu (Gauge) — UC-984. Değerler her scrape'te EventPublisherJob'un verdiği toplayıcıdan okunur;
+ * toplayıcı yoksa (yayıncısı olmayan servis) seri yazılmaz.
+ *
+ * outbox_version_records{service,status}: pending/processing/failed sürüm olayı sayısı
+ * outbox_version_oldest_pending_age_seconds{service}: en eski yayınlanmamış sürüm olayının yaşı
+ * outbox_unrecovered_records{service,reason}: kendiliğinden kurtulmayacak kayıtlar (tüm olay türleri) —
+ *   processing_stuck: processing'te kalmış ve otomatik kurtarma süresini aşmış
+ *   failed_final: deneme hakkı bitmiş ya da yeniden deneme zamanı olmayan failed kayıt
+ */
+EventMetrics.outboxVersionRecords = new prom_client_1.Gauge({
+    name: 'outbox_version_records',
+    help: 'Number of entity version outbox records by status',
+    labelNames: ['service', 'status'],
+    registers: [EventMetrics.registry],
+    collect() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const snapshot = yield EventMetrics.readOutboxSnapshot();
+            this.reset();
+            if (!snapshot)
+                return;
+            for (const [status, count] of Object.entries(snapshot.versionRecords)) {
+                this.set({ service: snapshot.service, status }, count);
+            }
+        });
+    }
+});
+EventMetrics.outboxVersionOldestPendingAge = new prom_client_1.Gauge({
+    name: 'outbox_version_oldest_pending_age_seconds',
+    help: 'Age in seconds of the oldest unpublished entity version outbox record (0 when none)',
+    labelNames: ['service'],
+    registers: [EventMetrics.registry],
+    collect() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const snapshot = yield EventMetrics.readOutboxSnapshot();
+            this.reset();
+            if (!snapshot)
+                return;
+            this.set({ service: snapshot.service }, snapshot.versionOldestPendingAgeSeconds);
+        });
+    }
+});
+EventMetrics.outboxUnrecoveredRecords = new prom_client_1.Gauge({
+    name: 'outbox_unrecovered_records',
+    help: 'Outbox records that will not be published without manual action, by reason',
+    labelNames: ['service', 'reason'],
+    registers: [EventMetrics.registry],
+    collect() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const snapshot = yield EventMetrics.readOutboxSnapshot();
+            this.reset();
+            if (!snapshot)
+                return;
+            this.set({ service: snapshot.service, reason: 'processing_stuck' }, snapshot.stuckProcessing);
+            this.set({ service: snapshot.service, reason: 'failed_final' }, snapshot.failedFinal);
+        });
+    }
+});
+EventMetrics.outboxCollector = null;
+EventMetrics.pendingSnapshot = null;
+// Aynı scrape'teki üç gauge tek sorgu turunu paylaşır
+EventMetrics.SNAPSHOT_TTL_MS = 2000;

@@ -14,6 +14,9 @@ export declare class EventPublisherJob {
     private static readonly PUBLISH_RETRY_BASE_DELAY;
     private static readonly PUBLISH_RETRY_MAX_DELAY;
     private static readonly MAX_JITTER;
+    private static readonly STUCK_PROCESSING_TIMEOUT;
+    private static readonly STUCK_FALLBACK_MAX_AGE;
+    private static readonly STUCK_METRIC_AGE;
     private static readonly PRIORITY_TRANSITION_DELAY;
     private intervalId;
     private versionEventIntervalId;
@@ -21,6 +24,7 @@ export declare class EventPublisherJob {
     private lastAlertLoggedAt;
     private readonly outboxModel;
     private readonly serviceOffset;
+    private readonly serviceLabel;
     private readonly versionEventInterval;
     private readonly versionBatchSize;
     private readonly versionMaxBatchesPerTick;
@@ -29,6 +33,11 @@ export declare class EventPublisherJob {
     private static readonly PRIORITY_MAP_TTL;
     private static readonly PRIORITY_MAP_MAX_SIZE;
     constructor(natsClient: Stan, connection: mongoose.Connection, serviceName?: ServiceName);
+    /**
+     * Outbox gauge'ları için anlık durum (UC-984). Yayıncıyla aynı environment filtresi kullanılır:
+     * paylaşımlı Mongo'daki development kayıtları canlı alarmına girmez.
+     */
+    private collectOutboxMetrics;
     /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
     private static readPositiveIntEnv;
     /**

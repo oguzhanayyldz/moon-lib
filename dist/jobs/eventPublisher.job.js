@@ -44,6 +44,7 @@ const catalogMappingCreated_publisher_1 = require("../events/publishers/catalogM
 const productIntegrationSynced_publisher_1 = require("../events/publishers/productIntegrationSynced.publisher");
 const orderIntegrationCreated_publisher_1 = require("../events/publishers/orderIntegrationCreated.publisher");
 const logger_service_1 = require("../services/logger.service");
+const EventMetrics_1 = require("../metrics/EventMetrics");
 const integrationCreated_publisher_1 = require("../events/publishers/integrationCreated.publisher");
 const integrationUpdated_publisher_1 = require("../events/publishers/integrationUpdated.publisher");
 const userIntegrationSettings_publisher_1 = require("../events/publishers/userIntegrationSettings.publisher");
@@ -104,9 +105,54 @@ class EventPublisherJob {
         const resolvedServiceName = serviceName || this.resolveServiceNameFromEnv();
         // Servis adından deterministik offset hesapla (0-2500ms arası)
         this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
+        this.serviceLabel = resolvedServiceName || 'unknown';
         this.versionEventInterval = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_INTERVAL_MS', EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT);
         this.versionBatchSize = Math.min(EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_BATCH_SIZE', EventPublisherJob.VERSION_BATCH_SIZE_MAX), EventPublisherJob.VERSION_BATCH_SIZE_MAX);
         this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
+        EventMetrics_1.EventMetrics.setOutboxCollector(this.serviceLabel, () => this.collectOutboxMetrics());
+    }
+    /**
+     * Outbox gauge'ları için anlık durum (UC-984). Yayıncıyla aynı environment filtresi kullanılır:
+     * paylaşımlı Mongo'daki development kayıtları canlı alarmına girmez.
+     */
+    collectOutboxMetrics() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const environment = process.env.NODE_ENV || 'production';
+            const now = Date.now();
+            const versionFilter = { environment, eventType: common_1.Subjects.EntityVersionUpdated };
+            const [pending, processing, failed, oldest, stuckProcessing, failedFinal] = yield Promise.all([
+                this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'pending' })),
+                this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'processing' })),
+                this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'failed' })),
+                this.outboxModel.findOne(Object.assign(Object.assign({}, versionFilter), { status: { $in: ['pending', 'processing'] } }))
+                    .sort({ creationDate: 1 })
+                    .select({ creationDate: 1 })
+                    .lean(),
+                this.outboxModel.countDocuments({
+                    environment,
+                    status: 'processing',
+                    $or: [
+                        { processingStartedAt: { $lt: new Date(now - EventPublisherJob.STUCK_METRIC_AGE) } },
+                        { processingStartedAt: { $not: { $type: 'date' } } }
+                    ]
+                }),
+                this.outboxModel.countDocuments({
+                    environment,
+                    status: 'failed',
+                    $or: [
+                        { retryCount: { $gte: EventPublisherJob.MAX_PUBLISH_ATTEMPTS } },
+                        { nextAttemptAt: { $not: { $type: 'date' } } }
+                    ]
+                })
+            ]);
+            const oldestCreated = oldest === null || oldest === void 0 ? void 0 : oldest.creationDate;
+            return {
+                versionRecords: { pending, processing, failed },
+                versionOldestPendingAgeSeconds: oldestCreated ? Math.max(0, (now - new Date(oldestCreated).getTime()) / 1000) : 0,
+                stuckProcessing,
+                failedFinal
+            };
+        });
     }
     /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
     static readPositiveIntEnv(name, fallback) {
@@ -159,7 +205,7 @@ class EventPublisherJob {
                 this.intervalId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
                     yield this.processEvents();
                 }), EventPublisherJob.RETRY_INTERVAL);
-                // Version event bulk publishing job (2 dakika - biriktirme için daha uzun)
+                // Version event bulk publishing job (varsayılan 5 sn, VERSION_EVENT_INTERVAL_MS)
                 this.versionEventIntervalId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
                     yield this.processVersionEventsAsBulk();
                 }), this.versionEventInterval);
@@ -310,6 +356,7 @@ class EventPublisherJob {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
+                const claimedAt = new Date();
                 const updated = yield this.outboxModel.updateOne({
                     _id: event.id,
                     status: 'pending',
@@ -317,7 +364,7 @@ class EventPublisherJob {
                 }, {
                     $set: {
                         status: 'processing',
-                        processingStartedAt: new Date()
+                        processingStartedAt: claimedAt
                     }
                 });
                 // Event başka bir pod tarafından alınmış demektir, atla
@@ -332,11 +379,11 @@ class EventPublisherJob {
                 catch (error) {
                     // Önce logla: markPublishFailed'daki Mongo hatası dış catch'e düşer ve asıl yayın hatası kaybolmaz
                     logger_service_1.logger.error(`Failed to publish event ${event.id}:`, error);
-                    yield this.markPublishFailed({ _id: event.id }, event.retryCount);
+                    yield this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount);
                     return;
                 }
                 // Başarılı olarak işaretle
-                yield this.outboxModel.updateOne({ _id: event.id, status: 'processing' }, { $set: { status: 'published' } });
+                yield this.outboxModel.updateOne({ _id: event.id, status: 'processing', processingStartedAt: claimedAt }, { $set: { status: 'published' } });
                 logger_service_1.logger.info(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
             }
             catch (error) {
@@ -471,8 +518,10 @@ class EventPublisherJob {
                     };
                     // TEK NATS mesajı gönder
                     yield new entityVersionBulkUpdated_publisher_1.EntityVersionBulkUpdatedPublisher(this.natsClient).publish(bulkPayload);
-                    // Tümünü başarılı işaretle
-                    yield this.outboxModel.updateMany({ _id: { $in: eventIds }, status: 'processing' }, { $set: { status: 'published' } });
+                    EventMetrics_1.EventMetrics.outboxVersionEventsPublishedTotal.inc({ service: this.serviceLabel }, versionEvents.length);
+                    // Yalnız bu turun claim'i published olur (kurtarılıp başka pod'ca yeniden alınmış kayıt değil).
+                    // Bu güncelleme düşerse kayıtlar processing'te kalır, 5 dk sonra yeniden yayınlanır (çift, kayıp değil).
+                    yield this.outboxModel.updateMany({ _id: { $in: eventIds }, status: 'processing', processingStartedAt: claimedAt }, { $set: { status: 'published' } });
                     logger_service_1.logger.info(`✅ Bulk published ${versionEvents.length} EntityVersionUpdated events (batch: ${batchId})`);
                     return { published: versionEvents.length, more: fullBatch };
                 }
@@ -487,7 +536,7 @@ class EventPublisherJob {
                         idsByRetryCount.set(versionEvent.retryCount, ids);
                     }
                     for (const [retryCount, ids] of idsByRetryCount) {
-                        yield this.markPublishFailed({ _id: { $in: ids } }, retryCount);
+                        yield this.markPublishFailed({ _id: { $in: ids }, processingStartedAt: claimedAt }, retryCount);
                     }
                     // Yayın başarısız: bu turda başka parti denenmez (NATS sorunluysa yükü büyütme)
                     return { published: 0, more: false };
@@ -502,21 +551,32 @@ class EventPublisherJob {
     monitorFailedEvents() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Çok uzun süre processing durumunda kalan kayıtları kontrol et
-                const stuckEvents = yield this.outboxModel.find({
+                // Çok uzun süre processing durumunda kalan kayıtları pending'e çevir. Filtre güncellemenin içindedir:
+                // arada başka pod'un kurtarıp yeniden aldığı (yeni processingStartedAt'lı) kayıt geri alınmaz.
+                const now = Date.now();
+                const stuckCutoff = new Date(now - EventPublisherJob.STUCK_PROCESSING_TIMEOUT);
+                const fallbackFloor = new Date(now - EventPublisherJob.STUCK_FALLBACK_MAX_AGE);
+                const recovered = yield this.outboxModel.updateMany({
                     status: 'processing',
-                    processingStartedAt: {
-                        $lt: new Date(Date.now() - 5 * 60 * 1000) // 5 dakikadan eski 
-                    }
+                    $or: [
+                        { processingStartedAt: { $lt: stuckCutoff } },
+                        // UC-984: zaman damgası olmayan kayıt hiç kurtarılmıyordu; son 24 saattekiler updatedOn'a,
+                        // updatedOn da yoksa creationDate'e göre kurtarılır (yalnız kendi environment'ı)
+                        {
+                            processingStartedAt: { $not: { $type: 'date' } },
+                            environment: process.env.NODE_ENV || 'production',
+                            $or: [
+                                { updatedOn: { $lt: stuckCutoff, $gte: fallbackFloor } },
+                                { updatedOn: { $not: { $type: 'date' } }, creationDate: { $lt: stuckCutoff, $gte: fallbackFloor } }
+                            ]
+                        }
+                    ]
+                }, {
+                    $set: { status: 'pending' },
+                    $unset: { processingStartedAt: 1 }
                 });
-                if (stuckEvents.length > 0) {
-                    logger_service_1.logger.warn(`Found ${stuckEvents.length} stuck events in processing state`);
-                    for (const event of stuckEvents) {
-                        yield this.outboxModel.updateOne({ _id: event.id, status: 'processing' }, {
-                            $set: { status: 'pending' },
-                            $unset: { processingStartedAt: 1 }
-                        });
-                    }
+                if (recovered.modifiedCount > 0) {
+                    logger_service_1.logger.warn(`Recovered ${recovered.modifiedCount} stuck events from processing state`);
                 }
                 // Deneme hakkı kalan failed kayıtları bekleme süresi dolunca yeniden kuyruğa al (issue #648 K-1).
                 // nextAttemptAt'i olmayan eski failed kayıtlar bilinçli olarak dışarıda kalır: birikmiş kayıtların
@@ -848,10 +908,11 @@ class EventPublisherJob {
 }
 exports.EventPublisherJob = EventPublisherJob;
 EventPublisherJob.RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
-// UC-984: sürüm olayları turda bir kez 100'lük tek parti gönderiliyordu (saatte en fazla 3.000); tepe üretimi
-// 4.200–4.700/sa olunca kuyruk büyüyordu. Artık her tur kuyruk boşalana ya da parti tavanına gelene kadar
-// partiler gönderir. Üçü de env ile ayarlanır; geçersiz değer varsayılana düşer.
-EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT = 120000; // 2 dakika (bulk biriktirme)
+// UC-984: sürüm olayları 2 dk'da bir 100'lük tek parti gönderiliyordu (saatte en fazla 3.000); tepe üretimi
+// 4.200–4.700/sa olunca kuyruk büyüyordu. Artık tur 5 sn'de bir çalışır ve kuyruk boşalana ya da parti tavanına
+// gelene kadar partiler gönderir (bekleyen sürüm olayının yaşı tepe saatte de saniyeler mertebesinde kalır).
+// Üçü de env ile ayarlanır; geçersiz değer varsayılana düşer.
+EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT = 5000; // 5 saniye
 // Tek NATS mesajındaki olay sayısı tavanı (mesaj boyutu). Env ile küçültülebilir, büyütülemez.
 EventPublisherJob.VERSION_BATCH_SIZE_MAX = 100;
 EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT = 20; // tur başına en fazla 20×100 olay
@@ -865,6 +926,14 @@ EventPublisherJob.MAX_PUBLISH_ATTEMPTS = 5;
 EventPublisherJob.PUBLISH_RETRY_BASE_DELAY = 30000; // 30 saniye
 EventPublisherJob.PUBLISH_RETRY_MAX_DELAY = 240000; // 4 dakika
 EventPublisherJob.MAX_JITTER = 500; // 0-500ms random jitter
+// processing'te kalan kayıt bu süreden sonra pending'e döner
+EventPublisherJob.STUCK_PROCESSING_TIMEOUT = 5 * 60000; // 5 dakika
+// UC-984: processingStartedAt'ı olmayan (ya da Date olmayan) processing kaydı updatedOn/creationDate'e göre
+// kurtarılır; ama yalnız bu pencere içindekiler. Daha eskileri (Ocak–Mart birikimi) kendiliğinden yeniden
+// yayınlanmaz: bayat olayın yeniden yayını ayrı ve onaylı bir operasyondur (scripts/ops kurtarma betiği).
+EventPublisherJob.STUCK_FALLBACK_MAX_AGE = 24 * 60 * 60000; // 24 saat
+// Metrikte "kendiliğinden kurtulmayacak" sayılan processing kaydı: otomatik kurtarmanın iki katı süre
+EventPublisherJob.STUCK_METRIC_AGE = 2 * EventPublisherJob.STUCK_PROCESSING_TIMEOUT;
 EventPublisherJob.PRIORITY_TRANSITION_DELAY = 5000; // 5 saniye - priority geçişlerinde bekleme
 EventPublisherJob.PRIORITY_MAP_TTL = 300000; // 5 dakika — bu süreden eski entry'ler temizlenir
 EventPublisherJob.PRIORITY_MAP_MAX_SIZE = 2000; // Maksimum kullanıcı sayısı

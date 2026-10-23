@@ -6,6 +6,7 @@ import { generateRandomString, SortType, getRefDataId } from '../../common';
 import { EntityType, ServiceName } from '../../common/types';
 import { Subjects } from '../../common/events';
 import { logger } from '../../services/logger.service';
+import { EventMetrics } from '../../metrics/EventMetrics';
 
 // ✅ Global Map: Model isimlerine göre version tracking config saklama
 // Schema veya Model'e custom property eklemek çalışmadığı için global Map kullanıyoruz
@@ -350,8 +351,10 @@ export function createBaseSchema(
 
                 await Outbox.create(outboxPayload);
             } catch (error) {
-                logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}:`, error);
-                // Hata logla ama işlemi engelleme
+                logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}: ${error instanceof Error ? error.message : String(error)}`);
+                // Hata logla ama işlemi engelleme. Outbox yazımı kaydın kendi işlemine bağlı değil: burada düşen
+                // sürüm olayı sync'e hiç gitmez, kayıp yalnız bu sayaçtan görünür (UC-984)
+                EventMetrics.versionEventWriteErrorsTotal.inc({ service: serviceName, entity_type: entityType });
             }
         };
 
