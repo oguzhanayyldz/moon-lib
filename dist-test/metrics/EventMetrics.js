@@ -133,13 +133,13 @@ EventMetrics.registry = new prom_client_1.Registry();
  *
  * Tracks how long it takes to process an event from receipt to completion.
  * Includes labels: service, event_type, queue_group, status
- * Buckets: 10ms -> 10s
+ * Buckets: 10ms -> 120s (UC-967: toplu işlemler için 30/60/120)
  */
 EventMetrics.eventProcessingDuration = new prom_client_1.Histogram({
     name: 'event_processing_duration_seconds',
     help: 'Duration of event processing in seconds',
     labelNames: ['service', 'event_type', 'queue_group', 'status'],
-    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10], // 10ms -> 10s
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 30, 60, 120], // 10ms -> 120s
     registers: [EventMetrics.registry]
 });
 /**

@@ -32,7 +32,7 @@ export declare class EventMetrics {
      *
      * Tracks how long it takes to process an event from receipt to completion.
      * Includes labels: service, event_type, queue_group, status
-     * Buckets: 10ms -> 10s
+     * Buckets: 10ms -> 120s (UC-967: toplu işlemler için 30/60/120)
      */
     static readonly eventProcessingDuration: Histogram<"status" | "service" | "event_type" | "queue_group">;
     /**
