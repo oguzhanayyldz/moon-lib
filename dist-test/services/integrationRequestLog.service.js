@@ -147,7 +147,8 @@ class IntegrationRequestLogService {
                         if (interpreter) {
                             const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
                             if (interpretedResponse) {
-                                updateData.interpretedResponse = interpretedResponse;
+                                // Yorumlayıcılar müşteri alanlarını details'e kopyalayabilir (T-Soft UPDATE_ORDER)
+                                updateData.interpretedResponse = (0, logSafety_util_1.redactPersonalData)(interpretedResponse);
                                 logger_service_1.logger.debug('Response interpreted successfully', {
                                     logId,
                                     operationType: logEntry.operationType,
@@ -173,7 +174,7 @@ class IntegrationRequestLogService {
                 errorMessage: options.errorMessage
             });
             let summaryIds;
-            if (success && (0, integrationRequestLogPolicy_util_1.isReadOperation)(logEntry.operationType)) {
+            if (success && (0, integrationRequestLogPolicy_util_1.isReadOperation)(logEntry.operationType) && (0, integrationRequestLogPolicy_util_1.isStructuredResponseBody)(options.responseBody)) {
                 const summary = (0, integrationRequestLogPolicy_util_1.summarizeReadResponse)(logEntry.integrationName, options.responseBody, responseBytes);
                 updateData.responseBody = null;
                 updateData.responseSummary = summary;

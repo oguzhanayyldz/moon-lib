@@ -223,3 +223,66 @@ describe('liste ucu projeksiyonu ve boyutlar (UC-979)', () => {
         expect(withIntegrationLogSizes({ _id: 'b' } as any)).toMatchObject({ requestSize: null, responseSize: null, totalSize: null });
     });
 });
+
+describe('UC-979 inceleme düzeltmeleri (B1–B3)', () => {
+    it('B1: yorumlayıcı çıktısı (T-Soft UPDATE_ORDER details) kişisel veriden maskelenir, parsedAt korunur', async () => {
+        const { connection, getCapturedUpdate } = createFakeConnection(entry(OperationType.UPDATE_ORDER, ResourceName.TSoft));
+        await new IntegrationRequestLogService(connection).logResponse('log-1', {
+            responseStatus: 200,
+            responseBody: {
+                data: {
+                    id: 5, orderNumber: 'TS-1', orderStatus: 'Kargoda',
+                    customerEmail: 'kisi@ornek.test', customerFirstName: 'Ad', customerLastName: 'Soyad'
+                }
+            }
+        });
+
+        const update = getCapturedUpdate();
+        expect(update.interpretedResponse.details).toMatchObject({
+            orderId: 5, orderNumber: 'TS-1', orderStatus: 'Kargoda',
+            customerEmail: PERSONAL_DATA_MASK, customerFirstName: PERSONAL_DATA_MASK, customerLastName: PERSONAL_DATA_MASK
+        });
+        expect(update.interpretedResponse.success).toBe(true);
+        expect(update.interpretedResponse.parsedAt).toBeInstanceOf(Date);
+        expect(JSON.stringify(update)).not.toContain('kisi@ornek.test');
+        expect(JSON.stringify(update)).not.toContain('Soyad');
+    });
+
+    it('B2: alıcı kullanıcı adı, teslim alan, alıcı adı ve IP alanları maskelenir', async () => {
+        const { connection, getCapturedUpdate } = createFakeConnection(entry(OperationType.UPDATE_ORDER));
+        await new IntegrationRequestLogService(connection).logResponse('log-1', {
+            responseStatus: 500,
+            responseBody: {
+                orderNumber: 'TY-5', buyerName: 'Alici Adi', customerUsername: 'kullanici1', recipientPerson: 'Teslim Alan',
+                customerIp: '10.1.2.3', receiverCustName: 'Alici2'
+            }
+        });
+
+        expect(JSON.parse(getCapturedUpdate().responseBody)).toEqual({
+            orderNumber: 'TY-5', buyerName: PERSONAL_DATA_MASK, customerUsername: PERSONAL_DATA_MASK,
+            recipientPerson: PERSONAL_DATA_MASK, customerIp: PERSONAL_DATA_MASK, receiverCustName: PERSONAL_DATA_MASK
+        });
+    });
+
+    it('B3: 2xx okumada JSON olmayan gövde (WAF/HTML) özetlenmez, maskeli tam gövde saklanır', async () => {
+        const html = '<html><head><title>Just a moment...</title></head><body><Email>kisi@ornek.test</Email></body></html>';
+        const { connection, getCapturedUpdate } = createFakeConnection(entry(OperationType.FETCH_ORDERS));
+        await new IntegrationRequestLogService(connection).logResponse('log-1', { responseStatus: 200, responseBody: html as any });
+
+        const update = getCapturedUpdate();
+        expect(update.responseSummary).toBeUndefined();
+        expect(update.responseBody).toContain('Just a moment...');
+        expect(update.responseBody).not.toContain('kisi@ornek.test');
+    });
+
+    it('B3: JSON metin ve boş gövdeli başarılı okuma yine özetlenir', async () => {
+        const json = createFakeConnection(entry(OperationType.FETCH_ORDERS));
+        await new IntegrationRequestLogService(json.connection).logResponse('log-1', { responseStatus: 200, responseBody: JSON.stringify(ordersPage) as any });
+        expect(json.getCapturedUpdate().responseBody).toBeNull();
+        expect(json.getCapturedUpdate().responseSummary).toMatchObject({ recordCount: 2 });
+
+        const empty = createFakeConnection(entry(OperationType.FETCH_ORDERS));
+        await new IntegrationRequestLogService(empty.connection).logResponse('log-1', { responseStatus: 200, responseBody: '' as any });
+        expect(empty.getCapturedUpdate().responseBody).toBeNull();
+    });
+});

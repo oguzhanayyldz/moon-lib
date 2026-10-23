@@ -1,4 +1,4 @@
-import nats, { Stan, Subscription } from 'node-nats-streaming';
+import nats, { Stan } from 'node-nats-streaming';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './logger.service';
 import { sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
@@ -95,46 +95,49 @@ export class NatsWrapper {
     }
 
     /**
-     * Request-Reply pattern implementasyonu
-     * Stan üzerinde doğrudan request metodu olmadığı için manuel olarak implemente ediyoruz
+     * Request-Reply pattern implementasyonu.
+     * İstek STAN kanalına yayınlanır (komut listener'ları STAN abonesidir), yanıt ise core NATS inbox'ına gelir:
+     * yanıt kalıcılık gerektirmez ve her istek için STAN kanalı açmak max_channels'ı doldurur (UC-949/UC-950).
      */
     async request<T = any>(subject: string, data: any, options: { timeout?: number; max?: number } = {}): Promise<T> {
         return new Promise<T>((resolve, reject) => {
-            const replyTo = `${subject}.reply.${uuidv4()}`;
+            const client = this.client;
+            const nc = coreConnection(client);
+            // `_INBOX.reply.<uuid>`: eski (STAN'a yanıt veren) bir yanıtlayan bu adla kanal açarsa bile
+            // nats-config'teki "*.reply.*" max_inactivity kalıbına uyar ve kanal birikmez.
+            const replyTo = `${CORE_REPLY_PREFIX}reply.${uuidv4()}`;
             const timeout = options.timeout || 10000;
-            
-            // NATS streaming için subscription
-            let subscription: Subscription;
-            
-            // Basit subscribe ile çalış, manuel olarak unsubscribe yap
-            subscription = this.client.subscribe(replyTo);
-            
-            // Timeout işlemi
+
+            let sid = 0;
             const timeoutId = setTimeout(() => {
-                subscription.unsubscribe();
+                nc.unsubscribe(sid);
                 reject(new Error(`Request timeout after ${timeout}ms for ${subject}`));
             }, timeout);
-            
-            // Mesaj alındığında
-            subscription.on('message', (msg) => {
+
+            // max: 1 → sunucu ilk yanıttan sonra aboneliği kendisi kapatır
+            sid = nc.subscribe(replyTo, { max: 1 }, (msg) => {
                 clearTimeout(timeoutId);
-                
-                // Beklenilen cevap geldiğinde manuel unsubscribe
-                subscription.unsubscribe();
-                
+                if (msg instanceof Error) {
+                    reject(msg);
+                    return;
+                }
                 try {
-                    const response = JSON.parse(msg.getData().toString());
-                    resolve(response);
+                    resolve(JSON.parse(decodeCoreMessage(msg)));
                 } catch (err) {
                     reject(err);
                 }
             });
-            
-            // İsteği yayınla
-            this.client.publish(subject, JSON.stringify({
-                ...data,
-                replyTo
-            }));
+
+            try {
+                client.publish(subject, JSON.stringify({
+                    ...data,
+                    replyTo
+                }));
+            } catch (err) {
+                clearTimeout(timeoutId);
+                nc.unsubscribe(sid);
+                reject(err);
+            }
         });
     }
 }
@@ -145,6 +148,8 @@ export const CORE_REPLY_PREFIX = '_INBOX.';
 // node-nats-streaming 0.3.x'in altındaki nats 1.x bağlantısı (Stan#nc); tiplerde yer almadığı için daraltılmış arayüz.
 interface CoreNatsConnection {
     publish(subject: string, data: Buffer): void;
+    subscribe(subject: string, options: { max?: number }, callback: (msg: string | Buffer | Error) => void): number;
+    unsubscribe(sid: number): void;
 }
 
 const coreConnection = (client: Stan): CoreNatsConnection => {
@@ -155,11 +160,15 @@ const coreConnection = (client: Stan): CoreNatsConnection => {
     return nc;
 };
 
+// Stan bağlantıyı 'binary' kodlamayla açar: gelen yük latin1 string'idir, UTF-8'e geri çevrilir.
+const decodeCoreMessage = (msg: string | Buffer): string =>
+    (Buffer.isBuffer(msg) ? msg : Buffer.from(msg, 'binary')).toString('utf8');
+
 /**
  * request() ile gelen komutun yanıtını gönderir.
- * Core NATS inbox'ında (`_INBOX.`) bekleyen istekçiye core NATS'ten, eski biçimdeki istekçiye
- * (`<subject>.reply.<uuid>`) STAN kanalından yanıt verir. Yanıtlayanlar istekçilerden önce bu sürüme
- * geçer (UC-950 Faz 1); istekçiler core inbox'a ancak tüm yanıtlayanlar canlıda güncellendikten sonra geçer (Faz 2).
+ * Yeni istekçi core NATS inbox'ında (`_INBOX.`) bekler; eski istekçi (`<subject>.reply.<uuid>`) STAN kanalında.
+ * İki biçim de desteklenir ki istekçi ve yanıtlayan servisler farklı zamanlarda deploy edilebilsin
+ * (UC-950: yanıtlayanlar Faz 1'de bu fonksiyona geçti, istekçiler Faz 2'de core inbox'a).
  */
 export const publishReply = (client: Stan, replyTo: string, data: string): void => {
     if (replyTo.startsWith(CORE_REPLY_PREFIX)) {

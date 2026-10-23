@@ -10,6 +10,7 @@ import {
     extractLogSearchKeys,
     INTEGRATION_LOG_SEARCH_KEYS_MAX,
     isReadOperation,
+    isStructuredResponseBody,
     isSuccessfulLogOutcome,
     measureBodyBytes,
     summarizeReadResponse
@@ -194,7 +195,8 @@ export class IntegrationRequestLogService {
                         if (interpreter) {
                             const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
                             if (interpretedResponse) {
-                                updateData.interpretedResponse = interpretedResponse;
+                                // Yorumlayıcılar müşteri alanlarını details'e kopyalayabilir (T-Soft UPDATE_ORDER)
+                                updateData.interpretedResponse = redactPersonalData(interpretedResponse);
                                 logger.debug('Response interpreted successfully', {
                                     logId,
                                     operationType: logEntry.operationType,
@@ -220,7 +222,7 @@ export class IntegrationRequestLogService {
                 errorMessage: options.errorMessage
             });
             let summaryIds: string[] | undefined;
-            if (success && isReadOperation(logEntry.operationType)) {
+            if (success && isReadOperation(logEntry.operationType) && isStructuredResponseBody(options.responseBody)) {
                 const summary = summarizeReadResponse(logEntry.integrationName, options.responseBody, responseBytes);
                 updateData.responseBody = null;
                 updateData.responseSummary = summary;

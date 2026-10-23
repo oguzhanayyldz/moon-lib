@@ -34,6 +34,7 @@ import { CatalogMappingCreatedPublisher } from '../events/publishers/catalogMapp
 import { ProductIntegrationSyncedPublisher } from '../events/publishers/productIntegrationSynced.publisher';
 import { OrderIntegrationCreatedPublisher } from '../events/publishers/orderIntegrationCreated.publisher';
 import { logger } from '../services/logger.service';
+import { EventMetrics, OutboxMetricsSnapshot } from '../metrics/EventMetrics';
 import { IntegrationCreatedPublisher } from '../events/publishers/integrationCreated.publisher';
 import { IntegrationUpdatedPublisher } from '../events/publishers/integrationUpdated.publisher';
 import { UserIntegrationSettingsPublisher } from '../events/publishers/userIntegrationSettings.publisher';
@@ -44,6 +45,10 @@ import { NewsletterEmailRequestedPublisher } from '../events/publishers/newslett
 import { UserSessionsRevokedPublisher } from '../events/publishers/userSessionsRevoked.publisher';
 import { OrderProductStockUpdatedPublisher } from '../events/publishers/orderProductUpdated.publisher';
 import { EntityVersionUpdatedPublisher } from '../events/publishers/entityVersionUpdated.publisher';
+import { versionEventKey } from '../utils/versionEventOutbox.util';
+import { VersionEventLeases, VersionLeaseDecision, VersionLeaseEntity } from '../utils/versionEventLease.util';
+import { redisWrapper } from '../services/redisWrapper.service';
+import os from 'os';
 import { EntityVersionBulkUpdatedPublisher } from '../events/publishers/entityVersionBulkUpdated.publisher';
 import { SyncRequestedPublisher } from '../events/publishers/syncRequested.publisher';
 import { InvoiceCreatedPublisher } from '../events/publishers/invoiceCreated.publisher';
@@ -80,7 +85,20 @@ import { StockCountFinishedPublisher } from '../events/publishers/stockCountFini
 
 export class EventPublisherJob {
     private static readonly RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
-    private static readonly VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
+    // UC-984: sürüm olayları 2 dk'da bir 100'lük tek parti gönderiliyordu (saatte en fazla 3.000); tepe üretimi
+    // 4.200–4.700/sa olunca kuyruk büyüyordu. Artık tur 5 sn'de bir çalışır ve kuyruk boşalana ya da parti tavanına
+    // gelene kadar partiler gönderir (bekleyen sürüm olayının yaşı tepe saatte de saniyeler mertebesinde kalır).
+    // Üçü de env ile ayarlanır; geçersiz değer varsayılana düşer.
+    private static readonly VERSION_EVENT_INTERVAL_DEFAULT = 5000; // 5 saniye
+    // Tek NATS mesajındaki olay sayısı tavanı (mesaj boyutu). Env ile küçültülebilir, büyütülemez.
+    private static readonly VERSION_BATCH_SIZE_MAX = 100;
+    private static readonly VERSION_MAX_BATCHES_PER_TICK_DEFAULT = 20; // tur başına en fazla 20×100 olay
+    // UC-984 madde 9: Redis iletim kirası. Kira, en uzun yayından (NATS + Mongo işaretleme) uzun ve takılı processing
+    // kurtarmasından (STUCK_PROCESSING_TIMEOUT) kısa olmalı: pod ölürse kira önce düşer, sonra kayıt yeniden kuyruğa girer.
+    private static readonly VERSION_LEASE_MS_DEFAULT = 60000; // 1 dakika
+    private static readonly VERSION_LATEST_TTL_MS_DEFAULT = 24 * 60 * 60000; // "gönderilmiş en son sürüm" 24 saat tutulur
+    private static readonly VERSION_REDIS_TIMEOUT_MS_DEFAULT = 1000; // Redis yanıt vermezse gönderim beklemez
+    private static readonly VERSION_LEASE_WARN_INTERVAL = 60000; // Redis yokken uyarı logu en fazla dakikada bir
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
     // Eşik aşılmış kaldıkça ALERT her pod'da en fazla bu aralıkla tekrar loglanır (izleme turu 3 sn'de bir koşar).
     // Kalıcı failed olan her kayıt ayrıca olduğu anda markPublishFailed içinde loglanır.
@@ -91,6 +109,14 @@ export class EventPublisherJob {
     private static readonly PUBLISH_RETRY_BASE_DELAY = 30000; // 30 saniye
     private static readonly PUBLISH_RETRY_MAX_DELAY = 240000; // 4 dakika
     private static readonly MAX_JITTER = 500; // 0-500ms random jitter
+    // processing'te kalan kayıt bu süreden sonra pending'e döner
+    private static readonly STUCK_PROCESSING_TIMEOUT = 5 * 60000; // 5 dakika
+    // UC-984: processingStartedAt'ı olmayan (ya da Date olmayan) processing kaydı updatedOn/creationDate'e göre
+    // kurtarılır; ama yalnız bu pencere içindekiler. Daha eskileri (Ocak–Mart birikimi) kendiliğinden yeniden
+    // yayınlanmaz: bayat olayın yeniden yayını ayrı ve onaylı bir operasyondur (scripts/ops kurtarma betiği).
+    private static readonly STUCK_FALLBACK_MAX_AGE = 24 * 60 * 60000; // 24 saat
+    // Metrikte "kendiliğinden kurtulmayacak" sayılan processing kaydı: otomatik kurtarmanın iki katı süre
+    private static readonly STUCK_METRIC_AGE = 2 * EventPublisherJob.STUCK_PROCESSING_TIMEOUT;
     private static readonly PRIORITY_TRANSITION_DELAY = 5000; // 5 saniye - priority geçişlerinde bekleme
     private intervalId: NodeJS.Timeout | null = null;
     private versionEventIntervalId: NodeJS.Timeout | null = null; // Version eventleri için ayrı interval
@@ -98,6 +124,15 @@ export class EventPublisherJob {
     private lastAlertLoggedAt: number | null = null; // Son ALERT logunun zamanı; sayı eşiğin altına inince sıfırlanır
     private readonly outboxModel: OutboxModel;
     private readonly serviceOffset: number; // Servis bazlı offset (thundering herd prevention)
+    private readonly serviceLabel: string; // Metrik etiketi (SERVICE_NAME)
+    private readonly versionEventInterval: number;
+    private readonly versionBatchSize: number;
+    private readonly versionMaxBatchesPerTick: number;
+    // Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz (aynı pod'da üst üste boşaltma yok)
+    private versionDrainRunning = false;
+    private readonly versionLeases: VersionEventLeases;
+    private readonly podId = process.env.HOSTNAME || os.hostname();
+    private lastLeaseWarnAt = 0;
     
     // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
     private lastProcessedPriority: Map<string, { priority: number; timestamp: number }> = new Map();
@@ -117,6 +152,71 @@ export class EventPublisherJob {
         
         // Servis adından deterministik offset hesapla (0-2500ms arası)
         this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
+        this.serviceLabel = resolvedServiceName || 'unknown';
+
+        this.versionEventInterval = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_INTERVAL_MS', EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT);
+        this.versionBatchSize = Math.min(
+            EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_BATCH_SIZE', EventPublisherJob.VERSION_BATCH_SIZE_MAX),
+            EventPublisherJob.VERSION_BATCH_SIZE_MAX
+        );
+        this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
+        this.versionLeases = new VersionEventLeases(() => redisWrapper.client, {
+            leaseMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LEASE_MS', EventPublisherJob.VERSION_LEASE_MS_DEFAULT),
+            latestTtlMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LATEST_TTL_MS', EventPublisherJob.VERSION_LATEST_TTL_MS_DEFAULT),
+            timeoutMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_REDIS_TIMEOUT_MS', EventPublisherJob.VERSION_REDIS_TIMEOUT_MS_DEFAULT)
+        });
+
+        EventMetrics.setOutboxCollector(this.serviceLabel, () => this.collectOutboxMetrics());
+    }
+
+    /**
+     * Outbox gauge'ları için anlık durum (UC-984). Yayıncıyla aynı environment filtresi kullanılır:
+     * paylaşımlı Mongo'daki development kayıtları canlı alarmına girmez.
+     */
+    private async collectOutboxMetrics(): Promise<OutboxMetricsSnapshot> {
+        const environment = process.env.NODE_ENV || 'production';
+        const now = Date.now();
+        const versionFilter = { environment, eventType: Subjects.EntityVersionUpdated };
+
+        const [pending, processing, failed, oldest, stuckProcessing, failedFinal] = await Promise.all([
+            this.outboxModel.countDocuments({ ...versionFilter, status: 'pending' }),
+            this.outboxModel.countDocuments({ ...versionFilter, status: 'processing' }),
+            this.outboxModel.countDocuments({ ...versionFilter, status: 'failed' }),
+            this.outboxModel.findOne({ ...versionFilter, status: { $in: ['pending', 'processing'] } })
+                .sort({ creationDate: 1 })
+                .select({ creationDate: 1 })
+                .lean(),
+            this.outboxModel.countDocuments({
+                environment,
+                status: 'processing',
+                $or: [
+                    { processingStartedAt: { $lt: new Date(now - EventPublisherJob.STUCK_METRIC_AGE) } },
+                    { processingStartedAt: { $not: { $type: 'date' } } }
+                ]
+            }),
+            this.outboxModel.countDocuments({
+                environment,
+                status: 'failed',
+                $or: [
+                    { retryCount: { $gte: EventPublisherJob.MAX_PUBLISH_ATTEMPTS } },
+                    { nextAttemptAt: { $not: { $type: 'date' } } }
+                ]
+            })
+        ]);
+
+        const oldestCreated = (oldest as { creationDate?: Date } | null)?.creationDate;
+        return {
+            versionRecords: { pending, processing, failed },
+            versionOldestPendingAgeSeconds: oldestCreated ? Math.max(0, (now - new Date(oldestCreated).getTime()) / 1000) : 0,
+            stuckProcessing,
+            failedFinal
+        };
+    }
+
+    /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    private static readPositiveIntEnv(name: string, fallback: number): number {
+        const value = Number(process.env[name]);
+        return Number.isInteger(value) && value > 0 ? value : fallback;
     }
 
     /**
@@ -172,17 +272,17 @@ export class EventPublisherJob {
                 await this.processEvents();
             }, EventPublisherJob.RETRY_INTERVAL);
 
-            // Version event bulk publishing job (2 dakika - biriktirme için daha uzun)
+            // Version event bulk publishing job (varsayılan 5 sn, VERSION_EVENT_INTERVAL_MS)
             this.versionEventIntervalId = setInterval(async () => {
                 await this.processVersionEventsAsBulk();
-            }, EventPublisherJob.VERSION_EVENT_INTERVAL);
+            }, this.versionEventInterval);
 
             // Monitoring job
             this.monitoringId = setInterval(async () => {
                 await this.monitorFailedEvents();
             }, EventPublisherJob.RETRY_INTERVAL);
 
-            logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${EventPublisherJob.VERSION_EVENT_INTERVAL}ms, serviceOffset=${this.serviceOffset}ms`);
+            logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${this.versionEventInterval}ms (batch=${this.versionBatchSize}, maxBatches=${this.versionMaxBatchesPerTick}), serviceOffset=${this.serviceOffset}ms`);
         }, initialDelay);
     }
 
@@ -344,6 +444,7 @@ export class EventPublisherJob {
     private async processOneEvent(event: any) {
         try {
             // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
+            const claimedAt = new Date();
             const updated = await this.outboxModel.updateOne(
                 {
                     _id: event.id,
@@ -353,7 +454,7 @@ export class EventPublisherJob {
                 {
                     $set: {
                         status: 'processing',
-                        processingStartedAt: new Date()
+                        processingStartedAt: claimedAt
                     }
                 }
             );
@@ -370,13 +471,13 @@ export class EventPublisherJob {
             } catch (error) {
                 // Önce logla: markPublishFailed'daki Mongo hatası dış catch'e düşer ve asıl yayın hatası kaybolmaz
                 logger.error(`Failed to publish event ${event.id}:`, error);
-                await this.markPublishFailed({ _id: event.id }, event.retryCount);
+                await this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount);
                 return;
             }
 
             // Başarılı olarak işaretle
             await this.outboxModel.updateOne(
-                { _id: event.id, status: 'processing' },
+                { _id: event.id, status: 'processing', processingStartedAt: claimedAt },
                 { $set: { status: 'published' } }
             );
 
@@ -427,72 +528,188 @@ export class EventPublisherJob {
 
 
     /**
-     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
-     * Bu metod ayrı bir interval ile çalışır (10 saniye) ve birikmiş version
-     * eventlerini tek bir EntityVersionBulkUpdated mesajı olarak gönderir
+     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder.
+     * Ayrı bir interval ile çalışır (varsayılan 2 dk). Her tur, kuyruk boşalana ya da
+     * versionMaxBatchesPerTick partiye gelene kadar en fazla versionBatchSize olaylık
+     * EntityVersionBulkUpdated mesajları gönderir (UC-984). Mesaj biçimi değişmedi: eski ve yeni
+     * pod'lar aynı kuyruktan atomik claim ile birlikte yayın yapabilir.
      */
     private async processVersionEventsAsBulk() {
+        if (this.versionDrainRunning) {
+            logger.debug('Previous version event drain is still running, skipping this tick');
+            return;
+        }
+        this.versionDrainRunning = true;
+        try {
+            let batches = 0;
+            let published = 0;
+            // İletimde olduğu için pending'e geri bırakılan kayıtlar bu turda yeniden alınmaz (aynı satırlar üzerinde dönme yok)
+            const deferredIds = new Set<string>();
+            while (batches < this.versionMaxBatchesPerTick) {
+                const result = await this.publishVersionEventBatch(deferredIds);
+                batches++;
+                published += result.published;
+                if (!result.more) break;
+            }
+            if (batches > 1) {
+                logger.info(`🔄 Version event drain: ${published} events in ${batches} batches`);
+            }
+        } finally {
+            this.versionDrainRunning = false;
+        }
+    }
+
+    /**
+     * Tek parti: en eski versionBatchSize kaydı claim edip tek NATS mesajıyla yayınlar.
+     * `more`: kuyrukta kayıt kalmış olabilir ve yayın başarılı — aynı turda bir parti daha denenebilir.
+     */
+    private async publishVersionEventBatch(deferredIds: Set<string> = new Set()): Promise<{ published: number; more: boolean }> {
         try {
             const currentEnvironment = process.env.NODE_ENV || 'production';
 
             // Sadece EntityVersionUpdated eventlerini al
-            const versionEvents = await this.outboxModel.find({
+            const candidates = await this.outboxModel.find({
+                ...(deferredIds.size > 0 ? { _id: { $nin: [...deferredIds] } } : {}),
                 status: 'pending',
                 environment: currentEnvironment,
                 retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                 eventType: Subjects.EntityVersionUpdated
             })
                 .sort({ creationDate: 1 })
-                .limit(100); // Version eventleri için daha yüksek limit
+                .limit(this.versionBatchSize);
 
-            if (versionEvents.length === 0) {
-                return; // İşlenecek event yok
+            if (candidates.length === 0) {
+                return { published: 0, more: false }; // İşlenecek event yok
             }
 
-            logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk`);
-
-            const eventIds = versionEvents.map(e => e.id);
+            const fullBatch = candidates.length === this.versionBatchSize;
+            const candidateIds = candidates.map(e => e.id);
+            const claimedAt = new Date();
 
             // Atomik olarak tüm eventleri 'processing' yap
             const updateResult = await this.outboxModel.updateMany(
-                { 
-                    _id: { $in: eventIds }, 
-                    status: 'pending' 
+                {
+                    _id: { $in: candidateIds },
+                    status: 'pending'
                 },
-                { 
-                    $set: { 
-                        status: 'processing', 
-                        processingStartedAt: new Date() 
-                    } 
+                {
+                    $set: {
+                        status: 'processing',
+                        processingStartedAt: claimedAt
+                    }
                 }
             );
 
             // Bazı eventler başka pod tarafından alınmış olabilir
             if (updateResult.modifiedCount === 0) {
                 logger.debug('All version events already being processed by another publisher');
-                return;
+                return { published: 0, more: fullBatch };
             }
 
+            // Claim SONRASI yeniden okunur: yalnız bu partinin aldığı kayıtlar yayınlanır (başka pod'unkiler iki kez
+            // gitmez) ve claim'den hemen önce birleştirilen (writeVersionEventToOutbox) daha yeni sürüm kaybolmaz —
+            // claim öncesi okunan `candidates` o güncellemeyi görmemiş olabilir (UC-984 madde 8)
+            const versionEvents = await this.outboxModel.find({
+                _id: { $in: candidateIds },
+                status: 'processing',
+                processingStartedAt: claimedAt
+            });
+            if (versionEvents.length === 0) {
+                return { published: 0, more: fullBatch };
+            }
+
+            // Gönderimde birleştirme: aynı varlığın birden fazla kaydından yalnız en yüksek sürüm gider (eski pod'ların
+            // her güncellemede açtığı satırlar ve eşzamanlı yazımda açılan ikinci satır burada toplanır)
+            const winners = new Map<string, any>();
+            for (const versionEvent of versionEvents) {
+                const key = versionEventKey(versionEvent.payload);
+                const current = winners.get(key);
+                if (!current || (versionEvent.payload?.version ?? 0) > (current.payload?.version ?? 0)) {
+                    winners.set(key, versionEvent);
+                }
+            }
+            const batchId = `bulk-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+            const leaseToken = `${this.podId}:${batchId}`;
+
+            // UC-984 madde 9: Redis iletim kirası — tek ağ turunda tüm kazananlar için karar.
+            // Redis yoksa/yanıt vermezse null: bugünkü gibi yalnız Mongo claim'iyle gönderilir (kayıp yok, çift olabilir).
+            const winnerList = [...winners.values()];
+            const decisions = await this.acquireVersionLeases(winnerList, leaseToken);
+            const toSend = winnerList.filter((_, i) => !decisions || decisions[i] === 'acquired');
+            const leased = decisions ? toSend : [];
+            const inflightKeys = new Set(winnerList.filter((_, i) => decisions?.[i] === 'inflight').map(e => versionEventKey(e.payload)));
+            const deliveredKeys = new Set(winnerList.filter((_, i) => decisions?.[i] === 'delivered').map(e => versionEventKey(e.payload)));
+
+            // İletimde olan varlığın satırları pending'e geri döner (retryCount artmaz); sonraki turda gönderilir
+            const deferred = versionEvents.filter(e => inflightKeys.has(versionEventKey(e.payload)));
+            if (deferred.length > 0) {
+                await this.outboxModel.updateMany(
+                    { _id: { $in: deferred.map(e => e._id) }, status: 'processing', processingStartedAt: claimedAt },
+                    { $set: { status: 'pending' }, $unset: { processingStartedAt: 1 } }
+                );
+                deferred.forEach(e => deferredIds.add(e.id));
+                EventMetrics.versionEventsDuplicatePreventedTotal.inc({ service: this.serviceLabel, reason: 'inflight' }, deferred.length);
+            }
+            // Bu sürüm ya da daha yenisi sync'e zaten gönderilmiş: gönderilmez, iz için 'superseded'
+            const alreadyDelivered = versionEvents.filter(e => deliveredKeys.has(versionEventKey(e.payload)));
+            if (alreadyDelivered.length > 0) {
+                await this.outboxModel.updateMany(
+                    { _id: { $in: alreadyDelivered.map(e => e._id) }, status: 'processing', processingStartedAt: claimedAt },
+                    [{ $set: { status: 'superseded', supersededBy: { $concat: ['delivered:v', { $toString: '$payload.version' }] } } }]
+                );
+                EventMetrics.versionEventsDuplicatePreventedTotal.inc({ service: this.serviceLabel, reason: 'delivered' }, alreadyDelivered.length);
+            }
+
+            const sendKeys = new Set(toSend.map(e => versionEventKey(e.payload)));
+            const eventIds = toSend.map(e => e.id);
+            const superseded = versionEvents.filter(e => sendKeys.has(versionEventKey(e.payload)) && winners.get(versionEventKey(e.payload)) !== e);
+
+            logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk (${toSend.length} sent, ${superseded.length} superseded, ${deferred.length} in flight elsewhere, ${alreadyDelivered.length} already delivered)`);
+
+            if (toSend.length === 0) {
+                return { published: 0, more: fullBatch };
+            }
+
+            EventMetrics.versionEventsInflight.set({ service: this.serviceLabel }, leased.length);
             try {
                 // Bulk payload oluştur
-                const batchId = `bulk-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
                 const bulkPayload = {
-                    updates: versionEvents.map(e => e.payload),
+                    updates: toSend.map(e => e.payload),
                     batchId,
-                    batchSize: versionEvents.length,
+                    batchSize: toSend.length,
                     timestamp: new Date()
                 };
 
                 // TEK NATS mesajı gönder
                 await new EntityVersionBulkUpdatedPublisher(this.natsClient).publish(bulkPayload);
 
-                // Tümünü başarılı işaretle
+                EventMetrics.outboxVersionEventsPublishedTotal.inc({ service: this.serviceLabel }, toSend.length);
+                // Gönderilmiş sürüm Mongo işaretlemesinden ÖNCE yazılır: işaretleme düşüp kayıt yeniden kuyruğa girerse
+                // aynı sürüm ikinci kez gönderilmez ('delivered'). Redis hatası yayını geri almaz.
+                if (leased.length > 0) {
+                    await this.versionLeaseCall('mark delivered', () => this.versionLeases.markDelivered(leased.map(e => this.leaseEntity(e))));
+                }
+
+                // Yalnız bu turun claim'i published olur (kurtarılıp başka pod'ca yeniden alınmış kayıt değil).
+                // Bu güncelleme düşerse kayıtlar processing'te kalır, 5 dk sonra yeniden yayınlanır (çift, kayıp değil).
                 await this.outboxModel.updateMany(
-                    { _id: { $in: eventIds }, status: 'processing' },
+                    { _id: { $in: eventIds }, status: 'processing', processingStartedAt: claimedAt },
                     { $set: { status: 'published' } }
                 );
+                // Geride kalan sürümler silinmez: iz ve sayım için 'superseded' + gönderilen satırın kimliği.
+                // Yayından SONRA işaretlenir: yayın düşerse hepsi failed olur, sonraki turda yeniden toplanır.
+                if (superseded.length > 0) {
+                    await this.outboxModel.bulkWrite(superseded.map(e => ({
+                        updateOne: {
+                            filter: { _id: e._id, status: 'processing', processingStartedAt: claimedAt },
+                            update: { $set: { status: 'superseded', supersededBy: winners.get(versionEventKey(e.payload)).id } }
+                        }
+                    })), { ordered: false });
+                    EventMetrics.versionEventsCoalescedTotal.inc({ service: this.serviceLabel, stage: 'send' }, superseded.length);
+                }
 
-                logger.info(`✅ Bulk published ${versionEvents.length} EntityVersionUpdated events (batch: ${batchId})`);
+                logger.info(`✅ Bulk published ${toSend.length} EntityVersionUpdated events (batch: ${batchId})`);
+                return { published: toSend.length, more: fullBatch };
             } catch (error) {
                 // Önce logla: işaretleme sırasındaki Mongo hatası asıl yayın hatasını gizlemesin
                 logger.error('❌ Failed to publish bulk EntityVersionUpdated events:', error);
@@ -504,36 +721,86 @@ export class EventPublisherJob {
                     idsByRetryCount.set(versionEvent.retryCount, ids);
                 }
                 for (const [retryCount, ids] of idsByRetryCount) {
-                    await this.markPublishFailed({ _id: { $in: ids } }, retryCount);
+                    await this.markPublishFailed({ _id: { $in: ids }, processingStartedAt: claimedAt }, retryCount);
                 }
+                // Yayın başarısız: bu turda başka parti denenmez (NATS sorunluysa yükü büyütme)
+                return { published: 0, more: false };
+            } finally {
+                // Kira yalnız sahibince bırakılır; yayın ve işaretleme bittikten (ya da hata verdikten) sonra
+                if (leased.length > 0) {
+                    const expired = await this.versionLeaseCall('release', () => this.versionLeases.release(leased.map(e => this.leaseEntity(e)), leaseToken));
+                    if (expired) {
+                        EventMetrics.versionEventsLeaseExpiredTotal.inc({ service: this.serviceLabel }, expired);
+                        logger.warn(`Version event lease expired before publish finished for ${expired} entities (batch: ${batchId}); increase VERSION_EVENT_LEASE_MS`);
+                    }
+                }
+                EventMetrics.versionEventsInflight.set({ service: this.serviceLabel }, 0);
             }
         } catch (error) {
             logger.error('Version event bulk processing failed:', error);
+            return { published: 0, more: false };
+        }
+    }
+
+    private leaseEntity(versionEvent: any): VersionLeaseEntity {
+        const { entityType, entityId, service, version } = versionEvent.payload ?? {};
+        return { entityType: String(entityType), entityId: String(entityId), service: String(service), version: Number(version) || 0 };
+    }
+
+    /** null: Redis kullanılamadı, gönderim kirasız (yalnız Mongo claim'iyle) sürer */
+    private async acquireVersionLeases(winners: any[], token: string): Promise<VersionLeaseDecision[] | null> {
+        return this.versionLeaseCall('acquire', () => this.versionLeases.acquire(winners.map(e => this.leaseEntity(e)), token));
+    }
+
+    /** Redis hatası/zaman aşımı yutulur (null döner): kira yalnız çift gönderimi önler, gönderimi asla durdurmaz */
+    private async versionLeaseCall<T>(operation: string, call: () => Promise<T>): Promise<T | null> {
+        try {
+            return await call();
+        } catch (error) {
+            EventMetrics.versionEventsLeaseUnavailableTotal.inc({ service: this.serviceLabel });
+            const now = Date.now();
+            if (now - this.lastLeaseWarnAt >= EventPublisherJob.VERSION_LEASE_WARN_INTERVAL) {
+                this.lastLeaseWarnAt = now;
+                logger.warn(`Version event Redis lease ${operation} failed; publishing with Mongo claim only`, {
+                    error: (error as Error)?.message
+                });
+            }
+            return null;
         }
     }
 
     private async monitorFailedEvents() {
         try {
-            // Çok uzun süre processing durumunda kalan kayıtları kontrol et
-            const stuckEvents = await this.outboxModel.find({
-                status: 'processing',
-                processingStartedAt: { 
-                    $lt: new Date(Date.now() - 5 * 60 * 1000) // 5 dakikadan eski 
-                }
-            });
-            
-            if (stuckEvents.length > 0) {
-                logger.warn(`Found ${stuckEvents.length} stuck events in processing state`);
-                
-                for (const event of stuckEvents) {
-                    await this.outboxModel.updateOne(
-                        { _id: event.id, status: 'processing' },
-                        { 
-                            $set: { status: 'pending' }, 
-                            $unset: { processingStartedAt: 1 }
+            // Çok uzun süre processing durumunda kalan kayıtları pending'e çevir. Filtre güncellemenin içindedir:
+            // arada başka pod'un kurtarıp yeniden aldığı (yeni processingStartedAt'lı) kayıt geri alınmaz.
+            const now = Date.now();
+            const stuckCutoff = new Date(now - EventPublisherJob.STUCK_PROCESSING_TIMEOUT);
+            const fallbackFloor = new Date(now - EventPublisherJob.STUCK_FALLBACK_MAX_AGE);
+            const recovered = await this.outboxModel.updateMany(
+                {
+                    status: 'processing',
+                    $or: [
+                        { processingStartedAt: { $lt: stuckCutoff } },
+                        // UC-984: zaman damgası olmayan kayıt hiç kurtarılmıyordu; son 24 saattekiler updatedOn'a,
+                        // updatedOn da yoksa creationDate'e göre kurtarılır (yalnız kendi environment'ı)
+                        {
+                            processingStartedAt: { $not: { $type: 'date' } },
+                            environment: process.env.NODE_ENV || 'production',
+                            $or: [
+                                { updatedOn: { $lt: stuckCutoff, $gte: fallbackFloor } },
+                                { updatedOn: { $not: { $type: 'date' } }, creationDate: { $lt: stuckCutoff, $gte: fallbackFloor } }
+                            ]
                         }
-                    );
+                    ]
+                },
+                {
+                    $set: { status: 'pending' },
+                    $unset: { processingStartedAt: 1 }
                 }
+            );
+
+            if (recovered.modifiedCount > 0) {
+                logger.warn(`Recovered ${recovered.modifiedCount} stuck events from processing state`);
             }
             
             // Deneme hakkı kalan failed kayıtları bekleme süresi dolunca yeniden kuyruğa al (issue #648 K-1).

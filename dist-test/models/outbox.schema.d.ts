@@ -77,7 +77,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     eventType: T;
     payload: EventPayloadMap[T];
     environment?: 'production' | 'development' | 'test';
-    status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
+    status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed' | 'superseded';
     retryCount?: number;
     lastAttempt?: Date;
     nextAttemptAt?: Date;
@@ -85,6 +85,8 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;
+    supersededBy?: string;
+    coalescedCount?: number;
     priority?: number;
     userId?: string;
 }
@@ -92,7 +94,7 @@ export interface OutboxDoc extends BaseDoc {
     eventType: string;
     payload: any;
     environment: 'production' | 'development' | 'test';
-    status: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
+    status: 'pending' | 'processing' | 'published' | 'completed' | 'failed' | 'superseded';
     retryCount: number;
     lastAttempt?: Date;
     nextAttemptAt?: Date;
@@ -100,6 +102,8 @@ export interface OutboxDoc extends BaseDoc {
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;
+    supersededBy?: string;
+    coalescedCount?: number;
     priority: number;
     userId: string;
 }

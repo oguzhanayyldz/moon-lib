@@ -5,6 +5,7 @@ exports.isReadOperation = isReadOperation;
 exports.isSuccessfulLogOutcome = isSuccessfulLogOutcome;
 exports.computeLogExpireAt = computeLogExpireAt;
 exports.measureBodyBytes = measureBodyBytes;
+exports.isStructuredResponseBody = isStructuredResponseBody;
 exports.summarizeReadResponse = summarizeReadResponse;
 exports.extractLogSearchKeys = extractLogSearchKeys;
 exports.buildSearchKeysQuery = buildSearchKeysQuery;
@@ -159,6 +160,16 @@ function parseJsonBody(body) {
     catch (_a) {
         return undefined;
     }
+}
+/**
+ * Gövde bir JSON nesnesi/dizisi mi (nesne ya da JSON metni). Boş gövde de yapısal sayılır: özetlenecek bir şey
+ * kaybolmaz. 2xx okumada HTML/düz metin (WAF, bakım sayfası) gelirse gövde özetlenmez, tam saklanır.
+ */
+function isStructuredResponseBody(body) {
+    if (body === undefined || body === null || body === '')
+        return true;
+    const parsed = parseJsonBody(body);
+    return parsed !== null && typeof parsed === 'object';
 }
 class KeyCollector {
     constructor(max) {
