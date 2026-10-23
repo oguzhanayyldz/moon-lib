@@ -42,7 +42,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MicroserviceSecurityService = void 0;
+exports.MicroserviceSecurityService = exports.DEFAULT_AUTHENTICATED_MAX_REQUESTS = void 0;
 const index_1 = require("../index");
 const SecurityValidator_1 = require("./SecurityValidator");
 const RateLimiter_1 = require("./RateLimiter");
@@ -53,6 +53,17 @@ const bad_request_error_1 = require("../common/errors/bad-request-error");
 const logSafety_util_1 = require("../utils/logSafety.util");
 const jwt = __importStar(require("jsonwebtoken"));
 const crypto_1 = require("crypto");
+/**
+ * Kimlikli kullanıcı limiti varsayılanı: kullanıcı + uç başına 15 dk'da 1500 istek (UC-970).
+ * Eski tek limit (servise göre 50–300) panel yoklamaları ve socket olaylarıyla tetiklenen
+ * yeniden çekimlerde canlı kullanıcıyı 15 dk kilitliyordu. Giriş/şifre sıfırlama gibi
+ * anonim uçlar IP limitinde + BruteForceProtection'da kalır.
+ */
+exports.DEFAULT_AUTHENTICATED_MAX_REQUESTS = 1500;
+const resolveAuthenticatedMaxRequests = () => {
+    const fromEnv = parseInt(process.env.RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS || '', 10);
+    return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : exports.DEFAULT_AUTHENTICATED_MAX_REQUESTS;
+};
 /**
  * Merkezi Mikroservis Güvenlik Servisi
  *
@@ -75,6 +86,7 @@ class MicroserviceSecurityService {
             allowedFileTypes: ['application/json'],
             maxRequestsPerWindow: 100,
             requestWindowMs: 15 * 60 * 1000, // 15 dakika
+            authenticatedMaxRequestsPerWindow: resolveAuthenticatedMaxRequests(),
             bruteForceMaxAttempts: 5,
             bruteForceBlockDurationMs: 15 * 60 * 1000, // 15 dakika
             bruteForceWindowMs: 30 * 60 * 1000, // 30 dakika
@@ -89,6 +101,9 @@ class MicroserviceSecurityService {
         };
         // Default değerleri gelen config ile birleştir - tip güvenli yaklaşım
         this.config = Object.assign(Object.assign({}, defaultConfig), config);
+        if (this.config.authenticatedMaxRequestsPerWindow === undefined) {
+            this.config.authenticatedMaxRequestsPerWindow = defaultConfig.authenticatedMaxRequestsPerWindow;
+        }
         // SecurityValidator başlat
         this.validator = new SecurityValidator_1.SecurityValidator({
             enableInputSanitization: true,
@@ -104,14 +119,22 @@ class MicroserviceSecurityService {
         this.rateLimiter = new RateLimiter_1.RateLimiter(redis, {
             windowMs: this.config.requestWindowMs,
             maxRequests: this.config.maxRequestsPerWindow,
+            authenticatedMaxRequests: this.config.authenticatedMaxRequestsPerWindow,
+            serviceName: this.config.serviceName,
             keyGenerator: (req) => {
-                var _a;
+                var _a, _b;
                 // Kullanıcı kimliği varsa kullan, yoksa IP
                 const userId = (_a = req.currentUser) === null || _a === void 0 ? void 0 : _a.id;
                 const ip = req.ip || '0.0.0.0'; // IP için fallback değer
-                return userId
-                    ? `${this.config.serviceName}_rate_limit:user:${userId}`
-                    : `${this.config.serviceName}_rate_limit:ip:${ip}`;
+                if (!userId) {
+                    return `${this.config.serviceName}_rate_limit:ip:${ip}`;
+                }
+                // Taklitte currentUser.id müşteridir; admin ayrı kovada sayılır ki
+                // destek çalışması müşterinin kendi kotasını tüketmesin (UC-970)
+                if (((_b = req.currentUser) === null || _b === void 0 ? void 0 : _b.isImpersonating) && req.currentUser.adminId) {
+                    return `${this.config.serviceName}_rate_limit:user:${userId}:admin:${req.currentUser.adminId}`;
+                }
+                return `${this.config.serviceName}_rate_limit:user:${userId}`;
             },
             skipSuccessfulRequests: false,
             skipFailedRequests: false

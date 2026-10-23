@@ -14,6 +14,12 @@ export interface MicroserviceSecurityConfig {
     allowedFileTypes: string[];
     maxRequestsPerWindow: number;
     requestWindowMs: number;
+    /**
+     * Kimliği doğrulanmış kullanıcı için pencere başına limit (kullanıcı + uç başına, UC-970).
+     * Verilmezse RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS ya da DEFAULT_AUTHENTICATED_MAX_REQUESTS.
+     * Anonim (IP anahtarlı) istekler her zaman maxRequestsPerWindow'a tabidir.
+     */
+    authenticatedMaxRequestsPerWindow?: number;
     bruteForceMaxAttempts: number;
     bruteForceBlockDurationMs: number;
     bruteForceWindowMs: number;
@@ -26,6 +32,13 @@ export interface MicroserviceSecurityConfig {
     enableXContentTypeOptions: boolean;
     maxInputLength: number;
 }
+/**
+ * Kimlikli kullanıcı limiti varsayılanı: kullanıcı + uç başına 15 dk'da 1500 istek (UC-970).
+ * Eski tek limit (servise göre 50–300) panel yoklamaları ve socket olaylarıyla tetiklenen
+ * yeniden çekimlerde canlı kullanıcıyı 15 dk kilitliyordu. Giriş/şifre sıfırlama gibi
+ * anonim uçlar IP limitinde + BruteForceProtection'da kalır.
+ */
+export declare const DEFAULT_AUTHENTICATED_MAX_REQUESTS = 1500;
 /**
  * Merkezi Mikroservis Güvenlik Servisi
  *

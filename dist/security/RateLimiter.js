@@ -11,6 +11,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createStrictRateLimiter = exports.createAPIRateLimiter = exports.createUserRateLimiter = exports.createIPRateLimiter = exports.RateLimiter = void 0;
 const logger_service_1 = require("../services/logger.service");
+const httpMetrics_1 = require("../middleware/httpMetrics");
+/** IPv4'ün son okteti, IPv6'nın son grupları gizlenir (log için) */
+const maskIp = (ip) => {
+    const v4 = ip.match(/(\d+\.\d+\.\d+)\.\d+$/);
+    if (v4)
+        return `${v4[1]}.x`;
+    const groups = ip.split(':');
+    return groups.length > 3 ? `${groups.slice(0, 3).join(':')}:x` : 'x';
+};
 /**
  * Rate limiting service for controlling request frequency.
  *
@@ -171,7 +180,7 @@ class RateLimiter {
     middleware(options) {
         const config = Object.assign(Object.assign({}, this.config), options);
         return (req, res, next) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b, _c, _d;
             if (!config.enabled) {
                 return next();
             }
@@ -180,24 +189,51 @@ class RateLimiter {
                 const endpoint = ((_a = req.route) === null || _a === void 0 ? void 0 : _a.path) || req.path;
                 // Generate key for rate limiting
                 const key = config.keyGenerator ? config.keyGenerator(req) : ip;
+                const userId = (_b = req.currentUser) === null || _b === void 0 ? void 0 : _b.id;
+                const limit = userId && config.authenticatedMaxRequests
+                    ? config.authenticatedMaxRequests
+                    : config.maxRequests;
                 const result = yield this.checkIPRateLimit(key, endpoint);
+                // checkIPRateLimit kararı tek limitle (this.config.maxRequests) verir;
+                // kimlikli istekte limit farklı olabildiği için karar burada verilir.
+                // Redis'e ulaşılamazsa totalHits 0 döner → istek geçer (fail open).
+                const allowed = result.totalHits <= limit;
+                const retryAfter = Math.ceil(result.timeUntilReset / 1000);
                 // Set rate limit headers
                 res.set({
-                    'X-RateLimit-Limit': config.maxRequests.toString(),
-                    'X-RateLimit-Remaining': Math.max(0, config.maxRequests - result.totalHits).toString(),
+                    'X-RateLimit-Limit': limit.toString(),
+                    'X-RateLimit-Remaining': Math.max(0, limit - result.totalHits).toString(),
                     'X-RateLimit-Reset': result.resetTime.toISOString(),
-                    'X-RateLimit-RetryAfter': Math.ceil(result.timeUntilReset / 1000).toString()
+                    'X-RateLimit-RetryAfter': retryAfter.toString()
                 });
-                if (!result.allowed) {
-                    logger_service_1.logger.warn('Rate limit exceeded:', {
-                        ip,
-                        endpoint,
-                        totalHits: result.totalHits,
-                        limit: config.maxRequests
-                    });
+                if (!allowed) {
+                    const service = config.serviceName || 'unknown';
+                    const route = (0, httpMetrics_1.normalizeRoutePath)(endpoint);
+                    const scope = userId ? 'user' : 'ip';
+                    httpMetrics_1.HttpMetrics.httpRateLimitedTotal.inc({ service, route, scope });
+                    // Pencere başına anahtar başına TEK log: INCR atomik olduğundan
+                    // limit+1'inci istek tam bir kez görülür; sonrakiler yalnız sayaca yazılır.
+                    if (result.totalHits === limit + 1) {
+                        logger_service_1.logger.warn('[RateLimit] limit aşıldı, 429 dönülüyor', {
+                            event: 'rate_limit_exceeded',
+                            service,
+                            method: req.method,
+                            route,
+                            scope,
+                            userId,
+                            adminId: ((_c = req.currentUser) === null || _c === void 0 ? void 0 : _c.isImpersonating)
+                                ? (_d = req.currentUser) === null || _d === void 0 ? void 0 : _d.adminId
+                                : undefined,
+                            ip: maskIp(ip),
+                            limit,
+                            windowMs: config.windowMs,
+                            retryAfterSec: retryAfter
+                        });
+                    }
                     return res.status(429).json({
                         error: config.message,
-                        retryAfter: Math.ceil(result.timeUntilReset / 1000)
+                        retryAfter,
+                        service
                     });
                 }
                 next();

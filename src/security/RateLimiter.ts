@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { RedisClientType } from 'redis';
 import { logger } from '../services/logger.service';
+import { HttpMetrics, normalizeRoutePath } from '../middleware/httpMetrics';
 
 export interface RateLimitConfig {
     windowMs: number;
@@ -10,7 +11,26 @@ export interface RateLimitConfig {
     skipFailedRequests?: boolean;
     enabled?: boolean;
     message?: string;
+    /**
+     * Kimliği doğrulanmış isteklere (`req.currentUser.id`) uygulanan limit (UC-970).
+     * Verilmezse herkese `maxRequests` uygulanır. Anonim (IP anahtarlı) istekler —
+     * giriş, şifre sıfırlama gibi kaba kuvvet hedefleri — her zaman `maxRequests`'e tabidir.
+     */
+    authenticatedMaxRequests?: number;
+    /** 429 logu, yanıt gövdesi ve `http_rate_limited_total` etiketi için servis adı */
+    serviceName?: string;
 }
+
+type ResolvedRateLimitConfig = Required<Omit<RateLimitConfig, 'authenticatedMaxRequests' | 'serviceName'>>
+    & Pick<RateLimitConfig, 'authenticatedMaxRequests' | 'serviceName'>;
+
+/** IPv4'ün son okteti, IPv6'nın son grupları gizlenir (log için) */
+const maskIp = (ip: string): string => {
+    const v4 = ip.match(/(\d+\.\d+\.\d+)\.\d+$/);
+    if (v4) return `${v4[1]}.x`;
+    const groups = ip.split(':');
+    return groups.length > 3 ? `${groups.slice(0, 3).join(':')}:x` : 'x';
+};
 
 export interface RateLimitResult {
     allowed: boolean;
@@ -36,7 +56,7 @@ export interface RateLimitResult {
  * ```
  */
 export class RateLimiter {
-    private config: Required<RateLimitConfig>;
+    private config: ResolvedRateLimitConfig;
     private redisClient: RedisClientType;
 
     constructor (redisClient: RedisClientType, config?: Partial<RateLimitConfig>) {
@@ -208,27 +228,56 @@ export class RateLimiter {
                 // Generate key for rate limiting
                 const key = config.keyGenerator ? config.keyGenerator(req) : ip;
 
+                const userId: string | undefined = (req as any).currentUser?.id;
+                const limit = userId && config.authenticatedMaxRequests
+                    ? config.authenticatedMaxRequests
+                    : config.maxRequests;
+
                 const result = await this.checkIPRateLimit(key, endpoint);
+                // checkIPRateLimit kararı tek limitle (this.config.maxRequests) verir;
+                // kimlikli istekte limit farklı olabildiği için karar burada verilir.
+                // Redis'e ulaşılamazsa totalHits 0 döner → istek geçer (fail open).
+                const allowed = result.totalHits <= limit;
+                const retryAfter = Math.ceil(result.timeUntilReset / 1000);
 
                 // Set rate limit headers
                 res.set({
-                    'X-RateLimit-Limit': config.maxRequests.toString(),
-                    'X-RateLimit-Remaining': Math.max(0, config.maxRequests - result.totalHits).toString(),
+                    'X-RateLimit-Limit': limit.toString(),
+                    'X-RateLimit-Remaining': Math.max(0, limit - result.totalHits).toString(),
                     'X-RateLimit-Reset': result.resetTime.toISOString(),
-                    'X-RateLimit-RetryAfter': Math.ceil(result.timeUntilReset / 1000).toString()
+                    'X-RateLimit-RetryAfter': retryAfter.toString()
                 });
 
-                if (!result.allowed) {
-                    logger.warn('Rate limit exceeded:', {
-                        ip,
-                        endpoint,
-                        totalHits: result.totalHits,
-                        limit: config.maxRequests
-                    });
+                if (!allowed) {
+                    const service = config.serviceName || 'unknown';
+                    const route = normalizeRoutePath(endpoint);
+                    const scope = userId ? 'user' : 'ip';
+                    HttpMetrics.httpRateLimitedTotal.inc({ service, route, scope });
+
+                    // Pencere başına anahtar başına TEK log: INCR atomik olduğundan
+                    // limit+1'inci istek tam bir kez görülür; sonrakiler yalnız sayaca yazılır.
+                    if (result.totalHits === limit + 1) {
+                        logger.warn('[RateLimit] limit aşıldı, 429 dönülüyor', {
+                            event: 'rate_limit_exceeded',
+                            service,
+                            method: req.method,
+                            route,
+                            scope,
+                            userId,
+                            adminId: (req as any).currentUser?.isImpersonating
+                                ? (req as any).currentUser?.adminId
+                                : undefined,
+                            ip: maskIp(ip),
+                            limit,
+                            windowMs: config.windowMs,
+                            retryAfterSec: retryAfter
+                        });
+                    }
 
                     return res.status(429).json({
                         error: config.message,
-                        retryAfter: Math.ceil(result.timeUntilReset / 1000)
+                        retryAfter,
+                        service
                     });
                 }
 
