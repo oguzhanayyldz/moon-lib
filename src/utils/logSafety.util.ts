@@ -445,30 +445,111 @@ function normalizeFieldName(name: string): string {
         .replace(NON_ALPHANUMERIC_PATTERN, '');
 }
 
-function redactXmlElements(text: string): string {
+/** Marker written in place of a personal-data value (UC-979), kept apart from the credential marker. */
+export const PERSONAL_DATA_MASK = '***PII***';
+
+// Personal data of a buyer or recipient (UC-979), matched anywhere inside the normalized name:
+// `firstName`, `customerfullName` (N11), `shippingAddress`, `customerContactMail` (İdefix),
+// `tcIdentityNumber` (N11), `customerTcNumber` (İdefix), `taxId`, `gsm`, `Telefon`.
+// An address or contact object is masked as one value.
+const PERSONAL_NAME_PARTS = [
+    'firstname', 'lastname', 'fullname', 'surname', 'contactname', 'customername', 'receivername', 'recipientname',
+    'address', 'adres', 'phone', 'telefon', 'gsm', 'email', 'mail', 'identitynumber', 'identityno', 'tckimlik',
+    'tcnumber', 'tckn', 'taxnumber', 'taxid', 'vergino', 'vergikimlik'
+];
+
+/**
+ * Whether a field or XML element name holds personal data (UC-979). Same normalization as
+ * `isSensitiveFieldName`, and fail-closed in the same way (`ipAddress` is masked too).
+ */
+export function isPersonalDataFieldName(name: string): boolean {
+    const normalized = normalizeFieldName(name);
+    return PERSONAL_NAME_PARTS.some((part) => normalized.includes(part));
+}
+
+/**
+ * Returns a copy of a JSON-shaped value in which every personal-data field (`isPersonalDataFieldName`)
+ * is replaced by `PERSONAL_DATA_MASK`, nested objects and arrays included. An empty value (null,
+ * undefined, '') is kept, so the log still shows the field was empty. Strings go through
+ * `redactPersonalDataText`. Credentials are not handled here: `redactSensitiveFields` runs first.
+ */
+export function redactPersonalData<T>(value: T): T {
+    if (typeof value === 'string') {
+        return redactPersonalDataText(value) as unknown as T;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => redactPersonalData(item)) as unknown as T;
+    }
+    if (typeof value !== 'object' || value === null) {
+        return value;
+    }
+    return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+            key,
+            isPersonalDataFieldName(key) && item !== null && item !== undefined && item !== ''
+                ? PERSONAL_DATA_MASK
+                : redactPersonalData(item)
+        ])
+    ) as T;
+}
+
+/**
+ * Masks personal data inside a text body: a JSON text structurally (returned unchanged when it holds
+ * none), otherwise XML elements and `"name": value` pairs in place.
+ * Known limits: form (`name=value`) and header (`Name: value`) pairs are not masked for personal data
+ * (in the integrations' payloads those shapes carry credentials, not buyer data), and in a text that
+ * is not JSON an address object (`"address": {…}`) keeps its inner fields other than the named ones.
+ */
+export function redactPersonalDataText(text: string): string {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+            const parsed: unknown = JSON.parse(trimmed);
+            const redacted = JSON.stringify(redactPersonalData(parsed));
+            return redacted === JSON.stringify(parsed) ? text : redacted;
+        } catch {
+            // Not JSON after all: fall through to the text rules.
+        }
+    }
+    return redactJsonPairs(
+        redactXmlElements(text, isPersonalDataFieldName, PERSONAL_DATA_MASK),
+        isPersonalDataFieldName,
+        PERSONAL_DATA_MASK
+    );
+}
+
+function redactXmlElements(
+    text: string,
+    isMaskedName: (name: string) => boolean = isSensitiveFieldName,
+    mask: string = REDACTED_FIELD_MASK
+): string {
     const startTag = new RegExp(XML_START_TAG_PATTERN.source, 'g');
     let result = '';
     let copiedUpTo = 0;
     let match: RegExpExecArray | null;
     while ((match = startTag.exec(text)) !== null) {
         const [tag, qualifiedName, localName, attributes] = match;
-        if ((attributes ?? '').endsWith('/') || !isSensitiveFieldName(localName)) {
+        if ((attributes ?? '').endsWith('/') || !isMaskedName(localName)) {
             continue;
         }
         const contentStart = match.index + tag.length;
         const closingTag = new RegExp(`</${escapeRegExp(qualifiedName)}\\s*>`, 'i');
         const closing = closingTag.exec(text.slice(contentStart));
         const contentEnd = closing ? contentStart + closing.index : text.length;
-        result += text.slice(copiedUpTo, contentStart) + REDACTED_FIELD_MASK;
+        result += text.slice(copiedUpTo, contentStart) + mask;
         copiedUpTo = contentEnd;
         startTag.lastIndex = closing ? contentEnd + closing[0].length : text.length;
     }
     return result + text.slice(copiedUpTo);
 }
 
-function redactJsonPairs(text: string): string {
+function redactJsonPairs(
+    text: string,
+    isMaskedName: (name: string) => boolean = isSensitiveFieldName,
+    mask: string = REDACTED_FIELD_MASK
+): string {
     return text.replace(JSON_PAIR_PATTERN, (pair, name: string, separator: string) =>
-        isSensitiveFieldName(name) ? `"${name}"${separator}"${REDACTED_FIELD_MASK}"` : pair
+        isMaskedName(name) ? `"${name}"${separator}"${mask}"` : pair
     );
 }
 

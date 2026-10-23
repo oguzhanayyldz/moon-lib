@@ -2,7 +2,7 @@
  * UC-962 — İstek loglarında gövde üst sınırı (64 KB).
  *
  * `trendyol.integrationrequestlogs` 47 GB'a çıktı: her sipariş isteğinin tam yanıtı (~1,35 MB,
- * pretty-print JSON) saklanıyordu. Saklanan istek/yanıt gövdesi artık en çok 64 KB (UTF-8 bayt) +
+ * pretty-print JSON; UC-979'dan beri compact) saklanıyordu. Saklanan istek/yanıt gövdesi artık en çok 64 KB (UTF-8 bayt) +
  * `…(kırpıldı, toplam N bayt)` notu; `interpretedResponse` (özet) tam gövdeden hesaplanmaya devam eder.
  */
 import { IntegrationRequestLogService, INTEGRATION_LOG_BODY_MAX_BYTES } from '../integrationRequestLog.service';
@@ -44,7 +44,7 @@ function bigOrdersResponse(orderCount: number) {
         content: Array.from({ length: orderCount }, (_, i) => ({
             orderNumber: `TEST-${i}`,
             lines: [{ barcode: `BARKOD-${i}`, quantity: 1, productName: 'Örnek ürün adı '.repeat(10) }],
-            shipmentAddress: { fullAddress: 'Örnek Mah. Test Sok. No:1 '.repeat(5) }
+            cargoProviderName: 'Örnek Kargo Firması '.repeat(5)
         }))
     };
 }
@@ -52,7 +52,7 @@ function bigOrdersResponse(orderCount: number) {
 describe('IntegrationRequestLogService — gövde üst sınırı (UC-962)', () => {
     it('64 KB üstü yanıt gövdesini kırpar, sona toplam bayt notunu ekler, baş kısmı aynen korur', async () => {
         const body = bigOrdersResponse(1500);
-        const fullStored = JSON.stringify(body, null, 2);
+        const fullStored = JSON.stringify(body); // UC-979: compact JSON
         const fullBytes = Buffer.byteLength(fullStored, 'utf8');
         expect(fullBytes).toBeGreaterThan(500 * 1024);
 
@@ -85,7 +85,7 @@ describe('IntegrationRequestLogService — gövde üst sınırı (UC-962)', () =
 
         const small = { ok: true, items: [1, 2, 3] };
         await service.logResponse('log-1', { responseStatus: 200, responseBody: small });
-        expect(getCapturedUpdate().responseBody).toBe(JSON.stringify(small, null, 2));
+        expect(getCapturedUpdate().responseBody).toBe(JSON.stringify(small));
     });
 
     it('çok baytlı karakteri ortadan bölmez (sınır UTF-8 bayt üzerinden)', async () => {
@@ -125,11 +125,11 @@ describe('IntegrationRequestLogService — gövde üst sınırı (UC-962)', () =
     });
 
     it('kesim noktası bir kimlik değerinin ortasına düşse de değerin başı açığa çıkmaz (önce maskele, sonra kırp)', async () => {
-        // Pretty JSON: `{\n  "filler": "` (15 bayt) + filler + `",\n  "apiSecret": "` (18 bayt) + değer —
+        // Compact JSON (UC-979): `{"filler":"` (11 bayt) + filler + `","apiSecret":"` (15 bayt) + değer —
         // ham gövdede 64 KB sınırı değerin 20. baytına düşer; kırpılmış JSON ayrıştırılamaz, değer yarım kalır.
         const credential = ['uc962', 'kesim', 'noktasi', 'degeri', 'abcdefghijklmnop'].join('-');
-        const body = { filler: 'z'.repeat(INTEGRATION_LOG_BODY_MAX_BYTES - 15 - 18 - 20), apiSecret: credential };
-        expect(Buffer.byteLength(JSON.stringify(body, null, 2), 'utf8')).toBeGreaterThan(INTEGRATION_LOG_BODY_MAX_BYTES);
+        const body = { filler: 'z'.repeat(INTEGRATION_LOG_BODY_MAX_BYTES - 11 - 15 - 20), apiSecret: credential };
+        expect(Buffer.byteLength(JSON.stringify(body), 'utf8')).toBeGreaterThan(INTEGRATION_LOG_BODY_MAX_BYTES);
         const { connection, getCapturedUpdate } = createFakeConnection(baseEntry());
         await new IntegrationRequestLogService(connection).logResponse('log-1', { responseStatus: 200, responseBody: body });
 
@@ -163,7 +163,7 @@ describe('IntegrationRequestLogService — gövde üst sınırı (UC-962)', () =
         const stored: string = getCapturedInsert().requestBody;
         const match = stored.match(NOTE_PATTERN);
         expect(match).not.toBeNull();
-        expect(Number(match![1])).toBe(Buffer.byteLength(JSON.stringify(body, null, 2), 'utf8'));
+        expect(Number(match![1])).toBe(Buffer.byteLength(JSON.stringify(body), 'utf8'));
         expect(Buffer.byteLength(stored.replace(NOTE_PATTERN, ''), 'utf8')).toBeLessThanOrEqual(INTEGRATION_LOG_BODY_MAX_BYTES);
     });
 });

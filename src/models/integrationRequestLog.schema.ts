@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { ResourceName } from '../common';
 import { OperationType } from '../enums/operation-type.enum';
 import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
+import type { ResponseSummary } from '../utils/integrationRequestLogPolicy.util';
 
 /**
  * Yorumlanmış/özetlenmiş yanıt yapısı
@@ -32,6 +33,17 @@ export interface IntegrationRequestLogAttrs extends BaseAttrs {
     requestTime: Date;
     responseTime?: Date;
     metadata?: Record<string, any>;
+    /** UC-979: silinme anı (başarı +3 gün, hata +14 gün) — expireAfterSeconds:0 TTL. */
+    expireAt?: Date;
+    /** UC-979: başarılı okumada gövde yerine saklanan özet. */
+    responseSummary?: ResponseSummary;
+    /** UC-979: gelişmiş arama kimlikleri (sipariş no, paket id, barkod...). */
+    searchKeys?: string[];
+    /** UC-979: kırpma öncesi UTF-8 bayt boyu. */
+    requestBytes?: number;
+    responseBytes?: number;
+    /** UC-979: 409 + gövde success:true (aynı işlem önceden yapılmış) — listede gövde olmadan gösterilir. */
+    idempotentSuccess?: boolean;
 }
 
 export interface IntegrationRequestLogDoc extends BaseDoc {
@@ -51,11 +63,26 @@ export interface IntegrationRequestLogDoc extends BaseDoc {
     requestTime: Date;
     responseTime?: Date;
     metadata?: Record<string, any>;
+    /** UC-979: silinme anı (başarı +3 gün, hata +14 gün) — expireAfterSeconds:0 TTL. */
+    expireAt?: Date;
+    /** UC-979: başarılı okumada gövde yerine saklanan özet. */
+    responseSummary?: ResponseSummary;
+    /** UC-979: gelişmiş arama kimlikleri (sipariş no, paket id, barkod...). */
+    searchKeys?: string[];
+    /** UC-979: kırpma öncesi UTF-8 bayt boyu. */
+    requestBytes?: number;
+    responseBytes?: number;
+    /** UC-979: 409 + gövde success:true (aynı işlem önceden yapılmış) — listede gövde olmadan gösterilir. */
+    idempotentSuccess?: boolean;
 }
 
 export interface IntegrationRequestLogModel extends BaseModel<IntegrationRequestLogDoc, IntegrationRequestLogAttrs> { }
 
-/** İstek loglarının saklama süresi (UC-962): 7 gün, `requestTime` TTL indeksiyle. */
+/**
+ * İstek loglarının üst saklama süresi (UC-962): 7 gün, `requestTime` TTL indeksiyle.
+ * UC-979 Faz 1: asıl süre `expireAt` (başarı 3 / hata 14 gün); bu TTL güvenlik ağı olarak kalır ve
+ * expireAt'siz eski belgeleri siler. Faz 2 (ayrı PR) bu değeri 14 güne çeker — ön koşullar sonuç raporunda.
+ */
 export const INTEGRATION_REQUEST_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 const integrationRequestLogSchemaDefinition = {
@@ -128,6 +155,25 @@ const integrationRequestLogSchemaDefinition = {
     },
     metadata: {
         type: mongoose.Schema.Types.Mixed
+    },
+    expireAt: {
+        type: Date
+    },
+    responseSummary: {
+        type: mongoose.Schema.Types.Mixed
+    },
+    searchKeys: {
+        type: [String],
+        default: undefined
+    },
+    requestBytes: {
+        type: Number
+    },
+    responseBytes: {
+        type: Number
+    },
+    idempotentSuccess: {
+        type: Boolean
     }
 };
 
@@ -150,6 +196,11 @@ integrationRequestLogSchema.index({ integrationName: 1, requestTime: -1 });
 // OperationType için yeni index'ler
 integrationRequestLogSchema.index({ operationType: 1, userId: 1, requestTime: -1 });
 integrationRequestLogSchema.index({ operationType: 1, integrationName: 1, requestTime: -1 });
+// UC-979: sonuca göre saklama süresi — belge expireAt anında silinir. expireAt'siz (eski) belgelere
+// dokunmaz; onları requestTime TTL'i (güvenlik ağı) siler.
+integrationRequestLogSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
+// UC-979: gelişmiş arama kimlik listesinde tam eşleşme (gövde regex'i yerine)
+integrationRequestLogSchema.index({ searchKeys: 1, requestTime: -1 });
 
 export function createIntegrationRequestLogModel(connection: mongoose.Connection): void {
     connection.model<IntegrationRequestLogDoc, IntegrationRequestLogModel>('IntegrationRequestLog', integrationRequestLogSchema);

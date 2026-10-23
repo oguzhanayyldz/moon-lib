@@ -18,6 +18,7 @@ type Doc = {
     metadata?: { description?: string };
     requestBody?: string;
     responseBody?: string;
+    searchKeys?: string[];
     requestTime: Date;
 };
 
@@ -31,6 +32,11 @@ function matchesCondition(doc: any, field: string, cond: any): boolean {
         if ('$regex' in cond) {
             const re = new RegExp(cond.$regex, cond.$options || '');
             return typeof value === 'string' && re.test(value);
+        }
+        if ('$in' in cond) {
+            // Mongo: dizi alanında $in, elemanlardan biri listedeyse eşleşir
+            const values = Array.isArray(value) ? value : [value];
+            return values.some((v: any) => (cond.$in as any[]).includes(v));
         }
         if ('$exists' in cond) {
             return cond.$exists ? value !== undefined : value === undefined;
@@ -108,14 +114,14 @@ function createFakeConnection(docs: Doc[]) {
 
 function fixtureDocs(): Doc[] {
     return [
-        { _id: '1', userId: 'user-1', endpoint: '/orders(archived)', metadata: { description: 'ok' }, requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-01-01') },
-        { _id: '2', userId: 'user-1', endpoint: '/orders[legacy]', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-01-02') },
+        { _id: '1', userId: 'user-1', endpoint: '/orders(archived)', metadata: { description: 'ok' }, requestBody: '{}', responseBody: '{}', searchKeys: ['TY-1001', 'BARKOD-A'], requestTime: new Date('2026-01-01') },
+        { _id: '2', userId: 'user-1', endpoint: '/orders[legacy]', requestBody: '{}', responseBody: 'TY-1001 gövdede geçiyor', searchKeys: ['TY-1002'], requestTime: new Date('2026-01-02') },
         { _id: '3', userId: 'user-1', endpoint: '/products*sale', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-01-03') },
-        { _id: '4', userId: 'user-1', endpoint: '/cargo/a+b/track', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-01-04') },
+        { _id: '4', userId: 'user-1', endpoint: '/cargo/a+b/track', requestBody: '{}', responseBody: '{}', searchKeys: ['a+b'], requestTime: new Date('2026-01-04') },
         { _id: '5', userId: 'user-1', endpoint: '/version/1.2.3', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-01-05') },
         { _id: '6', userId: 'user-1', endpoint: '/plain/no/dot', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-01-06') },
         // Başka kiracı: aynı literal metni taşıyor, kiracı yalıtımını sınamak için.
-        { _id: '7', userId: 'user-2', endpoint: '/orders(archived)', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-01-07') }
+        { _id: '7', userId: 'user-2', endpoint: '/orders(archived)', requestBody: '{}', responseBody: '{}', searchKeys: ['TY-1001'], requestTime: new Date('2026-01-07') }
     ];
 }
 
@@ -135,12 +141,12 @@ describe('IntegrationRequestLogService.getUserLogs — arama değerleri literal 
         expect(result.logs.map((l: any) => l._id)).toEqual([expectedId]);
     });
 
-    it.each(SPECIAL_CASES)('advancedSearch="$term" hata vermez ve yalnız literal eşleşeni döner', async ({ term, expectedId }) => {
+    it.each(SPECIAL_CASES)('advancedSearch="$term" regex değildir: kimlik listesinde tam eşleşme yoksa sonuç boş', async ({ term }) => {
         const service = new IntegrationRequestLogService(createFakeConnection(fixtureDocs()));
 
         const result = await service.getUserLogs('user-1', undefined, 1, 50, 'requestTime', 'desc', { advancedSearch: term });
 
-        expect(result.logs.map((l: any) => l._id)).toEqual([expectedId]);
+        expect(result.logs).toEqual([]);
     });
 
     it('search="." tüm kayıtları eşlemez, yalnız içinde nokta geçen kaydı döner', async () => {
@@ -172,13 +178,20 @@ describe('IntegrationRequestLogService.getAdminLogs — arama değerleri literal
         expect(result.logs.map((l: any) => l._id).sort()).toEqual([...expectedIds].sort());
     });
 
-    it.each(SPECIAL_CASES)('advancedSearch="$term" hata vermez ve yalnız literal eşleşenleri döner', async ({ term, expectedId }) => {
+    it.each(SPECIAL_CASES)('advancedSearch="$term" regex değildir: kimlik listesinde tam eşleşme yoksa sonuç boş', async ({ term }) => {
         const service = new IntegrationRequestLogService(createFakeConnection(fixtureDocs()));
 
         const result = await service.getAdminLogs(undefined, 1, 50, 'requestTime', 'desc', { advancedSearch: term });
 
-        const expectedIds = term === '(' ? [expectedId, '7'] : [expectedId];
-        expect(result.logs.map((l: any) => l._id).sort()).toEqual([...expectedIds].sort());
+        expect(result.logs).toEqual([]);
+    });
+
+    it('advancedSearch kimliği kiracılar arasında bulur (admin görünümü)', async () => {
+        const service = new IntegrationRequestLogService(createFakeConnection(fixtureDocs()));
+
+        const result = await service.getAdminLogs(undefined, 1, 50, 'requestTime', 'desc', { advancedSearch: 'TY-1001' });
+
+        expect(result.logs.map((l: any) => l._id).sort()).toEqual(['1', '7']);
     });
 
     it('search="." tüm kayıtları eşlemez, yalnız içinde nokta geçen kaydı döner', async () => {
@@ -195,7 +208,8 @@ describe('IntegrationRequestLogService.getAdminLogs — success ve search birlik
         { _id: 'a', userId: 'u', endpoint: '/orders/fail', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-01'), responseStatus: 500 } as any,
         { _id: 'b', userId: 'u', endpoint: '/orders/ok', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-02'), responseStatus: 200 } as any,
         { _id: 'c', userId: 'u', endpoint: '/products/fail', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-03'), responseStatus: 500 } as any,
-        { _id: 'd', userId: 'u', endpoint: '/orders/nostatus', requestBody: '{}', responseBody: '{}', requestTime: new Date('2026-02-04') }
+        { _id: 'd', userId: 'u', endpoint: '/orders/nostatus', requestBody: '{}', responseBody: '{}', searchKeys: ['PKG-9'], requestTime: new Date('2026-02-04') },
+        { _id: 'e', userId: 'u', endpoint: '/products/other', requestBody: '{}', responseBody: '{}', searchKeys: ['PKG-9'], requestTime: new Date('2026-02-05'), responseStatus: 500 } as any
     ];
 
     it('success=false + search: yalnız hem başarısız hem aramaya uyan kayıtlar döner', async () => {
@@ -209,8 +223,43 @@ describe('IntegrationRequestLogService.getAdminLogs — success ve search birlik
     it('success=false + search + advancedSearch üçü birlikte uygulanır', async () => {
         const service = new IntegrationRequestLogService(createFakeConnection(docs()));
 
-        const result = await service.getAdminLogs(undefined, 1, 50, 'requestTime', 'desc', { success: false, search: 'orders', advancedSearch: 'nostatus' });
+        const result = await service.getAdminLogs(undefined, 1, 50, 'requestTime', 'desc', { success: false, search: 'orders', advancedSearch: 'PKG-9' });
 
         expect(result.logs.map((l: any) => l._id)).toEqual(['d']);
+    });
+});
+
+describe('IntegrationRequestLogService — gelişmiş arama kimlik listesinde (UC-979)', () => {
+    it('sipariş numarasını tam eşleşmeyle bulur; gövdede geçmesi tek başına yetmez', async () => {
+        const service = new IntegrationRequestLogService(createFakeConnection(fixtureDocs()));
+
+        const result = await service.getUserLogs('user-1', undefined, 1, 50, 'requestTime', 'desc', { advancedSearch: 'TY-1001' });
+
+        // doc 2'nin gövdesinde TY-1001 geçiyor ama kimlik listesinde yok; doc 7 başka kiracının
+        expect(result.logs.map((l: any) => l._id)).toEqual(['1']);
+    });
+
+    it('büyük/küçük harf ve baştaki/sondaki boşluk farkını tolere eder', async () => {
+        const service = new IntegrationRequestLogService(createFakeConnection(fixtureDocs()));
+
+        const lower = await service.getUserLogs('user-1', undefined, 1, 50, 'requestTime', 'desc', { advancedSearch: '  barkod-a ' });
+
+        expect(lower.logs.map((l: any) => l._id)).toEqual(['1']);
+    });
+
+    it('kimliğin bir parçası eşleşmez (alt dize araması yok)', async () => {
+        const service = new IntegrationRequestLogService(createFakeConnection(fixtureDocs()));
+
+        const result = await service.getUserLogs('user-1', undefined, 1, 50, 'requestTime', 'desc', { advancedSearch: 'TY-100' });
+
+        expect(result.logs).toEqual([]);
+    });
+
+    it('boşluktan ibaret değer filtre uygulamaz', async () => {
+        const service = new IntegrationRequestLogService(createFakeConnection(fixtureDocs()));
+
+        const result = await service.getUserLogs('user-1', undefined, 1, 50, 'requestTime', 'desc', { advancedSearch: '   ' });
+
+        expect(result.logs).toHaveLength(6);
     });
 });
