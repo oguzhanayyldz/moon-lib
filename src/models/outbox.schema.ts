@@ -158,7 +158,7 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     eventType: T;
     payload: EventPayloadMap[T];
     environment?: 'production' | 'development' | 'test';
-    status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
+    status?: 'pending' | 'processing' | 'published' | 'completed' | 'failed' | 'superseded';
     retryCount?: number;
     lastAttempt?: Date;
     nextAttemptAt?: Date; // failed kaydın yeniden kuyruğa alınacağı an (issue #648 K-1)
@@ -166,6 +166,8 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;
+    supersededBy?: string; // UC-984: aynı varlığın gönderilen daha yüksek sürümlü satırı
+    coalescedCount?: number; // UC-984: bu pending satıra birleştirilen sonraki sürüm sayısı
     priority?: number; // 1-5, 1 en yüksek öncelik
     userId?: string; // User-scoped priority için
 }
@@ -174,7 +176,7 @@ export interface OutboxDoc extends BaseDoc {
     eventType: string;
     payload: any;
     environment: 'production' | 'development' | 'test';
-    status: 'pending' | 'processing' | 'published' | 'completed' | 'failed';
+    status: 'pending' | 'processing' | 'published' | 'completed' | 'failed' | 'superseded';
     retryCount: number;
     lastAttempt?: Date;
     nextAttemptAt?: Date; // failed kaydın yeniden kuyruğa alınacağı an (issue #648 K-1)
@@ -182,6 +184,8 @@ export interface OutboxDoc extends BaseDoc {
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;
+    supersededBy?: string;
+    coalescedCount?: number;
     priority: number; // 1-5, 1 en yüksek öncelik
     userId: string; // User-scoped priority için (_system_ fallback)
 }
@@ -203,7 +207,9 @@ const outboxSchemaDefination = {
         type: String,
         required: true,
         default: 'pending',
-        enum: ['pending', 'processing' , 'published', 'completed' , 'failed']
+        // superseded (UC-984): yalnız entity:version-updated — aynı partide aynı varlığın daha yüksek sürümü
+        // gönderildi. Kayıp değildir; yayıncı, kurtarma ve kayıp alarmları bu durumu almaz.
+        enum: ['pending', 'processing' , 'published', 'completed' , 'failed', 'superseded']
     },
     retryCount: { type: Number, default: 0 },
     lastAttempt: Date,
@@ -220,6 +226,8 @@ const outboxSchemaDefination = {
     processingStartedAt: {
         type: Date
     },
+    supersededBy: { type: String },
+    coalescedCount: { type: Number },
     priority: {
         type: Number,
         min: 1,
@@ -353,6 +361,12 @@ outboxSchema.index({ status: 1, environment: 1, retryCount: 1, userId: 1, eventT
 // Issue #648 K-1: bekleme süresi dolan failed kayıtları yeniden kuyruğa alma (eventPublisher.job monitorFailedEvents).
 // nextAttemptAt yalnız yeniden denenecek kayıtlarda bulunur; alanı olmayan eski failed kayıtlar aralık taramasına girmez.
 outboxSchema.index({ status: 1, environment: 1, nextAttemptAt: 1 });
+// UC-984: sürüm olayı birleştirme araması (writeVersionEventToOutbox). Yalnız bekleyen sürüm olaylarını kapsar, küçük kalır.
+// Tekil DEĞİL: geri alımda (processing/failed → pending) aynı varlığın ikinci pending satırı olabilir, gönderimde toplanır.
+outboxSchema.index(
+    { 'payload.entityId': 1, 'payload.entityType': 1 },
+    { name: 'version_event_coalesce', partialFilterExpression: { status: 'pending', eventType: Subjects.EntityVersionUpdated } }
+);
 
 export function createOutboxModel(connection: mongoose.Connection) {
     try {

@@ -64,7 +64,7 @@ export declare class EventMetrics {
      * reason=unavailable: the write failed (e.g. Mongo not ready); the message is not acked and NATS redelivers it.
      * Includes labels: service, event_type, reason
      */
-    static readonly eventDlqWriteErrorTotal: Counter<"reason" | "service" | "event_type">;
+    static readonly eventDlqWriteErrorTotal: Counter<"service" | "event_type" | "reason">;
     /**
      * DLQ oynatmaları (Counter)
      *
@@ -74,7 +74,7 @@ export declare class EventMetrics {
      * Both busy cases share the label; only the processor's warning log tells a timeout apart.
      * Includes labels: service, event_type, queue_group, result
      */
-    static readonly eventDlqReplayTotal: Counter<"result" | "service" | "event_type" | "queue_group">;
+    static readonly eventDlqReplayTotal: Counter<"service" | "event_type" | "queue_group" | "result">;
     /**
      * Circuit breaker durumu (Gauge)
      *
@@ -83,6 +83,80 @@ export declare class EventMetrics {
      * Includes labels: service, circuit_breaker_name
      */
     static readonly circuitBreakerState: Gauge<"service" | "circuit_breaker_name">;
+    /**
+     * Yayınlanan sürüm olayı sayısı (Counter) — UC-984
+     *
+     * EventPublisherJob toplu sürüm yayınında NATS onayı alınan her olay için artar. sync tarafındaki
+     * sync_version_updates_total ile karşılaştırılır: üretilen = sync'e ulaşan.
+     * Labels: service (yayıncı servis)
+     */
+    static readonly outboxVersionEventsPublishedTotal: Counter<"service">;
+    /**
+     * Birleştirilen sürüm olayı (Counter) — UC-984 madde 8
+     *
+     * stage=write: yeni satır açılmadı, bekleyen satır güncellendi (writeVersionEventToOutbox).
+     * stage=send: aynı partide aynı varlığın daha yüksek sürümü gönderildi, satır 'superseded' oldu.
+     * Birleştirme oranı = coalesced / (coalesced + published). Kayıp DEĞİLDİR: en son sürüm yine gider.
+     * Labels: service, stage
+     */
+    static readonly versionEventsCoalescedTotal: Counter<"service" | "stage">;
+    /**
+     * Redis iletim kirası tutulan varlık sayısı (Gauge) — UC-984 madde 9
+     *
+     * Bu pod'un şu an yayınlamakta olduğu (kirasını tuttuğu) varlık sayısı; parti bitince 0'a döner.
+     * Labels: service
+     */
+    static readonly versionEventsInflight: Gauge<"service">;
+    /**
+     * Süresi dolmuş iletim kirası (Counter) — UC-984 madde 9
+     *
+     * Yayın bittiğinde kira artık bu pod'un değil: kira süresi (VERSION_EVENT_LEASE_MS) yayından kısa kalmış.
+     * Kayıp değildir (Mongo kaydı yine işaretlenir); sürekli artıyorsa kira süresini büyüt.
+     * Labels: service
+     */
+    static readonly versionEventsLeaseExpiredTotal: Counter<"service">;
+    /**
+     * Önlenen çift gönderim (Counter) — UC-984 madde 9
+     *
+     * reason=inflight: varlık o an başka bir partide iletimde, satır pending'e geri bırakıldı (sonraki turda gider).
+     * reason=delivered: satırın sürümü sync'e zaten gönderilmiş sürümden büyük değil, 'superseded' oldu.
+     * Labels: service, reason
+     */
+    static readonly versionEventsDuplicatePreventedTotal: Counter<"service" | "reason">;
+    /**
+     * Redis'e ulaşılamayan parti (Counter) — UC-984 madde 9
+     *
+     * Kira alınamadı/bırakılamadı; gönderim yalnız Mongo claim'iyle sürdü (olay kaybı yok, çift gönderim olabilir).
+     * Labels: service
+     */
+    static readonly versionEventsLeaseUnavailableTotal: Counter<"service">;
+    /**
+     * Outbox'a yazılamayan sürüm olayı (Counter) — UC-984
+     *
+     * base şemanın post-save kancası Outbox kaydını ayrı yazar; yazım hata verirse olay kaybolur.
+     * Bu sayaç sıfırdan büyükse sync'teki sürüm o varlık için bir sonraki kayda kadar geride kalır.
+     * Labels: service, entity_type
+     */
+    static readonly versionEventWriteErrorsTotal: Counter<"service" | "entity_type">;
+    /**
+     * Outbox durumu (Gauge) — UC-984. Değerler her scrape'te EventPublisherJob'un verdiği toplayıcıdan okunur;
+     * toplayıcı yoksa (yayıncısı olmayan servis) seri yazılmaz.
+     *
+     * outbox_version_records{service,status}: pending/processing/failed sürüm olayı sayısı
+     * outbox_version_oldest_pending_age_seconds{service}: en eski yayınlanmamış sürüm olayının yaşı
+     * outbox_unrecovered_records{service,reason}: kendiliğinden kurtulmayacak kayıtlar (tüm olay türleri) —
+     *   processing_stuck: processing'te kalmış ve otomatik kurtarma süresini aşmış
+     *   failed_final: deneme hakkı bitmiş ya da yeniden deneme zamanı olmayan failed kayıt
+     */
+    static readonly outboxVersionRecords: Gauge<"status" | "service">;
+    static readonly outboxVersionOldestPendingAge: Gauge<"service">;
+    static readonly outboxUnrecoveredRecords: Gauge<"service" | "reason">;
+    private static outboxCollector;
+    private static pendingSnapshot;
+    private static readonly SNAPSHOT_TTL_MS;
+    /** EventPublisherJob kendi outbox'ının toplayıcısını kaydeder (süreçte bir yayıncı: sonuncusu geçerlidir). */
+    static setOutboxCollector(service: string, collect: () => Promise<OutboxMetricsSnapshot>): void;
+    private static readOutboxSnapshot;
     /**
      * Returns the Prometheus registry containing all event metrics
      *
@@ -116,4 +190,15 @@ export declare class EventMetrics {
      * ```
      */
     static reset(): void;
+}
+/** EventPublisherJob'un outbox toplayıcısının döndürdüğü anlık durum (UC-984). */
+export interface OutboxMetricsSnapshot {
+    versionRecords: {
+        pending: number;
+        processing: number;
+        failed: number;
+    };
+    versionOldestPendingAgeSeconds: number;
+    stuckProcessing: number;
+    failedFinal: number;
 }

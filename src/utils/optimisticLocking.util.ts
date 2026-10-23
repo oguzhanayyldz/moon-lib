@@ -1,6 +1,7 @@
 import { logger } from "../services/logger.service";
 import { ClientSession } from 'mongoose';
 import { Request } from 'express';
+import { writeVersionEventToOutbox } from './versionEventOutbox.util';
 
 /**
  * Enhanced Optimistic Locking Utility
@@ -322,29 +323,20 @@ export class OptimisticLockingUtil {
         }
 
         const previousVersion = newVersion - 1;
-        const outboxPayload = {
-            eventType: 'entity:version-updated',
-            payload: {
-                entityType,
-                entityId: docId,
-                service: serviceName,
-                version: newVersion,
-                previousVersion,
-                timestamp: new Date(),
-                userId: doc.user?.toString() || doc.user,
-                metadata: {
-                    modelName: Model.modelName,
-                    source
-                }
-            },
-            status: 'pending'
-        };
-
-        if (session) {
-            await Outbox.create([outboxPayload], { session });
-        } else {
-            await Outbox.create(outboxPayload);
-        }
+        // Bekleyen satır varsa onunla birleşir (UC-984); session verilirse aynı transaction'da yazılır
+        await writeVersionEventToOutbox(Outbox, {
+            entityType,
+            entityId: docId,
+            service: serviceName,
+            version: newVersion,
+            previousVersion,
+            timestamp: new Date(),
+            userId: doc.user?.toString() || doc.user,
+            metadata: {
+                modelName: Model.modelName,
+                source
+            }
+        }, session);
         return true;
     }
 

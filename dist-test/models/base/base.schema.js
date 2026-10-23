@@ -39,8 +39,9 @@ const mongoose_1 = __importStar(require("mongoose"));
 const mongoose_update_if_current_1 = require("mongoose-update-if-current");
 const uuid_1 = require("uuid");
 const common_1 = require("../../common");
-const events_1 = require("../../common/events");
 const logger_service_1 = require("../../services/logger.service");
+const EventMetrics_1 = require("../../metrics/EventMetrics");
+const versionEventOutbox_util_1 = require("../../utils/versionEventOutbox.util");
 // ✅ Global Map: Model isimlerine göre version tracking config saklama
 // Schema veya Model'e custom property eklemek çalışmadığı için global Map kullanıyoruz
 exports.VERSION_TRACKING_CONFIGS = new Map();
@@ -241,29 +242,26 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
                 }
                 // Outbox model'ini al
                 const Outbox = Model.db.model('Outbox');
-                // EntityVersionUpdated event'ini Outbox'a ekle
-                const outboxPayload = {
-                    eventType: events_1.Subjects.EntityVersionUpdated,
-                    payload: {
-                        entityType,
-                        entityId: docId,
-                        service: serviceName,
-                        version: doc.version,
-                        previousVersion,
-                        timestamp: new Date(),
-                        userId: ((_e = (_d = doc.user) === null || _d === void 0 ? void 0 : _d.toString) === null || _e === void 0 ? void 0 : _e.call(_d)) || doc.user,
-                        metadata: includeMetadata ? {
-                            modelName: Model.modelName
-                        } : undefined,
-                        parentEntity // Parent entity bilgisi
-                    },
-                    status: 'pending'
-                };
-                await Outbox.create(outboxPayload);
+                // EntityVersionUpdated event'ini Outbox'a ekle; bekleyen satır varsa onunla birleşir (UC-984)
+                await (0, versionEventOutbox_util_1.writeVersionEventToOutbox)(Outbox, {
+                    entityType,
+                    entityId: docId,
+                    service: serviceName,
+                    version: doc.version,
+                    previousVersion,
+                    timestamp: new Date(),
+                    userId: ((_e = (_d = doc.user) === null || _d === void 0 ? void 0 : _d.toString) === null || _e === void 0 ? void 0 : _e.call(_d)) || doc.user,
+                    metadata: includeMetadata ? {
+                        modelName: Model.modelName
+                    } : undefined,
+                    parentEntity // Parent entity bilgisi
+                });
             }
             catch (error) {
-                logger_service_1.logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}:`, error);
-                // Hata logla ama işlemi engelleme
+                logger_service_1.logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}: ${error instanceof Error ? error.message : String(error)}`);
+                // Hata logla ama işlemi engelleme. Outbox yazımı kaydın kendi işlemine bağlı değil: burada düşen
+                // sürüm olayı sync'e hiç gitmez, kayıp yalnız bu sayaçtan görünür (UC-984)
+                EventMetrics_1.EventMetrics.versionEventWriteErrorsTotal.inc({ service: serviceName, entity_type: entityType });
             }
         };
         // POST-SAVE HOOK (create ve doc.save() update için)

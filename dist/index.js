@@ -89,6 +89,8 @@ __exportStar(require("./middleware/httpMetrics"), exports);
 // Redis connection pooling handled by redisWrapper.service
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
+__exportStar(require("./utils/versionEventOutbox.util"), exports);
+__exportStar(require("./utils/versionEventLease.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);
 __exportStar(require("./utils/performanceMonitor.util"), exports);
 __exportStar(require("./utils/audit-helper"), exports);
