@@ -19,8 +19,9 @@ export declare class NatsWrapper {
     close(): void;
     connect(clusterId: string, clientId: string, url: string): Promise<void>;
     /**
-     * Request-Reply pattern implementasyonu
-     * Stan üzerinde doğrudan request metodu olmadığı için manuel olarak implemente ediyoruz
+     * Request-Reply pattern implementasyonu.
+     * İstek STAN kanalına yayınlanır (komut listener'ları STAN abonesidir), yanıt ise core NATS inbox'ına gelir:
+     * yanıt kalıcılık gerektirmez ve her istek için STAN kanalı açmak max_channels'ı doldurur (UC-949/UC-950).
      */
     request<T = any>(subject: string, data: any, options?: {
         timeout?: number;
@@ -31,9 +32,9 @@ export declare class NatsWrapper {
 export declare const CORE_REPLY_PREFIX = "_INBOX.";
 /**
  * request() ile gelen komutun yanıtını gönderir.
- * Core NATS inbox'ında (`_INBOX.`) bekleyen istekçiye core NATS'ten, eski biçimdeki istekçiye
- * (`<subject>.reply.<uuid>`) STAN kanalından yanıt verir. Yanıtlayanlar istekçilerden önce bu sürüme
- * geçer (UC-950 Faz 1); istekçiler core inbox'a ancak tüm yanıtlayanlar canlıda güncellendikten sonra geçer (Faz 2).
+ * Yeni istekçi core NATS inbox'ında (`_INBOX.`) bekler; eski istekçi (`<subject>.reply.<uuid>`) STAN kanalında.
+ * İki biçim de desteklenir ki istekçi ve yanıtlayan servisler farklı zamanlarda deploy edilebilsin
+ * (UC-950: yanıtlayanlar Faz 1'de bu fonksiyona geçti, istekçiler Faz 2'de core inbox'a).
  */
 export declare const publishReply: (client: Stan, replyTo: string, data: string) => void;
 export declare const createNatsWrapper: () => NatsWrapper;

@@ -216,9 +216,28 @@ describe('NatsWrapper connection lifecycle', () => {
     });
 });
 
-// UC-950 Faz 1: yanıtlayan iki biçime de yanıt verir; istekçi (request) henüz eski STAN reply kanalındadır.
-describe('NatsWrapper reply compatibility (UC-950 phase 1)', () => {
+// UC-950: yanıt STAN kanalına değil core NATS inbox'ına gelir; her istek kalıcı bir STAN kanalı açmaz.
+describe('NatsWrapper request/reply over core NATS', () => {
     const URL_PLAIN = `${NATS}://nats-srv:4222`;
+
+    type CoreCallback = (msg: string | Buffer | Error) => void;
+
+    const createFakeNc = () => {
+        const subs: Record<number, { subject: string; callback: CoreCallback }> = {};
+        let nextSid = 0;
+        return {
+            subscribe: jest.fn((subject: string, _options: { max?: number }, callback: CoreCallback) => {
+                nextSid += 1;
+                subs[nextSid] = { subject, callback };
+                return nextSid;
+            }),
+            unsubscribe: jest.fn(),
+            publish: jest.fn(),
+            deliver: (subject: string, msg: string | Buffer | Error) => {
+                Object.values(subs).filter((s) => s.subject === subject).forEach((s) => s.callback(msg));
+            },
+        };
+    };
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -232,11 +251,8 @@ describe('NatsWrapper reply compatibility (UC-950 phase 1)', () => {
     });
 
     const connected = async () => {
-        const nc = { publish: jest.fn() };
-        const replySub = { on: jest.fn(), unsubscribe: jest.fn() };
-        const stan = Object.assign(createFakeStan(), {
-            close: jest.fn(), publish: jest.fn(), subscribe: jest.fn(() => replySub), nc,
-        });
+        const nc = createFakeNc();
+        const stan = Object.assign(createFakeStan(), { close: jest.fn(), publish: jest.fn(), subscribe: jest.fn(), nc });
         mockConnect.mockReturnValueOnce(stan);
         const wrapper = new NatsWrapper();
         const connecting = wrapper.connect('test-cluster', 'client-1', URL_PLAIN);
@@ -245,17 +261,56 @@ describe('NatsWrapper reply compatibility (UC-950 phase 1)', () => {
         return { wrapper, stan, nc };
     };
 
-    it('publishReply answers a core inbox over core NATS and a legacy replyTo over STAN', async () => {
-        const { stan, nc } = await connected();
-        const client = stan as unknown as Parameters<typeof publishReply>[0];
+    const publishedReplyTo = (stan: { publish: jest.Mock }) => JSON.parse(stan.publish.mock.calls[0][1]).replyTo as string;
 
-        publishReply(client, `${CORE_REPLY_PREFIX}reply.abc`, JSON.stringify({ ok: 'ı' }));
-        publishReply(client, 'integration:marketplace:trendyol:command.reply.u-1', '{"ok":true}');
+    it('publishes the request on STAN with a core inbox replyTo and never subscribes on STAN', async () => {
+        const { wrapper, stan, nc } = await connected();
 
-        expect(nc.publish).toHaveBeenCalledTimes(1);
-        expect(nc.publish).toHaveBeenCalledWith(`${CORE_REPLY_PREFIX}reply.abc`, Buffer.from(JSON.stringify({ ok: 'ı' }), 'utf8'));
+        const pending = wrapper.request('integration:marketplace:trendyol:command', { command: 'x' });
+
+        expect(stan.subscribe).not.toHaveBeenCalled();
         expect(stan.publish).toHaveBeenCalledTimes(1);
-        expect(stan.publish).toHaveBeenCalledWith('integration:marketplace:trendyol:command.reply.u-1', '{"ok":true}');
+        expect(stan.publish.mock.calls[0][0]).toBe('integration:marketplace:trendyol:command');
+        const replyTo = publishedReplyTo(stan);
+        expect(replyTo.startsWith(CORE_REPLY_PREFIX)).toBe(true);
+        // nats-config "*.reply.*" kalıbına uyar (eski yanıtlayan STAN kanalı açsa da 1 dk'da silinir)
+        expect(replyTo).toMatch(/^_INBOX\.reply\.[^.]+$/);
+        expect(nc.subscribe).toHaveBeenCalledWith(replyTo, { max: 1 }, expect.any(Function));
+
+        // Stan 'binary' kodlamayla açar: UTF-8 yük latin1 string olarak gelir
+        nc.deliver(replyTo, Buffer.from(JSON.stringify({ success: true, data: 'Çğüşİ' }), 'utf8').toString('binary'));
+
+        await expect(pending).resolves.toEqual({ success: true, data: 'Çğüşİ' });
+    });
+
+    it('rejects with a timeout and drops the core subscription when no reply arrives', async () => {
+        const { wrapper, stan, nc } = await connected();
+
+        const pending = wrapper.request('subj', {}, { timeout: 500 });
+        const sid = nc.subscribe.mock.results[0].value;
+        jest.advanceTimersByTime(500);
+
+        await expect(pending).rejects.toThrow('Request timeout after 500ms for subj');
+        expect(nc.unsubscribe).toHaveBeenCalledWith(sid);
+        expect(stan.subscribe).not.toHaveBeenCalled();
+    });
+
+    it('rejects and cleans up when publishing the request throws', async () => {
+        const { wrapper, stan, nc } = await connected();
+        stan.publish.mockImplementation(() => { throw new Error('publish failed'); });
+
+        await expect(wrapper.request('subj', {})).rejects.toThrow('publish failed');
+        expect(nc.unsubscribe).toHaveBeenCalledWith(nc.subscribe.mock.results[0].value);
+    });
+
+    it('rejects with the error delivered on the core subscription instead of parsing it', async () => {
+        const { wrapper, stan, nc } = await connected();
+
+        const pending = wrapper.request('subj', {});
+        const failure = new Error('NATS: subscription error');
+        nc.deliver(publishedReplyTo(stan), failure);
+
+        await expect(pending).rejects.toBe(failure);
     });
 
     it('publishReply fails loudly for a core inbox when the client has no core connection', async () => {
@@ -266,14 +321,15 @@ describe('NatsWrapper reply compatibility (UC-950 phase 1)', () => {
         expect(stan.publish).not.toHaveBeenCalled();
     });
 
-    it('request still waits on a legacy STAN reply channel so old responders keep working', async () => {
-        const { wrapper, stan, nc } = await connected();
+    it('publishReply answers a core inbox over core NATS and a legacy replyTo over STAN', async () => {
+        const { stan, nc } = await connected();
+        const client = stan as unknown as Parameters<typeof publishReply>[0];
 
-        void wrapper.request('integration:marketplace:trendyol:command', { command: 'x' });
+        publishReply(client, `${CORE_REPLY_PREFIX}abc`, JSON.stringify({ ok: 'ı' }));
+        publishReply(client, 'integration:marketplace:trendyol:command.reply.u-1', '{"ok":true}');
 
-        const replyTo = JSON.parse(stan.publish.mock.calls[0][1]).replyTo as string;
-        expect(replyTo).toMatch(/^integration:marketplace:trendyol:command\.reply\.[^.]+$/);
-        expect(stan.subscribe).toHaveBeenCalledWith(replyTo);
-        expect(nc.publish).not.toHaveBeenCalled();
+        expect(nc.publish).toHaveBeenCalledWith(`${CORE_REPLY_PREFIX}abc`, Buffer.from(JSON.stringify({ ok: 'ı' }), 'utf8'));
+        expect(stan.publish).toHaveBeenCalledTimes(1);
+        expect(stan.publish).toHaveBeenCalledWith('integration:marketplace:trendyol:command.reply.u-1', '{"ok":true}');
     });
 });

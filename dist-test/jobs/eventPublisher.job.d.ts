@@ -5,13 +5,22 @@ export declare class EventPublisherJob {
     private natsClient;
     private connection;
     private static readonly RETRY_INTERVAL;
-    private static readonly VERSION_EVENT_INTERVAL;
+    private static readonly VERSION_EVENT_INTERVAL_DEFAULT;
+    private static readonly VERSION_BATCH_SIZE_MAX;
+    private static readonly VERSION_MAX_BATCHES_PER_TICK_DEFAULT;
+    private static readonly VERSION_LEASE_MS_DEFAULT;
+    private static readonly VERSION_LATEST_TTL_MS_DEFAULT;
+    private static readonly VERSION_REDIS_TIMEOUT_MS_DEFAULT;
+    private static readonly VERSION_LEASE_WARN_INTERVAL;
     private static readonly ALERT_THRESHOLD;
     private static readonly ALERT_LOG_INTERVAL;
     private static readonly MAX_PUBLISH_ATTEMPTS;
     private static readonly PUBLISH_RETRY_BASE_DELAY;
     private static readonly PUBLISH_RETRY_MAX_DELAY;
     private static readonly MAX_JITTER;
+    private static readonly STUCK_PROCESSING_TIMEOUT;
+    private static readonly STUCK_FALLBACK_MAX_AGE;
+    private static readonly STUCK_METRIC_AGE;
     private static readonly PRIORITY_TRANSITION_DELAY;
     private intervalId;
     private versionEventIntervalId;
@@ -19,10 +28,25 @@ export declare class EventPublisherJob {
     private lastAlertLoggedAt;
     private readonly outboxModel;
     private readonly serviceOffset;
+    private readonly serviceLabel;
+    private readonly versionEventInterval;
+    private readonly versionBatchSize;
+    private readonly versionMaxBatchesPerTick;
+    private versionDrainRunning;
+    private readonly versionLeases;
+    private readonly podId;
+    private lastLeaseWarnAt;
     private lastProcessedPriority;
     private static readonly PRIORITY_MAP_TTL;
     private static readonly PRIORITY_MAP_MAX_SIZE;
     constructor(natsClient: Stan, connection: mongoose.Connection, serviceName?: ServiceName);
+    /**
+     * Outbox gauge'ları için anlık durum (UC-984). Yayıncıyla aynı environment filtresi kullanılır:
+     * paylaşımlı Mongo'daki development kayıtları canlı alarmına girmez.
+     */
+    private collectOutboxMetrics;
+    /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    private static readPositiveIntEnv;
     /**
      * Environment variable'dan servis adını çöz
      */
@@ -65,11 +89,23 @@ export declare class EventPublisherJob {
      */
     private getPublishRetryDelay;
     /**
-     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
-     * Bu metod ayrı bir interval ile çalışır (10 saniye) ve birikmiş version
-     * eventlerini tek bir EntityVersionBulkUpdated mesajı olarak gönderir
+     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder.
+     * Ayrı bir interval ile çalışır (varsayılan 2 dk). Her tur, kuyruk boşalana ya da
+     * versionMaxBatchesPerTick partiye gelene kadar en fazla versionBatchSize olaylık
+     * EntityVersionBulkUpdated mesajları gönderir (UC-984). Mesaj biçimi değişmedi: eski ve yeni
+     * pod'lar aynı kuyruktan atomik claim ile birlikte yayın yapabilir.
      */
     private processVersionEventsAsBulk;
+    /**
+     * Tek parti: en eski versionBatchSize kaydı claim edip tek NATS mesajıyla yayınlar.
+     * `more`: kuyrukta kayıt kalmış olabilir ve yayın başarılı — aynı turda bir parti daha denenebilir.
+     */
+    private publishVersionEventBatch;
+    private leaseEntity;
+    /** null: Redis kullanılamadı, gönderim kirasız (yalnız Mongo claim'iyle) sürer */
+    private acquireVersionLeases;
+    /** Redis hatası/zaman aşımı yutulur (null döner): kira yalnız çift gönderimi önler, gönderimi asla durdurmaz */
+    private versionLeaseCall;
     private monitorFailedEvents;
     private publishEvent;
 }
