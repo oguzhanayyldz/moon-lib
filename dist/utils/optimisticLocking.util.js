@@ -44,6 +44,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OptimisticLockingUtil = void 0;
 const logger_service_1 = require("../services/logger.service");
+const versionEventOutbox_util_1 = require("./versionEventOutbox.util");
 /**
  * Enhanced Optimistic Locking Utility
  *
@@ -304,29 +305,20 @@ class OptimisticLockingUtil {
                 return false;
             }
             const previousVersion = newVersion - 1;
-            const outboxPayload = {
-                eventType: 'entity:version-updated',
-                payload: {
-                    entityType,
-                    entityId: docId,
-                    service: serviceName,
-                    version: newVersion,
-                    previousVersion,
-                    timestamp: new Date(),
-                    userId: ((_b = doc.user) === null || _b === void 0 ? void 0 : _b.toString()) || doc.user,
-                    metadata: {
-                        modelName: Model.modelName,
-                        source
-                    }
-                },
-                status: 'pending'
-            };
-            if (session) {
-                yield Outbox.create([outboxPayload], { session });
-            }
-            else {
-                yield Outbox.create(outboxPayload);
-            }
+            // Bekleyen satır varsa onunla birleşir (UC-984); session verilirse aynı transaction'da yazılır
+            yield (0, versionEventOutbox_util_1.writeVersionEventToOutbox)(Outbox, {
+                entityType,
+                entityId: docId,
+                service: serviceName,
+                version: newVersion,
+                previousVersion,
+                timestamp: new Date(),
+                userId: ((_b = doc.user) === null || _b === void 0 ? void 0 : _b.toString()) || doc.user,
+                metadata: {
+                    modelName: Model.modelName,
+                    source
+                }
+            }, session);
             return true;
         });
     }

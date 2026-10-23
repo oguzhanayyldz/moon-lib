@@ -92,6 +92,45 @@ export declare class EventMetrics {
      */
     static readonly outboxVersionEventsPublishedTotal: Counter<"service">;
     /**
+     * Birleştirilen sürüm olayı (Counter) — UC-984 madde 8
+     *
+     * stage=write: yeni satır açılmadı, bekleyen satır güncellendi (writeVersionEventToOutbox).
+     * stage=send: aynı partide aynı varlığın daha yüksek sürümü gönderildi, satır 'superseded' oldu.
+     * Birleştirme oranı = coalesced / (coalesced + published). Kayıp DEĞİLDİR: en son sürüm yine gider.
+     * Labels: service, stage
+     */
+    static readonly versionEventsCoalescedTotal: Counter<"service" | "stage">;
+    /**
+     * Redis iletim kirası tutulan varlık sayısı (Gauge) — UC-984 madde 9
+     *
+     * Bu pod'un şu an yayınlamakta olduğu (kirasını tuttuğu) varlık sayısı; parti bitince 0'a döner.
+     * Labels: service
+     */
+    static readonly versionEventsInflight: Gauge<"service">;
+    /**
+     * Süresi dolmuş iletim kirası (Counter) — UC-984 madde 9
+     *
+     * Yayın bittiğinde kira artık bu pod'un değil: kira süresi (VERSION_EVENT_LEASE_MS) yayından kısa kalmış.
+     * Kayıp değildir (Mongo kaydı yine işaretlenir); sürekli artıyorsa kira süresini büyüt.
+     * Labels: service
+     */
+    static readonly versionEventsLeaseExpiredTotal: Counter<"service">;
+    /**
+     * Önlenen çift gönderim (Counter) — UC-984 madde 9
+     *
+     * reason=inflight: varlık o an başka bir partide iletimde, satır pending'e geri bırakıldı (sonraki turda gider).
+     * reason=delivered: satırın sürümü sync'e zaten gönderilmiş sürümden büyük değil, 'superseded' oldu.
+     * Labels: service, reason
+     */
+    static readonly versionEventsDuplicatePreventedTotal: Counter<"service" | "reason">;
+    /**
+     * Redis'e ulaşılamayan parti (Counter) — UC-984 madde 9
+     *
+     * Kira alınamadı/bırakılamadı; gönderim yalnız Mongo claim'iyle sürdü (olay kaybı yok, çift gönderim olabilir).
+     * Labels: service
+     */
+    static readonly versionEventsLeaseUnavailableTotal: Counter<"service">;
+    /**
      * Outbox'a yazılamayan sürüm olayı (Counter) — UC-984
      *
      * base şemanın post-save kancası Outbox kaydını ayrı yazar; yazım hata verirse olay kaybolur.

@@ -8,6 +8,10 @@ export declare class EventPublisherJob {
     private static readonly VERSION_EVENT_INTERVAL_DEFAULT;
     private static readonly VERSION_BATCH_SIZE_MAX;
     private static readonly VERSION_MAX_BATCHES_PER_TICK_DEFAULT;
+    private static readonly VERSION_LEASE_MS_DEFAULT;
+    private static readonly VERSION_LATEST_TTL_MS_DEFAULT;
+    private static readonly VERSION_REDIS_TIMEOUT_MS_DEFAULT;
+    private static readonly VERSION_LEASE_WARN_INTERVAL;
     private static readonly ALERT_THRESHOLD;
     private static readonly ALERT_LOG_INTERVAL;
     private static readonly MAX_PUBLISH_ATTEMPTS;
@@ -29,6 +33,9 @@ export declare class EventPublisherJob {
     private readonly versionBatchSize;
     private readonly versionMaxBatchesPerTick;
     private versionDrainRunning;
+    private readonly versionLeases;
+    private readonly podId;
+    private lastLeaseWarnAt;
     private lastProcessedPriority;
     private static readonly PRIORITY_MAP_TTL;
     private static readonly PRIORITY_MAP_MAX_SIZE;
@@ -94,6 +101,11 @@ export declare class EventPublisherJob {
      * `more`: kuyrukta kayıt kalmış olabilir ve yayın başarılı — aynı turda bir parti daha denenebilir.
      */
     private publishVersionEventBatch;
+    private leaseEntity;
+    /** null: Redis kullanılamadı, gönderim kirasız (yalnız Mongo claim'iyle) sürer */
+    private acquireVersionLeases;
+    /** Redis hatası/zaman aşımı yutulur (null döner): kira yalnız çift gönderimi önler, gönderimi asla durdurmaz */
+    private versionLeaseCall;
     private monitorFailedEvents;
     private publishEvent;
 }

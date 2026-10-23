@@ -45,6 +45,10 @@ import { NewsletterEmailRequestedPublisher } from '../events/publishers/newslett
 import { UserSessionsRevokedPublisher } from '../events/publishers/userSessionsRevoked.publisher';
 import { OrderProductStockUpdatedPublisher } from '../events/publishers/orderProductUpdated.publisher';
 import { EntityVersionUpdatedPublisher } from '../events/publishers/entityVersionUpdated.publisher';
+import { versionEventKey } from '../utils/versionEventOutbox.util';
+import { VersionEventLeases, VersionLeaseDecision, VersionLeaseEntity } from '../utils/versionEventLease.util';
+import { redisWrapper } from '../services/redisWrapper.service';
+import os from 'os';
 import { EntityVersionBulkUpdatedPublisher } from '../events/publishers/entityVersionBulkUpdated.publisher';
 import { SyncRequestedPublisher } from '../events/publishers/syncRequested.publisher';
 import { InvoiceCreatedPublisher } from '../events/publishers/invoiceCreated.publisher';
@@ -89,6 +93,12 @@ export class EventPublisherJob {
     // Tek NATS mesajındaki olay sayısı tavanı (mesaj boyutu). Env ile küçültülebilir, büyütülemez.
     private static readonly VERSION_BATCH_SIZE_MAX = 100;
     private static readonly VERSION_MAX_BATCHES_PER_TICK_DEFAULT = 20; // tur başına en fazla 20×100 olay
+    // UC-984 madde 9: Redis iletim kirası. Kira, en uzun yayından (NATS + Mongo işaretleme) uzun ve takılı processing
+    // kurtarmasından (STUCK_PROCESSING_TIMEOUT) kısa olmalı: pod ölürse kira önce düşer, sonra kayıt yeniden kuyruğa girer.
+    private static readonly VERSION_LEASE_MS_DEFAULT = 60000; // 1 dakika
+    private static readonly VERSION_LATEST_TTL_MS_DEFAULT = 24 * 60 * 60000; // "gönderilmiş en son sürüm" 24 saat tutulur
+    private static readonly VERSION_REDIS_TIMEOUT_MS_DEFAULT = 1000; // Redis yanıt vermezse gönderim beklemez
+    private static readonly VERSION_LEASE_WARN_INTERVAL = 60000; // Redis yokken uyarı logu en fazla dakikada bir
     private static readonly ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
     // Eşik aşılmış kaldıkça ALERT her pod'da en fazla bu aralıkla tekrar loglanır (izleme turu 3 sn'de bir koşar).
     // Kalıcı failed olan her kayıt ayrıca olduğu anda markPublishFailed içinde loglanır.
@@ -120,6 +130,9 @@ export class EventPublisherJob {
     private readonly versionMaxBatchesPerTick: number;
     // Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz (aynı pod'da üst üste boşaltma yok)
     private versionDrainRunning = false;
+    private readonly versionLeases: VersionEventLeases;
+    private readonly podId = process.env.HOSTNAME || os.hostname();
+    private lastLeaseWarnAt = 0;
     
     // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
     private lastProcessedPriority: Map<string, { priority: number; timestamp: number }> = new Map();
@@ -147,6 +160,11 @@ export class EventPublisherJob {
             EventPublisherJob.VERSION_BATCH_SIZE_MAX
         );
         this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
+        this.versionLeases = new VersionEventLeases(() => redisWrapper.client, {
+            leaseMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LEASE_MS', EventPublisherJob.VERSION_LEASE_MS_DEFAULT),
+            latestTtlMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LATEST_TTL_MS', EventPublisherJob.VERSION_LATEST_TTL_MS_DEFAULT),
+            timeoutMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_REDIS_TIMEOUT_MS', EventPublisherJob.VERSION_REDIS_TIMEOUT_MS_DEFAULT)
+        });
 
         EventMetrics.setOutboxCollector(this.serviceLabel, () => this.collectOutboxMetrics());
     }
@@ -525,8 +543,10 @@ export class EventPublisherJob {
         try {
             let batches = 0;
             let published = 0;
+            // İletimde olduğu için pending'e geri bırakılan kayıtlar bu turda yeniden alınmaz (aynı satırlar üzerinde dönme yok)
+            const deferredIds = new Set<string>();
             while (batches < this.versionMaxBatchesPerTick) {
-                const result = await this.publishVersionEventBatch();
+                const result = await this.publishVersionEventBatch(deferredIds);
                 batches++;
                 published += result.published;
                 if (!result.more) break;
@@ -543,12 +563,13 @@ export class EventPublisherJob {
      * Tek parti: en eski versionBatchSize kaydı claim edip tek NATS mesajıyla yayınlar.
      * `more`: kuyrukta kayıt kalmış olabilir ve yayın başarılı — aynı turda bir parti daha denenebilir.
      */
-    private async publishVersionEventBatch(): Promise<{ published: number; more: boolean }> {
+    private async publishVersionEventBatch(deferredIds: Set<string> = new Set()): Promise<{ published: number; more: boolean }> {
         try {
             const currentEnvironment = process.env.NODE_ENV || 'production';
 
             // Sadece EntityVersionUpdated eventlerini al
             const candidates = await this.outboxModel.find({
+                ...(deferredIds.size > 0 ? { _id: { $nin: [...deferredIds] } } : {}),
                 status: 'pending',
                 environment: currentEnvironment,
                 retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
@@ -585,35 +606,89 @@ export class EventPublisherJob {
                 return { published: 0, more: fullBatch };
             }
 
-            // Kısmi claim: yalnız bu partinin aldığı kayıtlar yayınlanır, başka pod'un aldıkları iki kez gitmez
-            const versionEvents = updateResult.modifiedCount === candidates.length
-                ? candidates
-                : await this.outboxModel.find({
-                    _id: { $in: candidateIds },
-                    status: 'processing',
-                    processingStartedAt: claimedAt
-                });
+            // Claim SONRASI yeniden okunur: yalnız bu partinin aldığı kayıtlar yayınlanır (başka pod'unkiler iki kez
+            // gitmez) ve claim'den hemen önce birleştirilen (writeVersionEventToOutbox) daha yeni sürüm kaybolmaz —
+            // claim öncesi okunan `candidates` o güncellemeyi görmemiş olabilir (UC-984 madde 8)
+            const versionEvents = await this.outboxModel.find({
+                _id: { $in: candidateIds },
+                status: 'processing',
+                processingStartedAt: claimedAt
+            });
             if (versionEvents.length === 0) {
                 return { published: 0, more: fullBatch };
             }
-            const eventIds = versionEvents.map(e => e.id);
 
-            logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk`);
+            // Gönderimde birleştirme: aynı varlığın birden fazla kaydından yalnız en yüksek sürüm gider (eski pod'ların
+            // her güncellemede açtığı satırlar ve eşzamanlı yazımda açılan ikinci satır burada toplanır)
+            const winners = new Map<string, any>();
+            for (const versionEvent of versionEvents) {
+                const key = versionEventKey(versionEvent.payload);
+                const current = winners.get(key);
+                if (!current || (versionEvent.payload?.version ?? 0) > (current.payload?.version ?? 0)) {
+                    winners.set(key, versionEvent);
+                }
+            }
+            const batchId = `bulk-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+            const leaseToken = `${this.podId}:${batchId}`;
 
+            // UC-984 madde 9: Redis iletim kirası — tek ağ turunda tüm kazananlar için karar.
+            // Redis yoksa/yanıt vermezse null: bugünkü gibi yalnız Mongo claim'iyle gönderilir (kayıp yok, çift olabilir).
+            const winnerList = [...winners.values()];
+            const decisions = await this.acquireVersionLeases(winnerList, leaseToken);
+            const toSend = winnerList.filter((_, i) => !decisions || decisions[i] === 'acquired');
+            const leased = decisions ? toSend : [];
+            const inflightKeys = new Set(winnerList.filter((_, i) => decisions?.[i] === 'inflight').map(e => versionEventKey(e.payload)));
+            const deliveredKeys = new Set(winnerList.filter((_, i) => decisions?.[i] === 'delivered').map(e => versionEventKey(e.payload)));
+
+            // İletimde olan varlığın satırları pending'e geri döner (retryCount artmaz); sonraki turda gönderilir
+            const deferred = versionEvents.filter(e => inflightKeys.has(versionEventKey(e.payload)));
+            if (deferred.length > 0) {
+                await this.outboxModel.updateMany(
+                    { _id: { $in: deferred.map(e => e._id) }, status: 'processing', processingStartedAt: claimedAt },
+                    { $set: { status: 'pending' }, $unset: { processingStartedAt: 1 } }
+                );
+                deferred.forEach(e => deferredIds.add(e.id));
+                EventMetrics.versionEventsDuplicatePreventedTotal.inc({ service: this.serviceLabel, reason: 'inflight' }, deferred.length);
+            }
+            // Bu sürüm ya da daha yenisi sync'e zaten gönderilmiş: gönderilmez, iz için 'superseded'
+            const alreadyDelivered = versionEvents.filter(e => deliveredKeys.has(versionEventKey(e.payload)));
+            if (alreadyDelivered.length > 0) {
+                await this.outboxModel.updateMany(
+                    { _id: { $in: alreadyDelivered.map(e => e._id) }, status: 'processing', processingStartedAt: claimedAt },
+                    [{ $set: { status: 'superseded', supersededBy: { $concat: ['delivered:v', { $toString: '$payload.version' }] } } }]
+                );
+                EventMetrics.versionEventsDuplicatePreventedTotal.inc({ service: this.serviceLabel, reason: 'delivered' }, alreadyDelivered.length);
+            }
+
+            const sendKeys = new Set(toSend.map(e => versionEventKey(e.payload)));
+            const eventIds = toSend.map(e => e.id);
+            const superseded = versionEvents.filter(e => sendKeys.has(versionEventKey(e.payload)) && winners.get(versionEventKey(e.payload)) !== e);
+
+            logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk (${toSend.length} sent, ${superseded.length} superseded, ${deferred.length} in flight elsewhere, ${alreadyDelivered.length} already delivered)`);
+
+            if (toSend.length === 0) {
+                return { published: 0, more: fullBatch };
+            }
+
+            EventMetrics.versionEventsInflight.set({ service: this.serviceLabel }, leased.length);
             try {
                 // Bulk payload oluştur
-                const batchId = `bulk-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
                 const bulkPayload = {
-                    updates: versionEvents.map(e => e.payload),
+                    updates: toSend.map(e => e.payload),
                     batchId,
-                    batchSize: versionEvents.length,
+                    batchSize: toSend.length,
                     timestamp: new Date()
                 };
 
                 // TEK NATS mesajı gönder
                 await new EntityVersionBulkUpdatedPublisher(this.natsClient).publish(bulkPayload);
 
-                EventMetrics.outboxVersionEventsPublishedTotal.inc({ service: this.serviceLabel }, versionEvents.length);
+                EventMetrics.outboxVersionEventsPublishedTotal.inc({ service: this.serviceLabel }, toSend.length);
+                // Gönderilmiş sürüm Mongo işaretlemesinden ÖNCE yazılır: işaretleme düşüp kayıt yeniden kuyruğa girerse
+                // aynı sürüm ikinci kez gönderilmez ('delivered'). Redis hatası yayını geri almaz.
+                if (leased.length > 0) {
+                    await this.versionLeaseCall('mark delivered', () => this.versionLeases.markDelivered(leased.map(e => this.leaseEntity(e))));
+                }
 
                 // Yalnız bu turun claim'i published olur (kurtarılıp başka pod'ca yeniden alınmış kayıt değil).
                 // Bu güncelleme düşerse kayıtlar processing'te kalır, 5 dk sonra yeniden yayınlanır (çift, kayıp değil).
@@ -621,9 +696,20 @@ export class EventPublisherJob {
                     { _id: { $in: eventIds }, status: 'processing', processingStartedAt: claimedAt },
                     { $set: { status: 'published' } }
                 );
+                // Geride kalan sürümler silinmez: iz ve sayım için 'superseded' + gönderilen satırın kimliği.
+                // Yayından SONRA işaretlenir: yayın düşerse hepsi failed olur, sonraki turda yeniden toplanır.
+                if (superseded.length > 0) {
+                    await this.outboxModel.bulkWrite(superseded.map(e => ({
+                        updateOne: {
+                            filter: { _id: e._id, status: 'processing', processingStartedAt: claimedAt },
+                            update: { $set: { status: 'superseded', supersededBy: winners.get(versionEventKey(e.payload)).id } }
+                        }
+                    })), { ordered: false });
+                    EventMetrics.versionEventsCoalescedTotal.inc({ service: this.serviceLabel, stage: 'send' }, superseded.length);
+                }
 
-                logger.info(`✅ Bulk published ${versionEvents.length} EntityVersionUpdated events (batch: ${batchId})`);
-                return { published: versionEvents.length, more: fullBatch };
+                logger.info(`✅ Bulk published ${toSend.length} EntityVersionUpdated events (batch: ${batchId})`);
+                return { published: toSend.length, more: fullBatch };
             } catch (error) {
                 // Önce logla: işaretleme sırasındaki Mongo hatası asıl yayın hatasını gizlemesin
                 logger.error('❌ Failed to publish bulk EntityVersionUpdated events:', error);
@@ -639,10 +725,47 @@ export class EventPublisherJob {
                 }
                 // Yayın başarısız: bu turda başka parti denenmez (NATS sorunluysa yükü büyütme)
                 return { published: 0, more: false };
+            } finally {
+                // Kira yalnız sahibince bırakılır; yayın ve işaretleme bittikten (ya da hata verdikten) sonra
+                if (leased.length > 0) {
+                    const expired = await this.versionLeaseCall('release', () => this.versionLeases.release(leased.map(e => this.leaseEntity(e)), leaseToken));
+                    if (expired) {
+                        EventMetrics.versionEventsLeaseExpiredTotal.inc({ service: this.serviceLabel }, expired);
+                        logger.warn(`Version event lease expired before publish finished for ${expired} entities (batch: ${batchId}); increase VERSION_EVENT_LEASE_MS`);
+                    }
+                }
+                EventMetrics.versionEventsInflight.set({ service: this.serviceLabel }, 0);
             }
         } catch (error) {
             logger.error('Version event bulk processing failed:', error);
             return { published: 0, more: false };
+        }
+    }
+
+    private leaseEntity(versionEvent: any): VersionLeaseEntity {
+        const { entityType, entityId, service, version } = versionEvent.payload ?? {};
+        return { entityType: String(entityType), entityId: String(entityId), service: String(service), version: Number(version) || 0 };
+    }
+
+    /** null: Redis kullanılamadı, gönderim kirasız (yalnız Mongo claim'iyle) sürer */
+    private async acquireVersionLeases(winners: any[], token: string): Promise<VersionLeaseDecision[] | null> {
+        return this.versionLeaseCall('acquire', () => this.versionLeases.acquire(winners.map(e => this.leaseEntity(e)), token));
+    }
+
+    /** Redis hatası/zaman aşımı yutulur (null döner): kira yalnız çift gönderimi önler, gönderimi asla durdurmaz */
+    private async versionLeaseCall<T>(operation: string, call: () => Promise<T>): Promise<T | null> {
+        try {
+            return await call();
+        } catch (error) {
+            EventMetrics.versionEventsLeaseUnavailableTotal.inc({ service: this.serviceLabel });
+            const now = Date.now();
+            if (now - this.lastLeaseWarnAt >= EventPublisherJob.VERSION_LEASE_WARN_INTERVAL) {
+                this.lastLeaseWarnAt = now;
+                logger.warn(`Version event Redis lease ${operation} failed; publishing with Mongo claim only`, {
+                    error: (error as Error)?.message
+                });
+            }
+            return null;
         }
     }
 

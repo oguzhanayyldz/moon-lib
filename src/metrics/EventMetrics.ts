@@ -144,6 +144,75 @@ export class EventMetrics {
   });
 
   /**
+   * Birleştirilen sürüm olayı (Counter) — UC-984 madde 8
+   *
+   * stage=write: yeni satır açılmadı, bekleyen satır güncellendi (writeVersionEventToOutbox).
+   * stage=send: aynı partide aynı varlığın daha yüksek sürümü gönderildi, satır 'superseded' oldu.
+   * Birleştirme oranı = coalesced / (coalesced + published). Kayıp DEĞİLDİR: en son sürüm yine gider.
+   * Labels: service, stage
+   */
+  static readonly versionEventsCoalescedTotal = new Counter<'service' | 'stage'>({
+    name: 'version_events_coalesced_total',
+    help: 'Total number of entity version events merged into a newer pending event for the same entity',
+    labelNames: ['service', 'stage'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Redis iletim kirası tutulan varlık sayısı (Gauge) — UC-984 madde 9
+   *
+   * Bu pod'un şu an yayınlamakta olduğu (kirasını tuttuğu) varlık sayısı; parti bitince 0'a döner.
+   * Labels: service
+   */
+  static readonly versionEventsInflight = new Gauge<'service'>({
+    name: 'version_events_inflight',
+    help: 'Number of entities whose version event this pod is currently publishing (Redis lease held)',
+    labelNames: ['service'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Süresi dolmuş iletim kirası (Counter) — UC-984 madde 9
+   *
+   * Yayın bittiğinde kira artık bu pod'un değil: kira süresi (VERSION_EVENT_LEASE_MS) yayından kısa kalmış.
+   * Kayıp değildir (Mongo kaydı yine işaretlenir); sürekli artıyorsa kira süresini büyüt.
+   * Labels: service
+   */
+  static readonly versionEventsLeaseExpiredTotal = new Counter<'service'>({
+    name: 'version_events_lease_expired_total',
+    help: 'Total number of version event leases that had already expired when the publish finished',
+    labelNames: ['service'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Önlenen çift gönderim (Counter) — UC-984 madde 9
+   *
+   * reason=inflight: varlık o an başka bir partide iletimde, satır pending'e geri bırakıldı (sonraki turda gider).
+   * reason=delivered: satırın sürümü sync'e zaten gönderilmiş sürümden büyük değil, 'superseded' oldu.
+   * Labels: service, reason
+   */
+  static readonly versionEventsDuplicatePreventedTotal = new Counter<'service' | 'reason'>({
+    name: 'version_events_duplicate_prevented_total',
+    help: 'Total number of version events not published because the entity was in flight or already delivered',
+    labelNames: ['service', 'reason'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Redis'e ulaşılamayan parti (Counter) — UC-984 madde 9
+   *
+   * Kira alınamadı/bırakılamadı; gönderim yalnız Mongo claim'iyle sürdü (olay kaybı yok, çift gönderim olabilir).
+   * Labels: service
+   */
+  static readonly versionEventsLeaseUnavailableTotal = new Counter<'service'>({
+    name: 'version_events_lease_unavailable_total',
+    help: 'Total number of version event batches published without Redis leases because Redis was unavailable',
+    labelNames: ['service'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
    * Outbox'a yazılamayan sürüm olayı (Counter) — UC-984
    *
    * base şemanın post-save kancası Outbox kaydını ayrı yazar; yazım hata verirse olay kaybolur.
@@ -283,6 +352,11 @@ export class EventMetrics {
     EventMetrics.eventDlqReplayTotal.reset();
     EventMetrics.outboxVersionEventsPublishedTotal.reset();
     EventMetrics.versionEventWriteErrorsTotal.reset();
+    EventMetrics.versionEventsCoalescedTotal.reset();
+    EventMetrics.versionEventsInflight.reset();
+    EventMetrics.versionEventsLeaseExpiredTotal.reset();
+    EventMetrics.versionEventsDuplicatePreventedTotal.reset();
+    EventMetrics.versionEventsLeaseUnavailableTotal.reset();
     EventMetrics.outboxCollector = null;
     EventMetrics.pendingSnapshot = null;
     // Note: Gauge values will remain until explicitly set again
@@ -298,6 +372,11 @@ export class EventMetrics {
     EventMetrics.registry.registerMetric(EventMetrics.circuitBreakerState);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.versionEventsCoalescedTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.versionEventsInflight);
+    EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseExpiredTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.versionEventsDuplicatePreventedTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseUnavailableTotal);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionRecords);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionOldestPendingAge);
     EventMetrics.registry.registerMetric(EventMetrics.outboxUnrecoveredRecords);
