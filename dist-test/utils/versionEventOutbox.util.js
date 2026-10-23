@@ -4,25 +4,6 @@ exports.versionEventKey = versionEventKey;
 exports.writeVersionEventToOutbox = writeVersionEventToOutbox;
 const subjects_1 = require("../common/events/subjects");
 const EventMetrics_1 = require("../metrics/EventMetrics");
-/**
- * EntityVersionUpdated outbox yazımı — birleştirme (coalescing), UC-984 madde 8.
- *
- * sync ara sürümleri kullanmaz (eski ya da eşit sürüm 'stale' sayılır); yalnız en son sürüm anlamlıdır.
- * Aynı (entityType, entityId, service, userId) için yayın bekleyen (pending) bir satır varsa yeni satır açılmaz:
- * o satır ATOMİK olarak güncellenir ve payload yalnız gelen sürüm daha büyükse değişir (eski sürüm yeniyi ezmez).
- * Yalnız `entity:version-updated` birleştirilir; diğer olay tipleri bu yoldan geçmez.
- *
- * Eşzamanlılık:
- *  - Güncelleme filtresi `status: 'pending'` içerir. Yayıncının claim'i (pending → processing) ile yarışta ya
- *    güncelleme claim'den önce uygulanır (yayıncı claim SONRASI okuduğu güncel satırı gönderir) ya da filtre
- *    tutmaz ve yeni pending satır açılır. Gönderimi süren satıra dokunulmaz.
- *  - İki pod aynı anda eşleşme bulamazsa iki pending satır açılabilir; tekil indeks bilinçli olarak YOK:
- *    monitorFailedEvents'in processing/failed → pending geri alımı tekil indekse çarpıp kurtarmayı durdururdu.
- *    Aynı varlığın birden fazla satırı gönderimde toplanır (EventPublisherJob: yalnız en yüksek sürüm gider,
- *    diğerleri 'superseded'). Eski pod'ların her güncellemede açtığı satırlar da aynı yoldan toplanır.
- */
-/** EventPublisherJob.MAX_PUBLISH_ATTEMPTS ile aynı: hakkı bitmiş pending satır yayınlanmaz, ona birleştirilmez. */
-const MAX_PUBLISH_ATTEMPTS = 5;
 /** Aynı varlığın sürüm olaylarını gruplayan anahtar (yazımda ve gönderimde aynı). */
 function versionEventKey(payload) {
     var _a;
@@ -41,11 +22,16 @@ async function writeVersionEventToOutbox(Outbox, payload, session) {
     var _a;
     const clean = withoutUndefined(payload);
     const environment = process.env.NODE_ENV || 'production';
-    const merged = await Outbox.findOneAndUpdate({
+    // Faz 1 (varsayılan): yazım tarafı birleştirmesi KAPALI, her güncelleme kendi satırını açar. Karışık deploy'da eski yayıncı
+    // pod, claim'den önce okuduğu satırı published yapar; yeni yazıcı o satıra daha yeni sürümü birleştirmişse sürüm kaybolur.
+    // Faz 2: tüm pod'lar yeni koddayken VERSION_EVENT_WRITE_COALESCE=true ile açılır (gönderim tarafı birleştirme her zaman açık).
+    const coalesceOnWrite = ['1', 'true'].includes(String(process.env.VERSION_EVENT_WRITE_COALESCE).toLowerCase());
+    const merged = !coalesceOnWrite ? null : await Outbox.findOneAndUpdate({
         eventType: subjects_1.Subjects.EntityVersionUpdated,
         status: 'pending',
         environment,
-        retryCount: { $lt: MAX_PUBLISH_ATTEMPTS },
+        // Deneme hakkı devri yok: hakkı tükenmeye yakın satıra binen en yeni sürüm tek NATS hatasıyla kalıcı failed olmasın
+        retryCount: 0,
         'payload.entityType': payload.entityType,
         'payload.entityId': payload.entityId,
         'payload.service': payload.service,

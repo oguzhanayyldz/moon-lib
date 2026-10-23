@@ -20,9 +20,6 @@ import { EventMetrics } from '../metrics/EventMetrics';
  *    diğerleri 'superseded'). Eski pod'ların her güncellemede açtığı satırlar da aynı yoldan toplanır.
  */
 
-/** EventPublisherJob.MAX_PUBLISH_ATTEMPTS ile aynı: hakkı bitmiş pending satır yayınlanmaz, ona birleştirilmez. */
-const MAX_PUBLISH_ATTEMPTS = 5;
-
 export interface VersionEventPayload {
     entityType: string;
     entityId: string;
@@ -55,12 +52,17 @@ export async function writeVersionEventToOutbox(
     const clean = withoutUndefined(payload);
     const environment = process.env.NODE_ENV || 'production';
 
-    const merged = await Outbox.findOneAndUpdate(
+    // Faz 1 (varsayılan): yazım tarafı birleştirmesi KAPALI, her güncelleme kendi satırını açar. Karışık deploy'da eski yayıncı
+    // pod, claim'den önce okuduğu satırı published yapar; yeni yazıcı o satıra daha yeni sürümü birleştirmişse sürüm kaybolur.
+    // Faz 2: tüm pod'lar yeni koddayken VERSION_EVENT_WRITE_COALESCE=true ile açılır (gönderim tarafı birleştirme her zaman açık).
+    const coalesceOnWrite = ['1', 'true'].includes(String(process.env.VERSION_EVENT_WRITE_COALESCE).toLowerCase());
+    const merged = !coalesceOnWrite ? null : await Outbox.findOneAndUpdate(
         {
             eventType: Subjects.EntityVersionUpdated,
             status: 'pending',
             environment,
-            retryCount: { $lt: MAX_PUBLISH_ATTEMPTS },
+            // Deneme hakkı devri yok: hakkı tükenmeye yakın satıra binen en yeni sürüm tek NATS hatasıyla kalıcı failed olmasın
+            retryCount: 0,
             'payload.entityType': payload.entityType,
             'payload.entityId': payload.entityId,
             'payload.service': payload.service,

@@ -84,11 +84,14 @@ describe('UC-984 — version event coalescing (real Mongo)', () => {
         await mms.stop();
     });
 
+    let previousCoalesce: string | undefined;
     beforeEach(async () => {
         previousEnv = process.env.NODE_ENV;
         previousService = process.env.SERVICE_NAME;
         process.env.NODE_ENV = ENV;
         process.env.SERVICE_NAME = 'inventory';
+        previousCoalesce = process.env.VERSION_EVENT_WRITE_COALESCE;
+        process.env.VERSION_EVENT_WRITE_COALESCE = 'true'; // Faz 2 davranışı; Faz 1 (bayrak kapalı) ayrı describe'ta
         EventMetrics.reset();
         nats = createFakeStan();
         await Outbox.deleteMany({});
@@ -97,8 +100,46 @@ describe('UC-984 — version event coalescing (real Mongo)', () => {
 
     afterEach(() => {
         process.env.NODE_ENV = previousEnv;
+        if (previousCoalesce === undefined) delete process.env.VERSION_EVENT_WRITE_COALESCE;
+        else process.env.VERSION_EVENT_WRITE_COALESCE = previousCoalesce;
         if (previousService === undefined) delete process.env.SERVICE_NAME;
         else process.env.SERVICE_NAME = previousService;
+    });
+
+    describe('write-time coalescing flag (VERSION_EVENT_WRITE_COALESCE, phase 1 = off)', () => {
+        it('flag off (default): every update opens its own row, nothing is merged into a row an old publisher may have read', async () => {
+            delete process.env.VERSION_EVENT_WRITE_COALESCE;
+            const id = oid();
+            for (let v = 1; v <= 5; v++) expect(await writeVersionEventToOutbox(Outbox, event(id, v))).toBe('created');
+
+            expect(await versionRows()).toHaveLength(5);
+            expect(await counter('write')).toBe(0);
+        });
+
+        it('flag off: old-publisher pattern (row read, newer version written meanwhile) loses nothing, 300/300', async () => {
+            delete process.env.VERSION_EVENT_WRITE_COALESCE;
+            let lost = 0;
+            for (let i = 0; i < 300; i++) {
+                const id = oid();
+                await writeVersionEventToOutbox(Outbox, event(id, 5));
+                const [seen] = await versionRows({ 'payload.entityId': id }); // eski yayıncı: find
+                await writeVersionEventToOutbox(Outbox, event(id, 6)); // yeni yazıcı: araya giren güncelleme
+                await Outbox.collection.updateOne({ _id: seen._id }, { $set: { status: 'published' } }); // eski yayıncı: claim + published
+                const pending = await versionRows({ 'payload.entityId': id, status: 'pending' });
+                if (!pending.some(r => r.payload.version === 6)) lost++;
+            }
+            expect(lost).toBe(0);
+        });
+
+        it('flag on: a pending row whose retries are already used is not merged into (the newest version keeps full retries)', async () => {
+            const id = oid();
+            await insertRaw(event(id, 1), { retryCount: 4 });
+
+            expect(await writeVersionEventToOutbox(Outbox, event(id, 2))).toBe('created');
+            const rows = await versionRows({ 'payload.entityId': id });
+            expect(rows).toHaveLength(2);
+            expect(rows.find(r => r.payload.version === 2)!.retryCount).toBe(0);
+        });
     });
 
     describe('write-time coalescing', () => {
