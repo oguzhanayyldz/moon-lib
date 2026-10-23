@@ -11,11 +11,12 @@ const common_1 = require("../common");
 const operation_type_enum_1 = require("../enums/operation-type.enum");
 const base_schema_1 = require("./base/base.schema");
 /**
- * İstek loglarının üst saklama süresi (UC-962): 7 gün, `requestTime` TTL indeksiyle.
- * UC-979 Faz 1: asıl süre `expireAt` (başarı 3 / hata 14 gün); bu TTL güvenlik ağı olarak kalır ve
- * expireAt'siz eski belgeleri siler. Faz 2 (ayrı PR) bu değeri 14 güne çeker — ön koşullar sonuç raporunda.
+ * İstek loglarının üst saklama süresi, `requestTime` TTL indeksiyle (UC-962'de 7 gün).
+ * UC-979 Faz 2: asıl süre `expireAt` (başarı 3 / hata 14 gün); bu TTL en uzun süreye (14 gün) çekilir ve
+ * yalnız yanıtı hiç yazılmamış kayıtlar için ağ olarak kalır. Ön koşul: tüm entegrasyon DB'lerinde
+ * expireAt'siz belge kalmamış olmalı (Faz 1 ≥7 gün canlıda).
  */
-exports.INTEGRATION_REQUEST_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
+exports.INTEGRATION_REQUEST_LOG_TTL_SECONDS = 14 * 24 * 60 * 60;
 const integrationRequestLogSchemaDefinition = {
     integrationName: {
         type: String,
@@ -77,7 +78,7 @@ const integrationRequestLogSchemaDefinition = {
     requestTime: {
         type: Date,
         required: true,
-        // TTL (UC-962): Mongo kayıtları requestTime'dan 7 gün sonra kendisi siler.
+        // TTL (UC-962, UC-979 Faz 2): Mongo kayıtları requestTime'dan 14 gün sonra kendisi siler.
         // Mevcut veritabanlarında indeks TTL'siz kurulu; ensureIntegrationRequestLogTtlIndex collMod ile dönüştürür.
         index: { expires: exports.INTEGRATION_REQUEST_LOG_TTL_SECONDS }
     },
