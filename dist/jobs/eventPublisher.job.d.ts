@@ -5,7 +5,9 @@ export declare class EventPublisherJob {
     private natsClient;
     private connection;
     private static readonly RETRY_INTERVAL;
-    private static readonly VERSION_EVENT_INTERVAL;
+    private static readonly VERSION_EVENT_INTERVAL_DEFAULT;
+    private static readonly VERSION_BATCH_SIZE_MAX;
+    private static readonly VERSION_MAX_BATCHES_PER_TICK_DEFAULT;
     private static readonly ALERT_THRESHOLD;
     private static readonly ALERT_LOG_INTERVAL;
     private static readonly MAX_PUBLISH_ATTEMPTS;
@@ -19,10 +21,16 @@ export declare class EventPublisherJob {
     private lastAlertLoggedAt;
     private readonly outboxModel;
     private readonly serviceOffset;
+    private readonly versionEventInterval;
+    private readonly versionBatchSize;
+    private readonly versionMaxBatchesPerTick;
+    private versionDrainRunning;
     private lastProcessedPriority;
     private static readonly PRIORITY_MAP_TTL;
     private static readonly PRIORITY_MAP_MAX_SIZE;
     constructor(natsClient: Stan, connection: mongoose.Connection, serviceName?: ServiceName);
+    /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    private static readPositiveIntEnv;
     /**
      * Environment variable'dan servis adını çöz
      */
@@ -65,11 +73,18 @@ export declare class EventPublisherJob {
      */
     private getPublishRetryDelay;
     /**
-     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
-     * Bu metod ayrı bir interval ile çalışır (10 saniye) ve birikmiş version
-     * eventlerini tek bir EntityVersionBulkUpdated mesajı olarak gönderir
+     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder.
+     * Ayrı bir interval ile çalışır (varsayılan 2 dk). Her tur, kuyruk boşalana ya da
+     * versionMaxBatchesPerTick partiye gelene kadar en fazla versionBatchSize olaylık
+     * EntityVersionBulkUpdated mesajları gönderir (UC-984). Mesaj biçimi değişmedi: eski ve yeni
+     * pod'lar aynı kuyruktan atomik claim ile birlikte yayın yapabilir.
      */
     private processVersionEventsAsBulk;
+    /**
+     * Tek parti: en eski versionBatchSize kaydı claim edip tek NATS mesajıyla yayınlar.
+     * `more`: kuyrukta kayıt kalmış olabilir ve yayın başarılı — aynı turda bir parti daha denenebilir.
+     */
+    private publishVersionEventBatch;
     private monitorFailedEvents;
     private publishEvent;
 }

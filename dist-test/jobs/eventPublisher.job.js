@@ -86,6 +86,8 @@ class EventPublisherJob {
         this.versionEventIntervalId = null; // Version eventleri için ayrı interval
         this.monitoringId = null;
         this.lastAlertLoggedAt = null; // Son ALERT logunun zamanı; sayı eşiğin altına inince sıfırlanır
+        // Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz (aynı pod'da üst üste boşaltma yok)
+        this.versionDrainRunning = false;
         // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
         this.lastProcessedPriority = new Map();
         this.outboxModel = (0, outbox_schema_1.createOutboxModel)(connection);
@@ -93,6 +95,14 @@ class EventPublisherJob {
         const resolvedServiceName = serviceName || this.resolveServiceNameFromEnv();
         // Servis adından deterministik offset hesapla (0-2500ms arası)
         this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
+        this.versionEventInterval = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_INTERVAL_MS', EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT);
+        this.versionBatchSize = Math.min(EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_BATCH_SIZE', EventPublisherJob.VERSION_BATCH_SIZE_MAX), EventPublisherJob.VERSION_BATCH_SIZE_MAX);
+        this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
+    }
+    /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    static readPositiveIntEnv(name, fallback) {
+        const value = Number(process.env[name]);
+        return Number.isInteger(value) && value > 0 ? value : fallback;
     }
     /**
      * Environment variable'dan servis adını çöz
@@ -142,12 +152,12 @@ class EventPublisherJob {
             // Version event bulk publishing job (2 dakika - biriktirme için daha uzun)
             this.versionEventIntervalId = setInterval(async () => {
                 await this.processVersionEventsAsBulk();
-            }, EventPublisherJob.VERSION_EVENT_INTERVAL);
+            }, this.versionEventInterval);
             // Monitoring job
             this.monitoringId = setInterval(async () => {
                 await this.monitorFailedEvents();
             }, EventPublisherJob.RETRY_INTERVAL);
-            logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${EventPublisherJob.VERSION_EVENT_INTERVAL}ms, serviceOffset=${this.serviceOffset}ms`);
+            logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${this.versionEventInterval}ms (batch=${this.versionBatchSize}, maxBatches=${this.versionMaxBatchesPerTick}), serviceOffset=${this.serviceOffset}ms`);
         }, initialDelay);
     }
     stop() {
@@ -347,43 +357,87 @@ class EventPublisherJob {
         return Math.min(EventPublisherJob.PUBLISH_RETRY_BASE_DELAY * Math.pow(2, attempts - 1), EventPublisherJob.PUBLISH_RETRY_MAX_DELAY);
     }
     /**
-     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder
-     * Bu metod ayrı bir interval ile çalışır (10 saniye) ve birikmiş version
-     * eventlerini tek bir EntityVersionBulkUpdated mesajı olarak gönderir
+     * EntityVersionUpdated eventlerini biriktirip BULK olarak publish eder.
+     * Ayrı bir interval ile çalışır (varsayılan 2 dk). Her tur, kuyruk boşalana ya da
+     * versionMaxBatchesPerTick partiye gelene kadar en fazla versionBatchSize olaylık
+     * EntityVersionBulkUpdated mesajları gönderir (UC-984). Mesaj biçimi değişmedi: eski ve yeni
+     * pod'lar aynı kuyruktan atomik claim ile birlikte yayın yapabilir.
      */
     async processVersionEventsAsBulk() {
+        if (this.versionDrainRunning) {
+            logger_service_1.logger.debug('Previous version event drain is still running, skipping this tick');
+            return;
+        }
+        this.versionDrainRunning = true;
+        try {
+            let batches = 0;
+            let published = 0;
+            while (batches < this.versionMaxBatchesPerTick) {
+                const result = await this.publishVersionEventBatch();
+                batches++;
+                published += result.published;
+                if (!result.more)
+                    break;
+            }
+            if (batches > 1) {
+                logger_service_1.logger.info(`🔄 Version event drain: ${published} events in ${batches} batches`);
+            }
+        }
+        finally {
+            this.versionDrainRunning = false;
+        }
+    }
+    /**
+     * Tek parti: en eski versionBatchSize kaydı claim edip tek NATS mesajıyla yayınlar.
+     * `more`: kuyrukta kayıt kalmış olabilir ve yayın başarılı — aynı turda bir parti daha denenebilir.
+     */
+    async publishVersionEventBatch() {
         var _a;
         try {
             const currentEnvironment = process.env.NODE_ENV || 'production';
             // Sadece EntityVersionUpdated eventlerini al
-            const versionEvents = await this.outboxModel.find({
+            const candidates = await this.outboxModel.find({
                 status: 'pending',
                 environment: currentEnvironment,
                 retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                 eventType: common_1.Subjects.EntityVersionUpdated
             })
                 .sort({ creationDate: 1 })
-                .limit(100); // Version eventleri için daha yüksek limit
-            if (versionEvents.length === 0) {
-                return; // İşlenecek event yok
+                .limit(this.versionBatchSize);
+            if (candidates.length === 0) {
+                return { published: 0, more: false }; // İşlenecek event yok
             }
-            logger_service_1.logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk`);
-            const eventIds = versionEvents.map(e => e.id);
+            const fullBatch = candidates.length === this.versionBatchSize;
+            const candidateIds = candidates.map(e => e.id);
+            const claimedAt = new Date();
             // Atomik olarak tüm eventleri 'processing' yap
             const updateResult = await this.outboxModel.updateMany({
-                _id: { $in: eventIds },
+                _id: { $in: candidateIds },
                 status: 'pending'
             }, {
                 $set: {
                     status: 'processing',
-                    processingStartedAt: new Date()
+                    processingStartedAt: claimedAt
                 }
             });
             // Bazı eventler başka pod tarafından alınmış olabilir
             if (updateResult.modifiedCount === 0) {
                 logger_service_1.logger.debug('All version events already being processed by another publisher');
-                return;
+                return { published: 0, more: fullBatch };
             }
+            // Kısmi claim: yalnız bu partinin aldığı kayıtlar yayınlanır, başka pod'un aldıkları iki kez gitmez
+            const versionEvents = updateResult.modifiedCount === candidates.length
+                ? candidates
+                : await this.outboxModel.find({
+                    _id: { $in: candidateIds },
+                    status: 'processing',
+                    processingStartedAt: claimedAt
+                });
+            if (versionEvents.length === 0) {
+                return { published: 0, more: fullBatch };
+            }
+            const eventIds = versionEvents.map(e => e.id);
+            logger_service_1.logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk`);
             try {
                 // Bulk payload oluştur
                 const batchId = `bulk-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -398,6 +452,7 @@ class EventPublisherJob {
                 // Tümünü başarılı işaretle
                 await this.outboxModel.updateMany({ _id: { $in: eventIds }, status: 'processing' }, { $set: { status: 'published' } });
                 logger_service_1.logger.info(`✅ Bulk published ${versionEvents.length} EntityVersionUpdated events (batch: ${batchId})`);
+                return { published: versionEvents.length, more: fullBatch };
             }
             catch (error) {
                 // Önce logla: işaretleme sırasındaki Mongo hatası asıl yayın hatasını gizlemesin
@@ -412,10 +467,13 @@ class EventPublisherJob {
                 for (const [retryCount, ids] of idsByRetryCount) {
                     await this.markPublishFailed({ _id: { $in: ids } }, retryCount);
                 }
+                // Yayın başarısız: bu turda başka parti denenmez (NATS sorunluysa yükü büyütme)
+                return { published: 0, more: false };
             }
         }
         catch (error) {
             logger_service_1.logger.error('Version event bulk processing failed:', error);
+            return { published: 0, more: false };
         }
     }
     async monitorFailedEvents() {
@@ -763,7 +821,13 @@ class EventPublisherJob {
 }
 exports.EventPublisherJob = EventPublisherJob;
 EventPublisherJob.RETRY_INTERVAL = 3000; // 3 saniye (normal eventler için)
-EventPublisherJob.VERSION_EVENT_INTERVAL = 120000; // 2 dakika (version eventleri için - bulk biriktirme)
+// UC-984: sürüm olayları turda bir kez 100'lük tek parti gönderiliyordu (saatte en fazla 3.000); tepe üretimi
+// 4.200–4.700/sa olunca kuyruk büyüyordu. Artık her tur kuyruk boşalana ya da parti tavanına gelene kadar
+// partiler gönderir. Üçü de env ile ayarlanır; geçersiz değer varsayılana düşer.
+EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT = 120000; // 2 dakika (bulk biriktirme)
+// Tek NATS mesajındaki olay sayısı tavanı (mesaj boyutu). Env ile küçültülebilir, büyütülemez.
+EventPublisherJob.VERSION_BATCH_SIZE_MAX = 100;
+EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT = 20; // tur başına en fazla 20×100 olay
 EventPublisherJob.ALERT_THRESHOLD = 5; // 5 başarısız event alert eşiği
 // Eşik aşılmış kaldıkça ALERT her pod'da en fazla bu aralıkla tekrar loglanır (izleme turu 3 sn'de bir koşar).
 // Kalıcı failed olan her kayıt ayrıca olduğu anda markPublishFailed içinde loglanır.
