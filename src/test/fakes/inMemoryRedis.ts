@@ -2,10 +2,9 @@
  * In-memory Redis fake for event-delivery tests (issue #648).
  *
  * Implements only the commands RetryableListener and RetryManager use, with
- * Redis semantics (SET NX/EX, TTL -2/-1, compare-and-delete lock release).
+ * Redis semantics (SET NX/EX, TTL -2/-1, compare-and-delete lock release, owner-checked lock renew).
  * Anything else throws, so a test can never pass against a silently missing command.
  */
-
 interface Entry {
     value: string;
     expiresAt: number | null;
@@ -21,6 +20,8 @@ interface EvalOptions {
     arguments: string[];
 }
 
+// utils/lockHeartbeat.util LOCK_RENEW_SCRIPT; matched by content so the fake does not import the mocked redisWrapper
+const LOCK_RENEW_SCRIPT_PARTS = ['redis.call("expire", KEYS[1], ARGV[3])', 'string.sub(v, -string.len(ARGV[2])) == ARGV[2]'];
 const LOCK_RELEASE_SCRIPT_PARTS = ['redis.call("get", KEYS[1]) == ARGV[1]', 'redis.call("del", KEYS[1])'];
 
 export class InMemoryRedis {
@@ -63,8 +64,11 @@ export class InMemoryRedis {
     }
 
     async eval(script: string, options: EvalOptions): Promise<number> {
+        if (LOCK_RENEW_SCRIPT_PARTS.every(part => script.includes(part))) {
+            return this.renewLock(options);
+        }
         if (!LOCK_RELEASE_SCRIPT_PARTS.every(part => script.includes(part))) {
-            throw new Error('InMemoryRedis.eval: only the compare-and-delete lock release script is supported');
+            throw new Error('InMemoryRedis.eval: only the lock release and lock renew scripts are supported');
         }
         const [key] = options.keys;
         const [expectedValue] = options.arguments;
@@ -72,6 +76,18 @@ export class InMemoryRedis {
             return this.del(key);
         }
         return 0;
+    }
+
+    /** LOCK_RENEW_SCRIPT: value matches exactly (or ends with the suffix when no exact value is given) → expire, 1. */
+    private async renewLock(options: EvalOptions): Promise<number> {
+        const [key] = options.keys;
+        const [expectedValue, suffix, ttlSec] = options.arguments;
+        const entry = this.liveEntry(key);
+        if (!entry) return 0;
+        const owned = expectedValue !== '' ? entry.value === expectedValue : suffix !== '' && entry.value.endsWith(suffix);
+        if (!owned) return 0;
+        entry.expiresAt = Date.now() + Number(ttlSec) * 1000;
+        return 1;
     }
 
     flushAll(): void {

@@ -54,6 +54,7 @@ jest.mock('../metrics/EventMetrics', () => ({
         eventProcessingTotal: { inc: jest.fn() },
         eventRetryTotal: { inc: jest.fn() },
         eventDlqTotal: { inc: jest.fn() },
+        eventDuplicateKeyTotal: { inc: jest.fn() },
         eventDlqWriteErrorTotal: { inc: jest.fn() },
         eventDlqReplayTotal: { inc: jest.fn() },
     }

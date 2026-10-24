@@ -11,7 +11,23 @@ interface RetryOptions {
     enableLock?: boolean;
     ackWaitSec?: number;
     deadLetterReplay?: boolean;
+    /**
+     * E11000'den sonra processEvent'in süreç içinde kaç kez yeniden koşulacağı (UC-1020). 0 = eski davranış: ilk E11000'de ack.
+     * E11000, çakışan yazımın kaydı ZATEN yazdığını söyler: yarışta (iki olay aynı benzersiz kaydı findOne→save ile oluşturuyor)
+     * yeniden koşum o kaydı bulur ve başarılı olur; gerçek çiftte E11000 tekrarlanır ve mesaj eskisi gibi ack'lenir.
+     * Verilmezse RETRYABLE_DUPLICATE_KEY_RETRIES ortam değişkeni (0–5), o da yoksa 0.
+     */
+    duplicateKeyRetries?: number;
+    /**
+     * Olay kilidinin işlem sürdükçe kaç ms'de bir yenileneceği (UC-1020). 0 = yenileme yok (eski davranış).
+     * lockTimeoutSec'ten kısa olmalı; uzun işlerde kilidin işin ortasında düşüp yeniden teslimin işi kopyalamasını önler.
+     */
+    lockRenewIntervalMs?: number;
 }
+/**
+ * RETRYABLE_DUPLICATE_KEY_RETRIES'ı okur; geçersiz ya da yoksa 0, üst sınır MAX_DUPLICATE_KEY_RETRIES.
+ */
+export declare function resolveDuplicateKeyRetries(explicit?: number): number;
 /**
  * Retry özellikli temel listener sınıfı
  */
@@ -51,6 +67,13 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      * Retry mantığı ile geliştirilmiş mesaj işleme
      */
     onMessage(data: T['data'], msg: Message): Promise<void>;
+    /**
+     * processEvent'i koşar; E11000'de en fazla duplicateKeyRetries kez süreç içinde yeniden koşar (UC-1020).
+     * Yarış: çakışan yazım kaydı oluşturmuştur, yeniden koşumda handler'ın findOne'ı onu bulur → başarı ('resolved').
+     * Gerçek çift: E11000 her koşumda tekrarlar → son hata fırlatılır, çağıran eskisi gibi ack'ler.
+     * E11000 dışındaki hatalar hiç yeniden koşulmadan fırlatılır (NATS yeniden denemesi ve DLQ yolu değişmez).
+     */
+    private processEventWithDuplicateKeyRetries;
     /**
      * Anlık tekrar denemelerle işlemi gerçekleştir
      */
