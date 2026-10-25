@@ -100,6 +100,22 @@ export class EventMetrics {
   });
 
   /**
+   * Duplicate key (E11000) sonuçları (Counter)
+   *
+   * Counts RetryableListener duplicate key outcomes (UC-1020).
+   * outcome=acked: the message was acked without NATS retry (after duplicateKeyRetries in-process reruns, 0 by default);
+   * if the handler is not idempotent the rest of the event's work is not written.
+   * outcome=resolved: an in-process rerun succeeded, i.e. the E11000 was a race, not a real duplicate.
+   * Includes labels: service, event_type, queue_group, outcome
+   */
+  static readonly eventDuplicateKeyTotal = new Counter<'service' | 'event_type' | 'queue_group' | 'outcome'>({
+    name: 'event_duplicate_key_total',
+    help: 'Total number of duplicate key errors in event listeners by outcome',
+    labelNames: ['service', 'event_type', 'queue_group', 'outcome'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
    * DLQ oynatmaları (Counter)
    *
    * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
@@ -350,6 +366,7 @@ export class EventMetrics {
     EventMetrics.eventDlqTotal.reset();
     EventMetrics.eventDlqWriteErrorTotal.reset();
     EventMetrics.eventDlqReplayTotal.reset();
+    EventMetrics.eventDuplicateKeyTotal.reset();
     EventMetrics.outboxVersionEventsPublishedTotal.reset();
     EventMetrics.versionEventWriteErrorsTotal.reset();
     EventMetrics.versionEventsCoalescedTotal.reset();
@@ -369,6 +386,7 @@ export class EventMetrics {
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqTotal);
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqWriteErrorTotal);
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqReplayTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.eventDuplicateKeyTotal);
     EventMetrics.registry.registerMetric(EventMetrics.circuitBreakerState);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);

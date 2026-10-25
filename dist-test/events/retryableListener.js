@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RetryableListener = void 0;
+exports.resolveDuplicateKeyRetries = resolveDuplicateKeyRetries;
 const crypto_1 = __importDefault(require("crypto"));
 const common_1 = require("../common");
 const retryManager_1 = require("../services/retryManager");
@@ -14,14 +15,29 @@ const redisWrapper_service_1 = require("../services/redisWrapper.service");
 const logger_service_1 = require("../services/logger.service");
 const EventMetrics_1 = require("../metrics/EventMetrics");
 const duplicateKeyError_util_1 = require("../utils/duplicateKeyError.util");
+const lockHeartbeat_util_1 = require("../utils/lockHeartbeat.util");
 const deadLetterReplayRegistry_1 = require("./deadLetterReplayRegistry");
+const MAX_DUPLICATE_KEY_RETRIES = 5;
+/**
+ * RETRYABLE_DUPLICATE_KEY_RETRIES'ı okur; geçersiz ya da yoksa 0, üst sınır MAX_DUPLICATE_KEY_RETRIES.
+ */
+function resolveDuplicateKeyRetries(explicit) {
+    var _a;
+    const raw = explicit !== null && explicit !== void 0 ? explicit : Number((_a = process.env.RETRYABLE_DUPLICATE_KEY_RETRIES) !== null && _a !== void 0 ? _a : 0);
+    if (!Number.isInteger(raw) || raw < 0)
+        return 0;
+    return Math.min(raw, MAX_DUPLICATE_KEY_RETRIES);
+}
 /**
  * Retry özellikli temel listener sınıfı
  */
 class RetryableListener extends common_1.Listener {
     constructor(client, options = {}, connection = mongoose_1.default.connection) {
         super(client);
-        this.options = Object.assign(Object.assign({}, RetryableListener.DEFAULT_OPTIONS), options);
+        this.options = Object.assign(Object.assign(Object.assign({}, RetryableListener.DEFAULT_OPTIONS), options), { duplicateKeyRetries: resolveDuplicateKeyRetries(options.duplicateKeyRetries) });
+        if (this.options.lockRenewIntervalMs > 0 && this.options.lockRenewIntervalMs >= this.options.lockTimeoutSec * 1000) {
+            logger_service_1.logger.warn(`lockRenewIntervalMs (${this.options.lockRenewIntervalMs}) is not shorter than lockTimeoutSec (${this.options.lockTimeoutSec}s); the lock can expire before it is renewed`);
+        }
         // ackWait'i override et (base class'ta 5s, burada options'dan alıyoruz)
         this.ackWait = this.options.ackWaitSec * 1000;
         this.retryManager = new retryManager_1.RetryManager({ maxRetries: this.options.maxRetries });
@@ -59,12 +75,17 @@ class RetryableListener extends common_1.Listener {
             throw new Error(`Lock acquisition failed for ${this.subject}:${eventId}`);
         }
         logger_service_1.logger.debug(`Lock acquired for ${this.subject}:${eventId}`);
+        // Kendi kilit değerimizi bildiğimiz için yenileme tam eşleşmeyle yapılır (sonek yedeği gerekmez)
+        const stopHeartbeat = this.options.lockRenewIntervalMs > 0
+            ? (0, lockHeartbeat_util_1.startLockHeartbeat)(lockKey, lockValue, '', this.options.lockTimeoutSec, this.options.lockRenewIntervalMs)
+            : undefined;
         try {
             const result = await callback();
             logger_service_1.logger.debug(`Process completed with lock for ${this.subject}:${eventId}`);
             return result;
         }
         finally {
+            stopHeartbeat === null || stopHeartbeat === void 0 ? void 0 : stopHeartbeat();
             // İşlem tamamlandığında kilidi serbest bırak
             await this.releaseLock(lockKey, lockValue);
             logger_service_1.logger.debug(`Lock released for ${this.subject}:${eventId}`);
@@ -143,7 +164,7 @@ class RetryableListener extends common_1.Listener {
                 const sequence = this.getDeliverySequence(msg);
                 try {
                     await this.processWithLock(eventId, async () => {
-                        await this.processEvent(data);
+                        await this.processEventWithDuplicateKeyRetries(data, eventId);
                         return;
                     }, fingerprint, sequence);
                     // Başarılı işlemede retry sayacını sıfırla
@@ -227,7 +248,7 @@ class RetryableListener extends common_1.Listener {
                 }
             }
             // Lock etkin değilse normal işleme devam et
-            await this.processEvent(data);
+            await this.processEventWithDuplicateKeyRetries(data, eventId);
             // Başarılı işlemede retry sayacını sıfırla
             await this.retryManager.resetRetryCount(eventType, eventId);
             span.setTag('success', true);
@@ -270,10 +291,17 @@ class RetryableListener extends common_1.Listener {
             // MongoDB duplicate key hatası kontrolü
             const isDuplicate = (0, duplicateKeyError_util_1.isDuplicateKeyError)(error);
             if (isDuplicate) {
-                // Unique constraint hatası - retry yapmayacağız
-                logger_service_1.logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
+                // Unique constraint hatası - NATS yeniden denemesi yapmayacağız. duplicateKeyRetries > 0 ise süreç içi
+                // yeniden koşumlar da E11000 verdi: kayıt gerçekten mevcut (gerçek çift), ack doğru.
+                logger_service_1.logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId} (süreç içi yeniden koşum: ${this.options.duplicateKeyRetries})`);
                 span.setTag('error.retry_skipped', true);
                 span.setTag('error.duplicate_key', true);
+                EventMetrics_1.EventMetrics.eventDuplicateKeyTotal.inc({
+                    service: serviceName,
+                    event_type: eventType,
+                    queue_group: this.queueGroupName,
+                    outcome: 'acked'
+                });
                 // Mesajı onaylayıp geçiyoruz
                 msg.ack();
             }
@@ -341,6 +369,37 @@ class RetryableListener extends common_1.Listener {
         }
     }
     /**
+     * processEvent'i koşar; E11000'de en fazla duplicateKeyRetries kez süreç içinde yeniden koşar (UC-1020).
+     * Yarış: çakışan yazım kaydı oluşturmuştur, yeniden koşumda handler'ın findOne'ı onu bulur → başarı ('resolved').
+     * Gerçek çift: E11000 her koşumda tekrarlar → son hata fırlatılır, çağıran eskisi gibi ack'ler.
+     * E11000 dışındaki hatalar hiç yeniden koşulmadan fırlatılır (NATS yeniden denemesi ve DLQ yolu değişmez).
+     */
+    async processEventWithDuplicateKeyRetries(data, eventId) {
+        for (let attempt = 0;; attempt++) {
+            try {
+                await this.processEvent(data);
+                if (attempt > 0) {
+                    logger_service_1.logger.info(`Duplicate key race resolved on in-process rerun ${attempt}/${this.options.duplicateKeyRetries}: ${this.subject}:${eventId}`);
+                    EventMetrics_1.EventMetrics.eventDuplicateKeyTotal.inc({
+                        service: process.env.SERVICE_NAME || 'unknown',
+                        event_type: this.subject,
+                        queue_group: this.queueGroupName,
+                        outcome: 'resolved'
+                    });
+                }
+                return;
+            }
+            catch (error) {
+                if (attempt >= this.options.duplicateKeyRetries || !(0, duplicateKeyError_util_1.isDuplicateKeyError)(error)) {
+                    throw error;
+                }
+                logger_service_1.logger.warn(`Duplicate key error, rerunning in process ${attempt + 1}/${this.options.duplicateKeyRetries}: ${this.subject}:${eventId}`);
+                // Kısa jitter: çakışan yazımın kalan adımlarına (aynı partideki sonraki kayıtlar) zaman tanır
+                await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 100));
+            }
+        }
+    }
+    /**
      * Anlık tekrar denemelerle işlemi gerçekleştir
      */
     async processWithImmediateRetries(data, msg, span) {
@@ -388,7 +447,7 @@ class RetryableListener extends common_1.Listener {
         let started = false;
         const run = async () => {
             started = true;
-            await this.processEvent(data);
+            await this.processEventWithDuplicateKeyRetries(data, eventId);
         };
         try {
             if (this.options.enableLock) {
@@ -681,6 +740,8 @@ RetryableListener.DEFAULT_OPTIONS = {
     lockTimeoutSec: 30, // Lock için varsayılan timeout süresi (saniye)
     enableLock: true, // Varsayılan olarak lock etkin
     ackWaitSec: 60, // NATS ack timeout - lock TTL'inden büyük olmalı
-    deadLetterReplay: true // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
+    deadLetterReplay: true, // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
+    duplicateKeyRetries: 0, // constructor'da ortam değişkeniyle çözülür
+    lockRenewIntervalMs: 0 // kilit yenileme kapalı
 };
 //# sourceMappingURL=retryableListener.js.map
