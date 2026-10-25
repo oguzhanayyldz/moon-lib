@@ -116,6 +116,21 @@ export class EventMetrics {
   });
 
   /**
+   * Kalıcı (deterministik) hatalar (Counter) — UC-1043
+   *
+   * outcome: failed_fast (fail-fast açık: ilk denemede 'failed' DLQ kaydı + ack), shadow (fail-fast kapalı: eski
+   * yeniden deneme yolu sürer, yalnız sayılır), recovered (shadow sayılan olay sonraki teslimde BAŞARILI oldu —
+   * yanlış pozitif: fail-fast açık olsaydı bu olay kaybolurdu).
+   * Includes labels: service, event_type, queue_group, outcome
+   */
+  static readonly eventPermanentErrorTotal = new Counter<'service' | 'event_type' | 'queue_group' | 'outcome'>({
+    name: 'event_permanent_error_total',
+    help: 'Total number of deterministic (permanent) listener errors by outcome',
+    labelNames: ['service', 'event_type', 'queue_group', 'outcome'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
    * DLQ oynatmaları (Counter)
    *
    * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
@@ -367,6 +382,7 @@ export class EventMetrics {
     EventMetrics.eventDlqWriteErrorTotal.reset();
     EventMetrics.eventDlqReplayTotal.reset();
     EventMetrics.eventDuplicateKeyTotal.reset();
+    EventMetrics.eventPermanentErrorTotal.reset();
     EventMetrics.outboxVersionEventsPublishedTotal.reset();
     EventMetrics.versionEventWriteErrorsTotal.reset();
     EventMetrics.versionEventsCoalescedTotal.reset();
@@ -387,6 +403,7 @@ export class EventMetrics {
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqWriteErrorTotal);
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqReplayTotal);
     EventMetrics.registry.registerMetric(EventMetrics.eventDuplicateKeyTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.eventPermanentErrorTotal);
     EventMetrics.registry.registerMetric(EventMetrics.circuitBreakerState);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);

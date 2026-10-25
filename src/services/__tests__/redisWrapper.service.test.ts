@@ -24,10 +24,12 @@ type EventHandler = (payload?: unknown) => void;
 interface FakeRedisClient {
     handlers: Record<string, EventHandler>;
     isOpen: boolean;
+    isReady: boolean;
     on: jest.Mock;
     connect: jest.Mock;
     ping: jest.Mock;
     quit: jest.Mock;
+    disconnect: jest.Mock;
 }
 
 const mockedCreateClient = createClient as unknown as jest.Mock;
@@ -37,10 +39,12 @@ const createFakeClient = (): FakeRedisClient => {
     const client: FakeRedisClient = {
         handlers: {},
         isOpen: true,
+        isReady: false,
         on: jest.fn(),
         connect: jest.fn().mockResolvedValue(undefined),
         ping: jest.fn().mockResolvedValue('PONG'),
         quit: jest.fn().mockResolvedValue('OK'),
+        disconnect: jest.fn().mockResolvedValue(undefined),
     };
     client.on.mockImplementation((event: string, handler: EventHandler) => {
         client.handlers[event] = handler;
@@ -73,6 +77,12 @@ const nextRedisUrl = () => {
 describe('redisWrapper log safety', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Tek deneme: bu takım hata yolunun log güvenliğini ölçer; açılış yeniden denemesi redisWrapper.startupRetry.test.ts'te
+        process.env.REDIS_STARTUP_MAX_WAIT_MS = '0';
+    });
+
+    afterAll(() => {
+        delete process.env.REDIS_STARTUP_MAX_WAIT_MS;
     });
 
     afterEach(async () => {
@@ -145,7 +155,7 @@ describe('redisWrapper log safety', () => {
         const client = createFakeClient();
         const connectError = Object.assign(new Error(`connect failed redis://:${FAKE_PASSWORD}@redis-master:6379`), { code: 'ECONNREFUSED' });
         client.connect.mockRejectedValue(connectError);
-        client.quit.mockRejectedValue(new Error(`quit failed for redis://:${FAKE_PASSWORD}@redis-master:6379`));
+        client.disconnect.mockRejectedValue(new Error(`quit failed for redis://:${FAKE_PASSWORD}@redis-master:6379`));
         mockedCreateClient.mockReturnValue(client);
 
         const rejected = await redisWrapper.connect(nextRedisUrl(), 1000).catch((e) => e);

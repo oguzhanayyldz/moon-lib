@@ -76,6 +76,15 @@ export declare class EventMetrics {
      */
     static readonly eventDuplicateKeyTotal: Counter<"service" | "event_type" | "queue_group" | "outcome">;
     /**
+     * Kalıcı (deterministik) hatalar (Counter) — UC-1043
+     *
+     * outcome: failed_fast (fail-fast açık: ilk denemede 'failed' DLQ kaydı + ack), shadow (fail-fast kapalı: eski
+     * yeniden deneme yolu sürer, yalnız sayılır), recovered (shadow sayılan olay sonraki teslimde BAŞARILI oldu —
+     * yanlış pozitif: fail-fast açık olsaydı bu olay kaybolurdu).
+     * Includes labels: service, event_type, queue_group, outcome
+     */
+    static readonly eventPermanentErrorTotal: Counter<"service" | "event_type" | "queue_group" | "outcome">;
+    /**
      * DLQ oynatmaları (Counter)
      *
      * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
