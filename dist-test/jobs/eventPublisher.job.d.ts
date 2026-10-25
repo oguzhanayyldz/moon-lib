@@ -22,6 +22,7 @@ export declare class EventPublisherJob {
     private static readonly STUCK_FALLBACK_MAX_AGE;
     private static readonly STUCK_METRIC_AGE;
     private static readonly PRIORITY_TRANSITION_DELAY;
+    private static readonly NORMAL_DRAIN_BUDGET_MS_DEFAULT;
     private intervalId;
     private versionEventIntervalId;
     private monitoringId;
@@ -33,6 +34,8 @@ export declare class EventPublisherJob {
     private readonly versionBatchSize;
     private readonly versionMaxBatchesPerTick;
     private versionDrainRunning;
+    private normalDrainRunning;
+    private readonly normalDrainBudgetMs;
     private readonly versionLeases;
     private readonly podId;
     private lastLeaseWarnAt;
@@ -47,6 +50,8 @@ export declare class EventPublisherJob {
     private collectOutboxMetrics;
     /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
     private static readPositiveIntEnv;
+    /** Sıfır ya da pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    private static readNonNegativeIntEnv;
     /**
      * Environment variable'dan servis adını çöz
      */
@@ -67,12 +72,20 @@ export declare class EventPublisherJob {
      * TTL-based cleanup — eski veya aşırı büyümüş priority kayıtlarını temizle
      */
     private cleanupPriorityMap;
+    /**
+     * Normal olay turu (UC-1082): tek geçişi bütçe dolana ya da bir geçiş hiç olay yayınlamayana kadar tekrarlar.
+     * Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz. Priority geçiş beklemesi ve _system_ önceliği
+     * her geçişte aynen uygulanır: bekleyen kullanıcı o geçişte olay yayınlamaz, döngü onu zorlamaz.
+     */
     private processEvents;
+    /** Tek geçiş: _system_ olayları ya da en çok 10 kullanıcının en düşük priority'li olayları. Yayınlanan olay sayısını döndürür. */
+    private processEventsOnce;
     /**
      * Event batch'ini işle — paralel, concurrency limit ile
      */
     private static readonly CONCURRENCY_LIMIT;
     private processEventBatch;
+    /** Olay bu çağrıda yayınlanıp published işaretlendiyse true. */
     private processOneEvent;
     /**
      * Yayını başarısız olan kayıtları işaretle (issue #648 K-1).

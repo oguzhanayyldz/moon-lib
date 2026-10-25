@@ -96,6 +96,7 @@ class EventPublisherJob {
         this.lastAlertLoggedAt = null; // Son ALERT logunun zamanı; sayı eşiğin altına inince sıfırlanır
         // Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz (aynı pod'da üst üste boşaltma yok)
         this.versionDrainRunning = false;
+        this.normalDrainRunning = false;
         this.podId = process.env.HOSTNAME || os_1.default.hostname();
         this.lastLeaseWarnAt = 0;
         // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
@@ -109,6 +110,7 @@ class EventPublisherJob {
         this.versionEventInterval = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_INTERVAL_MS', EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT);
         this.versionBatchSize = Math.min(EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_BATCH_SIZE', EventPublisherJob.VERSION_BATCH_SIZE_MAX), EventPublisherJob.VERSION_BATCH_SIZE_MAX);
         this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
+        this.normalDrainBudgetMs = EventPublisherJob.readNonNegativeIntEnv('OUTBOX_DRAIN_BUDGET_MS', EventPublisherJob.NORMAL_DRAIN_BUDGET_MS_DEFAULT);
         this.versionLeases = new versionEventLease_util_1.VersionEventLeases(() => redisWrapper_service_1.redisWrapper.client, {
             leaseMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LEASE_MS', EventPublisherJob.VERSION_LEASE_MS_DEFAULT),
             latestTtlMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LATEST_TTL_MS', EventPublisherJob.VERSION_LATEST_TTL_MS_DEFAULT),
@@ -161,6 +163,14 @@ class EventPublisherJob {
     static readPositiveIntEnv(name, fallback) {
         const value = Number(process.env[name]);
         return Number.isInteger(value) && value > 0 ? value : fallback;
+    }
+    /** Sıfır ya da pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    static readNonNegativeIntEnv(name, fallback) {
+        const raw = process.env[name];
+        if (raw === undefined || raw.trim() === '')
+            return fallback;
+        const value = Number(raw);
+        return Number.isInteger(value) && value >= 0 ? value : fallback;
     }
     /**
      * Environment variable'dan servis adını çöz
@@ -215,7 +225,7 @@ class EventPublisherJob {
             this.monitoringId = setInterval(async () => {
                 await this.monitorFailedEvents();
             }, EventPublisherJob.RETRY_INTERVAL);
-            logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${this.versionEventInterval}ms (batch=${this.versionBatchSize}, maxBatches=${this.versionMaxBatchesPerTick}), serviceOffset=${this.serviceOffset}ms`);
+            logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms (drainBudget=${this.normalDrainBudgetMs}ms), version=${this.versionEventInterval}ms (batch=${this.versionBatchSize}, maxBatches=${this.versionMaxBatchesPerTick}), serviceOffset=${this.serviceOffset}ms`);
         }, initialDelay);
     }
     stop() {
@@ -249,8 +259,40 @@ class EventPublisherJob {
             }
         }
     }
+    /**
+     * Normal olay turu (UC-1082): tek geçişi bütçe dolana ya da bir geçiş hiç olay yayınlamayana kadar tekrarlar.
+     * Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz. Priority geçiş beklemesi ve _system_ önceliği
+     * her geçişte aynen uygulanır: bekleyen kullanıcı o geçişte olay yayınlamaz, döngü onu zorlamaz.
+     */
     async processEvents() {
+        if (this.normalDrainRunning) {
+            logger_service_1.logger.debug('Previous outbox drain is still running, skipping this tick');
+            return;
+        }
+        this.normalDrainRunning = true;
+        try {
+            const deadline = Date.now() + this.normalDrainBudgetMs;
+            let passes = 0;
+            let published = 0;
+            do {
+                const passPublished = await this.processEventsOnce();
+                passes++;
+                published += passPublished;
+                if (passPublished === 0)
+                    break;
+            } while (Date.now() < deadline);
+            if (passes > 1) {
+                logger_service_1.logger.debug(`Outbox drain: ${published} events in ${passes} passes`);
+            }
+        }
+        finally {
+            this.normalDrainRunning = false;
+        }
+    }
+    /** Tek geçiş: _system_ olayları ya da en çok 10 kullanıcının en düşük priority'li olayları. Yayınlanan olay sayısını döndürür. */
+    async processEventsOnce() {
         var _a;
+        let published = 0;
         try {
             // TTL-based cleanup — eski priority kayıtlarını temizle (bellek sızıntısı önleme)
             this.cleanupPriorityMap();
@@ -271,8 +313,7 @@ class EventPublisherJob {
                 .limit(20);
             if (systemEvents.length > 0) {
                 logger_service_1.logger.debug(`Processing ${systemEvents.length} _system_ events (highest priority)`);
-                await this.processEventBatch(systemEvents);
-                return; // _system_ bitmeden diğerlerine geçme
+                return await this.processEventBatch(systemEvents); // _system_ bitmeden diğerlerine geçme
             }
             // ✅ STEP 2: Her kullanıcı için sequential priority işleme
             const usersWithPendingEvents = await this.outboxModel.distinct('userId', {
@@ -283,7 +324,7 @@ class EventPublisherJob {
                 userId: { $nin: ['_system_', null] }
             });
             if (usersWithPendingEvents.length === 0) {
-                return;
+                return 0;
             }
             // Her kullanıcı için en yüksek öncelikli event'leri işle
             for (const userId of usersWithPendingEvents.slice(0, 10)) {
@@ -322,7 +363,7 @@ class EventPublisherJob {
                 });
                 if (userEvents.length > 0) {
                     logger_service_1.logger.debug(`Processing ${userEvents.length} priority-${currentPriority} events for user ${userId}`);
-                    await this.processEventBatch(userEvents);
+                    published += await this.processEventBatch(userEvents);
                     // Son işlenen priority'yi güncelle
                     this.lastProcessedPriority.set(userId, {
                         priority: currentPriority,
@@ -341,14 +382,19 @@ class EventPublisherJob {
         catch (error) {
             logger_service_1.logger.error('Event processing failed:', error);
         }
+        return published;
     }
     async processEventBatch(events) {
+        let published = 0;
         // Concurrency limit ile paralel işleme
         for (let i = 0; i < events.length; i += EventPublisherJob.CONCURRENCY_LIMIT) {
             const chunk = events.slice(i, i + EventPublisherJob.CONCURRENCY_LIMIT);
-            await Promise.all(chunk.map(event => this.processOneEvent(event)));
+            const results = await Promise.all(chunk.map(event => this.processOneEvent(event)));
+            published += results.filter(Boolean).length;
         }
+        return published;
     }
+    /** Olay bu çağrıda yayınlanıp published işaretlendiyse true. */
     async processOneEvent(event) {
         try {
             // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
@@ -366,7 +412,7 @@ class EventPublisherJob {
             // Event başka bir pod tarafından alınmış demektir, atla
             if (updated.modifiedCount === 0) {
                 logger_service_1.logger.debug(`Event ${event.id} is already being processed by another publisher, skipping`);
-                return;
+                return false;
             }
             // Deneme hakkını yalnız yayın hatası tüketir; Mongo durum güncellemesi hataları aşağıdaki catch'e düşer
             try {
@@ -376,14 +422,16 @@ class EventPublisherJob {
                 // Önce logla: markPublishFailed'daki Mongo hatası dış catch'e düşer ve asıl yayın hatası kaybolmaz
                 logger_service_1.logger.error(`Failed to publish event ${event.id}:`, error);
                 await this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount);
-                return;
+                return false;
             }
             // Başarılı olarak işaretle
             await this.outboxModel.updateOne({ _id: event.id, status: 'processing', processingStartedAt: claimedAt }, { $set: { status: 'published' } });
             logger_service_1.logger.info(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
+            return true;
         }
         catch (error) {
             logger_service_1.logger.error(`Failed to update outbox state of event ${event.id}:`, error);
+            return false;
         }
     }
     /**
@@ -1014,6 +1062,10 @@ EventPublisherJob.STUCK_FALLBACK_MAX_AGE = 24 * 60 * 60000; // 24 saat
 // Metrikte "kendiliğinden kurtulmayacak" sayılan processing kaydı: otomatik kurtarmanın iki katı süre
 EventPublisherJob.STUCK_METRIC_AGE = 2 * EventPublisherJob.STUCK_PROCESSING_TIMEOUT;
 EventPublisherJob.PRIORITY_TRANSITION_DELAY = 5000; // 5 saniye - priority geçişlerinde bekleme
+// UC-1082: normal olaylar 3 sn'de bir tek geçişle (kullanıcı başına 50 olay) yayınlanıyordu; tek kullanıcının
+// tavanı ~1.000 olay/dk idi ve 10.000 siparişlik birikim 40 dk'da boşalıyordu. Tur artık bu bütçe dolana ya da
+// kuyrukta yayınlanacak olay kalmayana kadar geçişi tekrarlar. 0 = eski tek geçiş davranışı (OUTBOX_DRAIN_BUDGET_MS).
+EventPublisherJob.NORMAL_DRAIN_BUDGET_MS_DEFAULT = 2000;
 EventPublisherJob.PRIORITY_MAP_TTL = 300000; // 5 dakika — bu süreden eski entry'ler temizlenir
 EventPublisherJob.PRIORITY_MAP_MAX_SIZE = 2000; // Maksimum kullanıcı sayısı
 /**
