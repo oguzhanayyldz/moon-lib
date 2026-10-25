@@ -1,17 +1,74 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.redisWrapper = void 0;
+exports.resolveRedisStartupMaxWaitMs = resolveRedisStartupMaxWaitMs;
+exports.getRedisStartupRetryDelay = getRedisStartupRetryDelay;
 const redis_1 = require("redis");
 const logger_service_1 = require("./logger.service");
 const logSafety_util_1 = require("../utils/logSafety.util");
+const STARTUP_RETRY_BASE_DELAY_MS = 1000;
+const STARTUP_RETRY_MAX_DELAY_MS = 30000;
+/**
+ * Açılışta Redis'e ulaşılamazsa connect()'in toplam kaç ms yeniden deneyeceği (UC-1043).
+ * REDIS_STARTUP_MAX_WAIT_MS yoksa ya da geçersizse -1 = süresiz (tavan startup probe'dadır);
+ * 0 = tek deneme (eski davranış).
+ */
+function resolveRedisStartupMaxWaitMs() {
+    const raw = process.env.REDIS_STARTUP_MAX_WAIT_MS;
+    if (raw === undefined || raw.trim() === '')
+        return -1;
+    const value = Number(raw);
+    return Number.isInteger(value) && value >= 0 ? value : -1;
+}
+/** n. başarısız açılış denemesinden sonraki bekleme: 1, 2, 4, 8, 16, 30, 30 ... sn. */
+function getRedisStartupRetryDelay(attempt) {
+    return Math.min(STARTUP_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), STARTUP_RETRY_MAX_DELAY_MS);
+}
 class RedisWrapper {
+    constructor() {
+        this.hasConnected = false;
+    }
     get client() {
         if (!this._client) {
             throw new Error('Cannot access Redis client before connecting');
         }
         return this._client;
     }
+    /**
+     * Redis'e bağlanır. Açılışta (bu süreç henüz hiç bağlanmadıysa) Redis geç gelirse tavanlı üstel geri çekilmeyle
+     * yeniden dener (UC-1043): CI Redis'i ve servisleri birlikte yeniden başlattığında servis Redis'ten önce açılıp
+     * tek denemede vazgeçiyor, start()'ın catch'i hatayı yutunca HTTP sunucusu hiç açılmıyor ve pod startup probe
+     * dolana kadar (~5 dk) hizmet dışı kalıyordu. Bekleme süresince HTTP kapalı olduğundan pod hazır sayılmaz.
+     * Çalışma sırasındaki yeniden bağlanma (servislerin 'end' işleyicisi) tek deneme kalır: başarısızlıkta servis
+     * yeniden başlar; aksi halde eski istemciyi tutan bileşenler kapalı istemciyle kalırdı.
+     * Kod/yapılandırma hatası (geçersiz URL: TypeError) yeniden denenmez.
+     */
     async connect(url, timeoutMs = 30000) {
+        const maxWaitMs = this.hasConnected ? 0 : resolveRedisStartupMaxWaitMs();
+        const startedAt = Date.now();
+        for (let attempt = 1;; attempt++) {
+            try {
+                await this.connectOnce(url, timeoutMs);
+                this.hasConnected = true;
+                if (attempt > 1) {
+                    logger_service_1.logger.info(`✅ Redis reachable after ${attempt} startup attempts (${Date.now() - startedAt}ms)`);
+                }
+                return;
+            }
+            catch (error) {
+                const delay = getRedisStartupRetryDelay(attempt);
+                const elapsed = Date.now() - startedAt;
+                const giveUp = (error === null || error === void 0 ? void 0 : error.name) === 'TypeError'
+                    || (maxWaitMs >= 0 && elapsed + delay > maxWaitMs);
+                if (giveUp) {
+                    throw error;
+                }
+                logger_service_1.logger.warn(`Redis not reachable at startup (attempt ${attempt}, ${elapsed}ms elapsed), retrying in ${delay}ms`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    async connectOnce(url, timeoutMs) {
         // URL parolayı taşır; yalnızca maskelenmiş biçimi loglanır.
         const safeUrl = (0, logSafety_util_1.maskConnectionUriSecret)(url);
         try {
@@ -32,7 +89,7 @@ class RedisWrapper {
                     this._client = undefined;
                     this._url = undefined;
                     // Recursive call to create new connection
-                    return this.connect(url, timeoutMs);
+                    return this.connectOnce(url, timeoutMs);
                 }
                 return;
             }
@@ -69,11 +126,14 @@ class RedisWrapper {
                 .on('reconnecting', () => logger_service_1.logger.warn('🔄 Redis Client Reconnecting...'))
                 .on('end', () => logger_service_1.logger.warn('⚠️ Redis connection ended'));
             // Timeout wrapper ile connection - improved error handling
+            let timeoutTimer;
             try {
                 await Promise.race([
                     client.connect(),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error(`Redis connection timeout after ${timeoutMs}ms`)), timeoutMs))
-                ]);
+                    new Promise((_, reject) => {
+                        timeoutTimer = setTimeout(() => reject(new Error(`Redis connection timeout after ${timeoutMs}ms`)), timeoutMs);
+                    })
+                ]).finally(() => clearTimeout(timeoutTimer));
                 // Connection başarılı, şimdi ping test yap
                 logger_service_1.logger.info('🔍 Validating Redis connection with ping test...');
                 await client.ping();
@@ -88,8 +148,13 @@ class RedisWrapper {
                 // Connection failed, cleanup client
                 logger_service_1.logger.error('❌ Redis connection or validation failed, cleaning up...');
                 try {
-                    if (client.isOpen) {
+                    if (client.isReady) {
                         await client.quit();
+                    }
+                    else if (client.isOpen) {
+                        // Hazır olmayan istemci kendi yeniden bağlanma döngüsünde: QUIT kuyrukta bekler,
+                        // disconnect() döngüyü durdurur (yoksa her açılış denemesi arkada bir istemci bırakırdı).
+                        await client.disconnect();
                     }
                 }
                 catch (quitError) {
