@@ -108,6 +108,7 @@ class EventPublisherJob {
         this.normalDrainRunning = false;
         this.podId = process.env.HOSTNAME || os_1.default.hostname();
         this.lastLeaseWarnAt = 0;
+        this.lastHintFallbackWarnAt = 0;
         // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
         this.lastProcessedPriority = new Map();
         this.outboxModel = (0, outbox_schema_1.createOutboxModel)(connection);
@@ -295,8 +296,8 @@ class EventPublisherJob {
                     if (passPublished === 0)
                         break;
                 } while (Date.now() < deadline);
-                if (passes > 1) {
-                    logger_service_1.logger.debug(`Outbox drain: ${published} events in ${passes} passes`);
+                if (published > 0) {
+                    logger_service_1.logger.info(`Outbox drain: ${published} events in ${passes} passes`);
                 }
             }
             finally {
@@ -344,17 +345,8 @@ class EventPublisherJob {
                 }
                 // Her kullanıcı için en yüksek öncelikli event'leri işle
                 for (const userId of usersWithPendingEvents.slice(0, 10)) {
-                    // ✅ TEK SORGU: Priority sıralı event'leri al, en düşük priority'yi belirle
-                    const sortedEvents = yield this.outboxModel.find({
-                        status: 'pending',
-                        environment: currentEnvironment,
-                        retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
-                        eventType: { $ne: common_1.Subjects.EntityVersionUpdated },
-                        userId: userId
-                    })
-                        .sort({ priority: 1, creationDate: 1 })
-                        .limit(50)
-                        .lean();
+                    // Priority sıralı event'leri al, en düşük priority'yi belirle
+                    const sortedEvents = yield this.findUserEvents(userId, currentEnvironment);
                     if (sortedEvents.length === 0)
                         continue;
                     // İlk event'in priority'si = en düşük priority
@@ -388,7 +380,7 @@ class EventPublisherJob {
                         // ✅ Ek sorguya gerek yok: 50 event aldık, hepsi aynı priority değilse
                         // veya tam 50 geldiyse, demek ki daha var
                         const remainingCount = sortedEvents.length - userEvents.length;
-                        const mightHaveMore = userEvents.length === 50;
+                        const mightHaveMore = userEvents.length === EventPublisherJob.USER_EVENTS_LIMIT;
                         if (remainingCount > 0 || mightHaveMore) {
                             logger_service_1.logger.debug(`User ${userId} still has pending events (same priority: ${mightHaveMore ? '50+' : '0'}, other priorities: ${remainingCount})`);
                         }
@@ -399,6 +391,44 @@ class EventPublisherJob {
                 logger_service_1.logger.error('Event processing failed:', error);
             }
             return published;
+        });
+    }
+    /**
+     * Kullanıcının en düşük priority'li bekleyen olayları (UC-1117), en çok USER_EVENTS_LIMIT kayıt, priority ve
+     * creationDate sırasıyla. İki sorgu, her biri kendi indeksine hint'li: önce priority 1-4 (ve priority'siz eski
+     * kayıtlar), yoksa priority 5. Sürüm olayları ilk sorgunun indeks aralığına girmez, ikincide eventType sınırıyla
+     * atlanır. İlk sorgu boş değilse sonuç tek sorgununkiyle aynıdır: sonraki adım yalnız en düşük priority'yi yayınlar.
+     */
+    findUserEvents(userId, environment) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const filter = {
+                status: 'pending',
+                environment,
+                retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
+                eventType: { $ne: common_1.Subjects.EntityVersionUpdated },
+                userId,
+            };
+            const urgent = yield this.findWithHint(Object.assign(Object.assign({}, filter), { priority: { $not: { $gte: 5 } } }), EventPublisherJob.USER_PRIORITY_INDEX);
+            if (urgent.length > 0)
+                return urgent;
+            return this.findWithHint(Object.assign(Object.assign({}, filter), { priority: { $gte: 5 } }), EventPublisherJob.USER_EVENT_TYPE_INDEX);
+        });
+    }
+    /** İndeks yoksa ya da henüz kuruluyorsa Mongo hint'li sorguyu reddeder; yayın durmasın diye hint'siz yeniden sorgular. */
+    findWithHint(filter, index) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const query = () => this.outboxModel.find(filter).sort({ priority: 1, creationDate: 1 }).limit(EventPublisherJob.USER_EVENTS_LIMIT);
+            try {
+                return yield query().hint(index).lean();
+            }
+            catch (error) {
+                const now = Date.now();
+                if (now - this.lastHintFallbackWarnAt >= EventPublisherJob.HINT_FALLBACK_WARN_INTERVAL) {
+                    this.lastHintFallbackWarnAt = now;
+                    logger_service_1.logger.warn(`Outbox query with index hint ${JSON.stringify(index)} failed, retrying without hint:`, error);
+                }
+                return query().lean();
+            }
         });
     }
     processEventBatch(events) {
@@ -446,7 +476,8 @@ class EventPublisherJob {
                 }
                 // Başarılı olarak işaretle
                 yield this.outboxModel.updateOne({ _id: event.id, status: 'processing', processingStartedAt: claimedAt }, { $set: { status: 'published' } });
-                logger_service_1.logger.info(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
+                // UC-1117: olay başına satır debug'da; tur özeti processEvents'te info
+                logger_service_1.logger.debug(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
                 return true;
             }
             catch (error) {
@@ -512,7 +543,7 @@ class EventPublisherJob {
                     if (!result.more)
                         break;
                 }
-                if (batches > 1) {
+                if (published > 0) {
                     logger_service_1.logger.info(`🔄 Version event drain: ${published} events in ${batches} batches`);
                 }
             }
@@ -602,7 +633,7 @@ class EventPublisherJob {
                 const sendKeys = new Set(toSend.map(e => (0, versionEventOutbox_util_1.versionEventKey)(e.payload)));
                 const eventIds = toSend.map(e => e.id);
                 const superseded = versionEvents.filter(e => sendKeys.has((0, versionEventOutbox_util_1.versionEventKey)(e.payload)) && winners.get((0, versionEventOutbox_util_1.versionEventKey)(e.payload)) !== e);
-                logger_service_1.logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk (${toSend.length} sent, ${superseded.length} superseded, ${deferred.length} in flight elsewhere, ${alreadyDelivered.length} already delivered)`);
+                logger_service_1.logger.debug(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk (${toSend.length} sent, ${superseded.length} superseded, ${deferred.length} in flight elsewhere, ${alreadyDelivered.length} already delivered)`);
                 if (toSend.length === 0) {
                     return { published: 0, more: fullBatch };
                 }
@@ -637,7 +668,7 @@ class EventPublisherJob {
                         })), { ordered: false });
                         EventMetrics_1.EventMetrics.versionEventsCoalescedTotal.inc({ service: this.serviceLabel, stage: 'send' }, superseded.length);
                     }
-                    logger_service_1.logger.info(`✅ Bulk published ${toSend.length} EntityVersionUpdated events (batch: ${batchId})`);
+                    logger_service_1.logger.debug(`✅ Bulk published ${toSend.length} EntityVersionUpdated events (batch: ${batchId})`);
                     return { published: toSend.length, more: fullBatch };
                 }
                 catch (error) {
@@ -1101,6 +1132,13 @@ EventPublisherJob.PRIORITY_TRANSITION_DELAY = 5000; // 5 saniye - priority geçi
 // tavanı ~1.000 olay/dk idi ve 10.000 siparişlik birikim 40 dk'da boşalıyordu. Tur artık bu bütçe dolana ya da
 // kuyrukta yayınlanacak olay kalmayana kadar geçişi tekrarlar. 0 = eski tek geçiş davranışı (OUTBOX_DRAIN_BUDGET_MS).
 EventPublisherJob.NORMAL_DRAIN_BUDGET_MS_DEFAULT = 2000;
+EventPublisherJob.USER_EVENTS_LIMIT = 50;
+// UC-1117: kullanıcı başı sorgunun indeksleri (outbox.schema.ts). Hint'siz tek sorguda planlayıcı, sürüm olayı
+// birikiminde eventType'lı indeksi seçip önbelleğe alıyor; birikim iş olayına dönünce plan değişmiyor ve her
+// geçiş binlerce bekleyen kaydı okuyup bellekte sıralıyordu (UC-1082 profili: sorgu başına ~12 bin belge).
+EventPublisherJob.USER_PRIORITY_INDEX = { status: 1, environment: 1, userId: 1, priority: 1, creationDate: 1 };
+EventPublisherJob.USER_EVENT_TYPE_INDEX = { status: 1, environment: 1, retryCount: 1, userId: 1, eventType: 1 };
+EventPublisherJob.HINT_FALLBACK_WARN_INTERVAL = 60000; // hint'siz sorguya düşme uyarısı en fazla dakikada bir
 EventPublisherJob.PRIORITY_MAP_TTL = 300000; // 5 dakika — bu süreden eski entry'ler temizlenir
 EventPublisherJob.PRIORITY_MAP_MAX_SIZE = 2000; // Maksimum kullanıcı sayısı
 /**

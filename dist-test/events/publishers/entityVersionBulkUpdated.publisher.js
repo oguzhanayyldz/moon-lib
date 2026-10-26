@@ -19,7 +19,8 @@ class EntityVersionBulkUpdatedPublisher extends common_1.Publisher {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 await super.publish(data);
-                logger_service_1.logger.info(`✅ EntityVersionBulkUpdated published: ${data.batchSize} updates in batch ${data.batchId}`);
+                // UC-1117: parti başına satır debug'da; tur özeti EventPublisherJob'da info
+                logger_service_1.logger.debug(`✅ EntityVersionBulkUpdated published: ${data.batchSize} updates in batch ${data.batchId}`);
                 return;
             }
             catch (error) {
