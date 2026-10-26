@@ -23,6 +23,10 @@ export declare class EventPublisherJob {
     private static readonly STUCK_METRIC_AGE;
     private static readonly PRIORITY_TRANSITION_DELAY;
     private static readonly NORMAL_DRAIN_BUDGET_MS_DEFAULT;
+    private static readonly USER_EVENTS_LIMIT;
+    private static readonly USER_PRIORITY_INDEX;
+    private static readonly USER_EVENT_TYPE_INDEX;
+    private static readonly HINT_FALLBACK_WARN_INTERVAL;
     private intervalId;
     private versionEventIntervalId;
     private monitoringId;
@@ -39,6 +43,7 @@ export declare class EventPublisherJob {
     private readonly versionLeases;
     private readonly podId;
     private lastLeaseWarnAt;
+    private lastHintFallbackWarnAt;
     private lastProcessedPriority;
     private static readonly PRIORITY_MAP_TTL;
     private static readonly PRIORITY_MAP_MAX_SIZE;
@@ -80,6 +85,15 @@ export declare class EventPublisherJob {
     private processEvents;
     /** Tek geçiş: _system_ olayları ya da en çok 10 kullanıcının en düşük priority'li olayları. Yayınlanan olay sayısını döndürür. */
     private processEventsOnce;
+    /**
+     * Kullanıcının en düşük priority'li bekleyen olayları (UC-1117), en çok USER_EVENTS_LIMIT kayıt, priority ve
+     * creationDate sırasıyla. İki sorgu, her biri kendi indeksine hint'li: önce priority 1-4 (ve priority'siz eski
+     * kayıtlar), yoksa priority 5. Sürüm olayları ilk sorgunun indeks aralığına girmez, ikincide eventType sınırıyla
+     * atlanır. İlk sorgu boş değilse sonuç tek sorgununkiyle aynıdır: sonraki adım yalnız en düşük priority'yi yayınlar.
+     */
+    private findUserEvents;
+    /** İndeks yoksa ya da henüz kuruluyorsa Mongo hint'li sorguyu reddeder; yayın durmasın diye hint'siz yeniden sorgular. */
+    private findWithHint;
     /**
      * Event batch'ini işle — paralel, concurrency limit ile
      */

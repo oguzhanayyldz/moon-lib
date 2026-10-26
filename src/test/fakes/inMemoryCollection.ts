@@ -17,7 +17,7 @@ interface ObjectIdLike {
     toHexString(): string;
 }
 
-const FIELD_OPERATORS = new Set(['$lt', '$lte', '$gt', '$gte', '$ne', '$in', '$nin', '$exists']);
+const FIELD_OPERATORS = new Set(['$lt', '$lte', '$gt', '$gte', '$ne', '$in', '$nin', '$exists', '$not']);
 const EXPRESSION_COMPARISONS = new Set(['$lt', '$lte', '$gt', '$gte']);
 const UPDATE_OPERATORS = new Set(['$set', '$inc', '$unset']);
 
@@ -94,6 +94,8 @@ function matchField(actual: unknown, condition: unknown): boolean {
             case '$in': return asArray(expected, '$in').some(item => valuesEqual(actual, item));
             case '$nin': return !asArray(expected, '$nin').some(item => valuesEqual(actual, item));
             case '$exists': return (actual !== undefined) === expected;
+            // Like MongoDB, `$not` also matches documents whose field is missing or null.
+            case '$not': return !matchField(actual, expected);
             default: return compare(actual, expected, operator);
         }
     });
@@ -168,10 +170,16 @@ class InMemoryQuery implements PromiseLike<Doc[]> {
     private sortSpec: SortSpec | null = null;
     private limitCount: number | null = null;
 
-    constructor (private readonly source: () => Doc[]) { }
+    constructor (private readonly source: () => Doc[], private readonly onHint: (index: SortSpec) => void) { }
 
     sort(spec: SortSpec): this {
         this.sortSpec = spec;
+        return this;
+    }
+
+    /** Index hints do not change the result; they are recorded on the collection (`hints`) for tests. */
+    hint(index: SortSpec): this {
+        this.onHint(index);
         return this;
     }
 
@@ -201,6 +209,7 @@ class InMemoryQuery implements PromiseLike<Doc[]> {
 
 export class InMemoryCollection {
     readonly docs: Doc[] = [];
+    readonly hints: Array<{ filter: Filter; index: SortSpec }> = [];
 
     insert(doc: Doc): Doc {
         const stored = { ...doc };
@@ -212,7 +221,10 @@ export class InMemoryCollection {
     }
 
     find(filter: Filter): InMemoryQuery {
-        return new InMemoryQuery(() => this.docs.filter(doc => matchesFilter(doc, filter)));
+        return new InMemoryQuery(
+            () => this.docs.filter(doc => matchesFilter(doc, filter)),
+            index => this.hints.push({ filter, index })
+        );
     }
 
     async distinct(field: string, filter: Filter): Promise<unknown[]> {
