@@ -154,6 +154,33 @@ describe('UC-984 — outbox recovery, claim ownership and outbox metrics (real M
             expect(await statusOf(otherEnv)).toBe('processing');
         });
 
+        it('UC-1070: a record of another environment with an old processingStartedAt stays processing', async () => {
+            // Shared Mongo: a production pod must not hand a development claim back (and vice versa)
+            const otherEnv = await insert({ status: 'processing', environment: 'development', processingStartedAt: ago(10 * MIN) });
+            const own = await insert({ status: 'processing', processingStartedAt: ago(10 * MIN) });
+
+            await newJob().monitorFailedEvents();
+
+            expect(await statusOf(otherEnv)).toBe('processing');
+            expect((await Outbox.collection.findOne({ _id: otherEnv }))?.processingStartedAt).toBeInstanceOf(Date);
+            expect(await statusOf(own)).toBe('pending');
+        });
+
+        it('UC-1070: permanently failed records of another environment do not raise the ALERT', async () => {
+            const { logger } = jest.requireMock('../services/logger.service') as { logger: { error: jest.Mock } };
+            const alerts = () => logger.error.mock.calls.filter(([message]) => String(message).startsWith('ALERT:'));
+            logger.error.mockClear();
+            await Promise.all(Array.from({ length: 6 }, () => insert({ status: 'failed', environment: 'development', retryCount: 5 })));
+
+            await newJob().monitorFailedEvents();
+            expect(alerts()).toHaveLength(0);
+
+            // Control: the same records in the own environment do raise it
+            await Promise.all(Array.from({ length: 6 }, () => insert({ status: 'failed', retryCount: 5 })));
+            await newJob().monitorFailedEvents();
+            expect(alerts()).toEqual([[`ALERT: 6 events have failed permanently!`]]);
+        });
+
         it('UC-984: a recovered record is published by the next version tick (no loss end to end)', async () => {
             const id = await insert({ status: 'processing', updatedOn: ago(10 * MIN) });
             const job = newJob();

@@ -707,15 +707,17 @@ class EventPublisherJob {
             const now = Date.now();
             const stuckCutoff = new Date(now - EventPublisherJob.STUCK_PROCESSING_TIMEOUT);
             const fallbackFloor = new Date(now - EventPublisherJob.STUCK_FALLBACK_MAX_AGE);
+            const environment = process.env.NODE_ENV || 'production';
             const recovered = await this.outboxModel.updateMany({
                 status: 'processing',
+                // UC-1070: paylaşımlı Mongo'da başka environment'ın claim'i geri alınmaz (iki dal için de geçerli)
+                environment,
                 $or: [
                     { processingStartedAt: { $lt: stuckCutoff } },
                     // UC-984: zaman damgası olmayan kayıt hiç kurtarılmıyordu; son 24 saattekiler updatedOn'a,
-                    // updatedOn da yoksa creationDate'e göre kurtarılır (yalnız kendi environment'ı)
+                    // updatedOn da yoksa creationDate'e göre kurtarılır
                     {
                         processingStartedAt: { $not: { $type: 'date' } },
-                        environment: process.env.NODE_ENV || 'production',
                         $or: [
                             { updatedOn: { $lt: stuckCutoff, $gte: fallbackFloor } },
                             { updatedOn: { $not: { $type: 'date' } }, creationDate: { $lt: stuckCutoff, $gte: fallbackFloor } }
@@ -734,7 +736,7 @@ class EventPublisherJob {
             // yeniden yayınlanması ayrı ve onaylı bir operasyondur.
             const requeued = await this.outboxModel.updateMany({
                 status: 'failed',
-                environment: process.env.NODE_ENV || 'production',
+                environment,
                 retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                 nextAttemptAt: { $lte: new Date() }
             }, {
@@ -745,7 +747,9 @@ class EventPublisherJob {
                 logger_service_1.logger.warn(`Requeued ${requeued.modifiedCount} failed events for another publish attempt`);
             }
             // Diğer mevcut monitoring kodları...
+            // UC-1070: başka environment'ın kalıcı hataları bu pod'un ALERT'ine girmez
             const failedEvents = await this.outboxModel.countDocuments({
+                environment,
                 status: 'failed',
                 retryCount: { $gte: EventPublisherJob.MAX_PUBLISH_ATTEMPTS }
             });
