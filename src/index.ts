@@ -6,6 +6,7 @@ import { createIntegrationCategoryModel } from './models/integrationCategory.sch
 import { createIntegrationBrandModel } from './models/integrationBrand.schema';
 import { createIntegrationCategoryAttributesModel } from './models/integrationCategoryAttributes.schema';
 import { createIntegrationRequestLogModel, ensureIntegrationRequestLogTtlIndex } from './models/integrationRequestLog.schema';
+import { ensureRetentionTtlIndexes } from './models/retentionTtlIndex';
 import { logger as moonLogger } from './services/logger.service';
 
 // Models
@@ -16,6 +17,7 @@ export * from './models/integrationCategory.schema';
 export * from './models/integrationBrand.schema';
 export * from './models/integrationCategoryAttributes.schema';
 export * from './models/integrationRequestLog.schema';
+export * from './models/retentionTtlIndex';
 export * from './models/excelJob.schema';
 
 // Services
@@ -204,6 +206,8 @@ export const initializeModels = (connection: mongoose.Connection): void => {
     createOutboxModel(connection);
     createDeadLetterModel(connection);
     createExcelJobModel(connection);
+    // UC-1056: OUTBOX_RETENTION_DAYS / DEADLETTER_RETENTION_DAYS tanımlıysa saklama TTL'i
+    ensureRetentionTtlIndexes(connection, moonLogger);
 };
 
 export const initializeModelsForIntegration = (connection: mongoose.Connection): void => {
@@ -214,6 +218,8 @@ export const initializeModelsForIntegration = (connection: mongoose.Connection):
     createIntegrationBrandModel(connection);
     createIntegrationCategoryAttributesModel(connection);
     createIntegrationRequestLogModel(connection);
+    // UC-1056: OUTBOX_RETENTION_DAYS / DEADLETTER_RETENTION_DAYS tanımlıysa saklama TTL'i
+    ensureRetentionTtlIndexes(connection, moonLogger);
     // UC-962: istek loglarına 7 günlük TTL — başlangıcı bekletmez, hata servisi durdurmaz
     ensureIntegrationRequestLogTtlIndex(connection)
         .then(result => moonLogger.info(`Integration request log TTL index: ${result}`))

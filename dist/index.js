@@ -22,6 +22,7 @@ const integrationCategory_schema_1 = require("./models/integrationCategory.schem
 const integrationBrand_schema_1 = require("./models/integrationBrand.schema");
 const integrationCategoryAttributes_schema_1 = require("./models/integrationCategoryAttributes.schema");
 const integrationRequestLog_schema_1 = require("./models/integrationRequestLog.schema");
+const retentionTtlIndex_1 = require("./models/retentionTtlIndex");
 const logger_service_1 = require("./services/logger.service");
 // Models
 __exportStar(require("./models/base/base.schema"), exports);
@@ -31,6 +32,7 @@ __exportStar(require("./models/integrationCategory.schema"), exports);
 __exportStar(require("./models/integrationBrand.schema"), exports);
 __exportStar(require("./models/integrationCategoryAttributes.schema"), exports);
 __exportStar(require("./models/integrationRequestLog.schema"), exports);
+__exportStar(require("./models/retentionTtlIndex"), exports);
 __exportStar(require("./models/excelJob.schema"), exports);
 // Services
 __exportStar(require("./services/natsWrapper.service"), exports);
@@ -202,6 +204,8 @@ const initializeModels = (connection) => {
     (0, outbox_schema_1.createOutboxModel)(connection);
     (0, deadLetter_schema_1.createDeadLetterModel)(connection);
     (0, excelJob_schema_1.createExcelJobModel)(connection);
+    // UC-1056: OUTBOX_RETENTION_DAYS / DEADLETTER_RETENTION_DAYS tanımlıysa saklama TTL'i
+    (0, retentionTtlIndex_1.ensureRetentionTtlIndexes)(connection, logger_service_1.logger);
 };
 exports.initializeModels = initializeModels;
 const initializeModelsForIntegration = (connection) => {
@@ -212,6 +216,8 @@ const initializeModelsForIntegration = (connection) => {
     (0, integrationBrand_schema_1.createIntegrationBrandModel)(connection);
     (0, integrationCategoryAttributes_schema_1.createIntegrationCategoryAttributesModel)(connection);
     (0, integrationRequestLog_schema_1.createIntegrationRequestLogModel)(connection);
+    // UC-1056: OUTBOX_RETENTION_DAYS / DEADLETTER_RETENTION_DAYS tanımlıysa saklama TTL'i
+    (0, retentionTtlIndex_1.ensureRetentionTtlIndexes)(connection, logger_service_1.logger);
     // UC-962: istek loglarına 7 günlük TTL — başlangıcı bekletmez, hata servisi durdurmaz
     (0, integrationRequestLog_schema_1.ensureIntegrationRequestLogTtlIndex)(connection)
         .then(result => logger_service_1.logger.info(`Integration request log TTL index: ${result}`))

@@ -1,0 +1,124 @@
+import mongoose from 'mongoose';
+
+/**
+ * UC-1056 — outbox ve deadletters saklama süresi (KVKK).
+ *
+ * Kopyalarda temizlenen kişisel veri outbox payload'ında ve DLQ `data` alanında süresiz kalıyordu. Süre ortam
+ * değişkeniyle açılır; değişken yoksa hiçbir şey yapılmaz ('disabled'). Değişkeni kaldırmak kurulu indeksi
+ * KALDIRMAZ — geri dönüş: `db.<koleksiyon>.dropIndex('<indeks adı>')`.
+ *
+ * Kısmi (partial) TTL: yalnız işi bitmiş durumlar silinir. Bekleyen/işlenen/yeniden denenecek kayıtlar kapsam dışı.
+ */
+export type RetentionTtlIndexResult = 'disabled' | 'unchanged' | 'modified' | 'created';
+
+export const OUTBOX_RETENTION_TTL_INDEX = 'outbox_retention_ttl';
+/** pending/processing/failed yayınlanmayı bekler; silinmez. */
+export const OUTBOX_RETENTION_STATUSES = ['published', 'completed', 'superseded'];
+
+export const DEAD_LETTER_RETENTION_TTL_INDEX = 'deadletter_retention_ttl';
+/**
+ * replaying/processing işlemci claim'idir (5 dk zaman aşımıyla queued'a döner), silinmez. pending yalnız DLQ-H öncesi
+ * kalıntıdır; archived (UC-1044 onarımı) ve queued (en çok 5 oynatmada ~31 dk içinde çıkar; 30+ günlük kayıt bayattır)
+ * saklama süresi dolunca silinir.
+ */
+export const DEAD_LETTER_RETENTION_STATUSES = ['completed', 'failed', 'pending', 'archived', 'queued'];
+
+/**
+ * Gün sayısını okur. Tanımsız/boş → undefined (kapalı). Pozitif tam sayı değilse hata atar: yanlış yazılmış
+ * değer sessizce "kapalı" sayılmasın, başlangıçta uyarı olarak loglansın.
+ */
+export function parseRetentionDays(raw: string | undefined, variableName: string): number | undefined {
+    if (raw === undefined || raw.trim() === '') return undefined;
+    const days = Number(raw);
+    if (!Number.isInteger(days) || days < 1) {
+        throw new Error(`${variableName} must be a positive integer (days), got "${raw}"`);
+    }
+    return days;
+}
+
+async function ensureRetentionTtlIndex(
+    connection: mongoose.Connection,
+    modelName: string,
+    indexName: string,
+    dateField: string,
+    statuses: string[],
+    days: number | undefined
+): Promise<RetentionTtlIndexResult> {
+    if (days === undefined) return 'disabled';
+
+    const expireAfterSeconds = days * 24 * 60 * 60;
+    const partialFilterExpression = { status: { $in: statuses } };
+    const collection = connection.model(modelName).collection;
+
+    let indexes: Array<{
+        name?: string;
+        key: Record<string, unknown>;
+        expireAfterSeconds?: number;
+        partialFilterExpression?: unknown;
+    }> = [];
+    try {
+        indexes = (await collection.indexes()) as typeof indexes;
+    } catch (error: any) {
+        // Koleksiyon henüz yok (ilk kurulum): NamespaceNotFound
+        if (error?.code !== 26) throw error;
+    }
+
+    const existing = indexes.find(index => index.name === indexName);
+    if (existing) {
+        const sameShape =
+            JSON.stringify(existing.key) === JSON.stringify({ [dateField]: 1 }) &&
+            JSON.stringify(existing.partialFilterExpression) === JSON.stringify(partialFilterExpression);
+        if (sameShape) {
+            if (existing.expireAfterSeconds === expireAfterSeconds) return 'unchanged';
+            await connection.db.command({
+                collMod: collection.collectionName,
+                index: { name: indexName, expireAfterSeconds }
+            });
+            return 'modified';
+        }
+        // Kısmi filtre collMod ile değiştirilemez: indeksi yeniden kur
+        await collection.dropIndex(indexName);
+        await collection.createIndex({ [dateField]: 1 }, { name: indexName, expireAfterSeconds, partialFilterExpression });
+        return 'modified';
+    }
+
+    await collection.createIndex({ [dateField]: 1 }, { name: indexName, expireAfterSeconds, partialFilterExpression });
+    return 'created';
+}
+
+/** OUTBOX_RETENTION_DAYS: yayınlanmış outbox kayıtları `creationDate`'ten bu kadar gün sonra silinir. */
+export function ensureOutboxRetentionTtlIndex(
+    connection: mongoose.Connection,
+    days: number | undefined = parseRetentionDays(process.env.OUTBOX_RETENTION_DAYS, 'OUTBOX_RETENTION_DAYS')
+): Promise<RetentionTtlIndexResult> {
+    return ensureRetentionTtlIndex(
+        connection, 'Outbox', OUTBOX_RETENTION_TTL_INDEX, 'creationDate', OUTBOX_RETENTION_STATUSES, days
+    );
+}
+
+/** DEADLETTER_RETENTION_DAYS: biten/oynatılamaz DLQ kayıtları `timestamp`'ten bu kadar gün sonra silinir. */
+export function ensureDeadLetterRetentionTtlIndex(
+    connection: mongoose.Connection,
+    days: number | undefined = parseRetentionDays(process.env.DEADLETTER_RETENTION_DAYS, 'DEADLETTER_RETENTION_DAYS')
+): Promise<RetentionTtlIndexResult> {
+    return ensureRetentionTtlIndex(
+        connection, 'DeadLetter', DEAD_LETTER_RETENTION_TTL_INDEX, 'timestamp', DEAD_LETTER_RETENTION_STATUSES, days
+    );
+}
+
+/** Başlangıcı bekletmez; hata servisi durdurmaz (UC-962 deseni). */
+export function ensureRetentionTtlIndexes(
+    connection: mongoose.Connection,
+    log: { info: (message: string) => void; warn: (message: string, meta?: unknown) => void }
+): void {
+    const run = (label: string, ensure: () => Promise<RetentionTtlIndexResult>) => {
+        Promise.resolve()
+            .then(ensure)
+            .then(result => log.info(`${label} retention TTL index: ${result}`))
+            .catch(error => log.warn(`${label} retention TTL index could not be ensured`, {
+                error: (error as Error)?.message
+            }));
+    };
+    run('Outbox', () => ensureOutboxRetentionTtlIndex(connection));
+    run('DeadLetter', () => ensureDeadLetterRetentionTtlIndex(connection));
+}

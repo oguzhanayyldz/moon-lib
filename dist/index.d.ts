@@ -6,6 +6,7 @@ export * from './models/integrationCategory.schema';
 export * from './models/integrationBrand.schema';
 export * from './models/integrationCategoryAttributes.schema';
 export * from './models/integrationRequestLog.schema';
+export * from './models/retentionTtlIndex';
 export * from './models/excelJob.schema';
 export * from './services/natsWrapper.service';
 export * from './services/tracer.service';
