@@ -36,7 +36,11 @@ describe('parseRetentionDays (UC-1056)', () => {
         expect(parseRetentionDays('30', 'X')).toBe(30);
     });
 
-    it.each(['0', '-5', '7.5', '30d', 'abc'])('geçersiz değer "%s" sessizce kapalı sayılmaz, hata atar', raw => {
+    it('çevresindeki boşluğu yok sayar', () => {
+        expect(parseRetentionDays(' 30 ', 'X')).toBe(30);
+    });
+
+    it.each(['0', '-5', '7.5', '30d', 'abc', '1e2', '0x1E', '30.0', '+30'])('geçersiz değer "%s" sessizce kapalı sayılmaz, hata atar', raw => {
         expect(() => parseRetentionDays(raw, 'OUTBOX_RETENTION_DAYS')).toThrow('OUTBOX_RETENTION_DAYS');
     });
 });
@@ -47,10 +51,10 @@ describe('ensure*RetentionTtlIndex (UC-1056)', () => {
     let dbCounter = 0;
     const connections: mongoose.Connection[] = [];
 
-    async function freshConnection() {
+    async function freshConnection(existingDbName?: string) {
         // autoIndex kapalı: şemanın kendi indeksleri testi bekletmesin; TTL indeksi şemada değil, ensure kurar
         const connection = await mongoose
-            .createConnection(baseUri(`uc1056_${Date.now()}_${++dbCounter}`), { autoIndex: false })
+            .createConnection(baseUri(existingDbName ?? `uc1056_${Date.now()}_${++dbCounter}`), { autoIndex: false })
             .asPromise();
         connections.push(connection);
         createOutboxModel(connection);
@@ -64,7 +68,10 @@ describe('ensure*RetentionTtlIndex (UC-1056)', () => {
             baseUri = dbName => `${externalUri.replace(/\/$/, '')}/${dbName}`;
             return;
         }
-        const server = await MongoMemoryServer.create({ binary: { version: '6.0.4' } });
+        const server = await MongoMemoryServer.create({
+            binary: { version: process.env.MONGOMS_VERSION || '6.0.4' },
+            instance: { storageEngine: 'wiredTiger' }
+        });
         mms = server;
         baseUri = dbName => server.getUri(dbName);
     });
@@ -120,6 +127,50 @@ describe('ensure*RetentionTtlIndex (UC-1056)', () => {
         expect(index?.partialFilterExpression).toEqual({
             status: { $in: ['published', 'completed', 'superseded'] }
         });
+    });
+
+    it('aynı ad + aynı filtre + aynı süre, YALNIZ anahtar farklıysa yeniden kurar', async () => {
+        const connection = await freshConnection();
+        await connection.db.collection('outboxes').createIndex(
+            { updatedOn: 1 },
+            {
+                name: OUTBOX_RETENTION_TTL_INDEX,
+                expireAfterSeconds: 30 * DAY,
+                partialFilterExpression: { status: { $in: ['published', 'completed', 'superseded'] } }
+            }
+        );
+
+        expect(await ensureOutboxRetentionTtlIndex(connection, 30)).toBe('modified');
+        const index = await namedIndex(connection, 'outboxes', OUTBOX_RETENTION_TTL_INDEX);
+        expect(index?.key).toEqual({ creationDate: 1 });
+        expect(index?.expireAfterSeconds).toBe(30 * DAY);
+    });
+
+    it('drop sırasında indeks başka bağlantıdan düşerse (IndexNotFound) uyarısız devam eder, son durum doğru', async () => {
+        const connection = await freshConnection();
+        const other = await freshConnection(connection.name);
+        await connection.db.collection('outboxes').createIndex(
+            { creationDate: 1 },
+            { name: OUTBOX_RETENTION_TTL_INDEX, expireAfterSeconds: 30 * DAY, partialFilterExpression: { status: 'published' } }
+        );
+        // indexes() okunduktan sonra, dropIndex'ten önce diğer pod indeksi düşürür
+        const collection = connection.model('Outbox').collection;
+        const realDrop = collection.dropIndex.bind(collection);
+        const dropSpy = jest.spyOn(collection, 'dropIndex').mockImplementation(async (name: string) => {
+            await other.db.collection('outboxes').dropIndex(name);
+            return realDrop(name);
+        });
+
+        try {
+            expect(await ensureOutboxRetentionTtlIndex(connection, 30)).toBe('modified');
+        } finally {
+            dropSpy.mockRestore();
+        }
+        const index = await namedIndex(connection, 'outboxes', OUTBOX_RETENTION_TTL_INDEX);
+        expect(index?.partialFilterExpression).toEqual({
+            status: { $in: ['published', 'completed', 'superseded'] }
+        });
+        expect(index?.expireAfterSeconds).toBe(30 * DAY);
     });
 
     it('mevcut outbox indekslerine dokunmaz', async () => {
@@ -183,8 +234,8 @@ describe('ensure*RetentionTtlIndex (UC-1056)', () => {
     it('TTL monitörü yalnız biten durumları siler; bekleyen/işlenen/başarısız ve DLQ işlemci claim kaydı kalır (gerçek silme)', async () => {
         // Varsayılan TTL monitörü 60 sn'de bir koşar: ayrı mongod'da 1 sn'ye çekilir
         const ttlServer = await MongoMemoryServer.create({
-            binary: { version: '6.0.4' },
-            instance: { args: ['--setParameter', 'ttlMonitorSleepSecs=1'] }
+            binary: { version: process.env.MONGOMS_VERSION || '6.0.4' },
+            instance: { storageEngine: 'wiredTiger', args: ['--setParameter', 'ttlMonitorSleepSecs=1'] }
         });
         const connection = await mongoose.createConnection(ttlServer.getUri('uc1056_ttl'), { autoIndex: false }).asPromise();
         try {
