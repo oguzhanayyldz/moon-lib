@@ -29,7 +29,8 @@ export const DEAD_LETTER_RETENTION_STATUSES = ['completed', 'failed', 'pending',
  */
 export function parseRetentionDays(raw: string | undefined, variableName: string): number | undefined {
     if (raw === undefined || raw.trim() === '') return undefined;
-    const days = Number(raw);
+    // Number() '1e2', '0x1E', '30.0', '+30' gibi yazımları da kabul eder: yalnız düz rakam dizisi geçerli
+    const days = /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
     if (!Number.isInteger(days) || days < 1) {
         throw new Error(`${variableName} must be a positive integer (days), got "${raw}"`);
     }
@@ -77,7 +78,12 @@ async function ensureRetentionTtlIndex(
             return 'modified';
         }
         // Kısmi filtre collMod ile değiştirilemez: indeksi yeniden kur
-        await collection.dropIndex(indexName);
+        try {
+            await collection.dropIndex(indexName);
+        } catch (error: any) {
+            // Eşzamanlı başlayan başka pod aynı indeksi çoktan düşürdü: IndexNotFound, create ile devam
+            if (error?.code !== 27) throw error;
+        }
         await collection.createIndex({ [dateField]: 1 }, { name: indexName, expireAfterSeconds, partialFilterExpression });
         return 'modified';
     }
