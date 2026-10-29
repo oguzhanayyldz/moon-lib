@@ -11,6 +11,17 @@ import { Subjects } from "./subjects";
 export declare const PRODUCT_PRE_MATCH_STATUSES: readonly ["pending_approval", "auto_approved", "approved", "rejected", "resolved_on_platform"];
 export type ProductPreMatchStatus = typeof PRODUCT_PRE_MATCH_STATUSES[number];
 export type ProductPreMatchDecisionSource = 'auto' | 'user';
+/**
+ * Otomatik onaya GİRMEYEN (elenen) bekleyen SKU'nun gerekçesi (UC-1170). Yalnız `pending_approval`
+ * kayıtlarda, otomatik onay yolu çalışmışken SKU'yu eleyen neden varsa gelir; `lastError` (onay/red
+ * DENEMESİ başarısız) ile karıştırılmaz — elenen SKU için HB'ye hiç istek gitmemiştir.
+ * - not_sent_by_moon     : Moon'un gönderdiği (ve HB'nin olumlu teyit ettiği) SKU değil (panel/başka entegratör)
+ * - auto_approve_off     : "otomatik onayla" ayarı kapalı ya da bu örnek güncel ayarı taşımıyor
+ * - decision_in_progress : aynı SKU için elle karar / başka takip işi sürüyor (kilit meşgul)
+ * - lock_unavailable     : karar kilidi alınamadı (geçici hata) — gece taraması yeniden dener
+ */
+export declare const PRODUCT_PRE_MATCH_SKIP_REASONS: readonly ["not_sent_by_moon", "auto_approve_off", "decision_in_progress", "lock_unavailable"];
+export type ProductPreMatchSkipReason = typeof PRODUCT_PRE_MATCH_SKIP_REASONS[number];
 /** Olayı üreten akış — tanı/log içindir, tüketici davranışını değiştirmez */
 export type ProductPreMatchTrigger = 'match_products' | 'tracking' | 'manual';
 /**
@@ -35,6 +46,8 @@ export interface ProductPreMatchItem {
     decidedBy?: ProductPreMatchDecisionSource;
     /** Son onay/red denemesi başarısızsa kısa, müşteri verisi içermeyen hata özeti */
     lastError?: string;
+    /** Otomatik onaya girmeyen bekleyen SKU'nun gerekçesi (deneme yapılmadı; bkz. PRODUCT_PRE_MATCH_SKIP_REASONS) */
+    skipReason?: ProductPreMatchSkipReason;
 }
 /**
  * ProductPreMatchUpdated (TASK-MURHHI9UCDMZW)
