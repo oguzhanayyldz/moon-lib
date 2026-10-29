@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RetryableListener = void 0;
 exports.resolveDuplicateKeyRetries = resolveDuplicateKeyRetries;
 exports.resolveFailFastOnPermanentError = resolveFailFastOnPermanentError;
+exports.resolveLockRenewIntervalMs = resolveLockRenewIntervalMs;
 const crypto_1 = __importDefault(require("crypto"));
 const common_1 = require("../common");
 const retryManager_1 = require("../services/retryManager");
@@ -40,6 +41,19 @@ function resolveFailFastOnPermanentError(explicit) {
     const raw = ((_a = process.env.RETRYABLE_PERMANENT_FAIL_FAST) !== null && _a !== void 0 ? _a : '').trim().toLowerCase();
     return raw === 'true' || raw === '1';
 }
+/**
+ * Kilit yenileme aralığını çözer (UC-430/UC-821): açık değer, yoksa RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa
+ * lockTimeoutSec/3. 0 = yenileme yok (açık değerle ya da ortam değişkeniyle kapatılır). Geçersiz değer varsayılana düşer.
+ */
+function resolveLockRenewIntervalMs(explicit, lockTimeoutSec) {
+    var _a;
+    const fallback = Math.max(1, Math.floor((lockTimeoutSec * 1000) / 3));
+    const env = ((_a = process.env.RETRYABLE_LOCK_RENEW_INTERVAL_MS) !== null && _a !== void 0 ? _a : '').trim();
+    const raw = explicit !== null && explicit !== void 0 ? explicit : (env === '' ? undefined : Number(env));
+    if (raw === undefined || !Number.isInteger(raw) || raw < 0)
+        return fallback;
+    return raw;
+}
 /** Gölge modda kalıcı sayılan olayın işareti: sonraki teslimde başarı = yanlış pozitif (UC-1043). */
 const PERMANENT_SHADOW_KEY_PREFIX = 'event:permanent-shadow:';
 const PERMANENT_SHADOW_TTL_SEC = 86400;
@@ -50,6 +64,10 @@ class RetryableListener extends common_1.Listener {
     constructor(client, options = {}, connection = mongoose_1.default.connection) {
         super(client);
         this.options = Object.assign(Object.assign(Object.assign({}, RetryableListener.DEFAULT_OPTIONS), options), { duplicateKeyRetries: resolveDuplicateKeyRetries(options.duplicateKeyRetries), failFastOnPermanentError: resolveFailFastOnPermanentError(options.failFastOnPermanentError) });
+        this.options.lockRenewIntervalMs = resolveLockRenewIntervalMs(options.lockRenewIntervalMs, this.options.lockTimeoutSec);
+        if (this.options.enableLock && this.options.lockTimeoutSec >= this.options.ackWaitSec) {
+            logger_service_1.logger.warn(`lockTimeoutSec (${this.options.lockTimeoutSec}s) is not shorter than ackWaitSec (${this.options.ackWaitSec}s) in ${this.constructor.name}; a crashed owner holds the event until the lock expires`);
+        }
         if (this.options.lockRenewIntervalMs > 0 && this.options.lockRenewIntervalMs >= this.options.lockTimeoutSec * 1000) {
             logger_service_1.logger.warn(`lockRenewIntervalMs (${this.options.lockRenewIntervalMs}) is not shorter than lockTimeoutSec (${this.options.lockTimeoutSec}s); the lock can expire before it is renewed`);
         }
@@ -165,7 +183,7 @@ class RetryableListener extends common_1.Listener {
      * Retry mantığı ile geliştirilmiş mesaj işleme
      */
     async onMessage(data, msg) {
-        var _a;
+        var _a, _b;
         const eventId = this.getEventId(data);
         const eventType = this.subject;
         const span = this.createTraceSpan(eventType, eventId);
@@ -241,6 +259,13 @@ class RetryableListener extends common_1.Listener {
                                 logger_service_1.logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
                                 span.setTag('lock.same_message', true);
                                 return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
+                            }
+                            // Sıra numarası yoksa yeniden teslim, kilit sahibinin işlediği mesajın kendisi olabilir: ack'lenirse
+                            // sahip sonra hata verdiğinde mesaj bir daha gelmez (UC-821 F-02).
+                            if (sequence === undefined && ((_b = msg.isRedelivered) === null || _b === void 0 ? void 0 : _b.call(msg))) {
+                                logger_service_1.logger.info(`Redelivered message without sequence while the same payload is locked (ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
+                                span.setTag('lock.same_payload_redelivered', true);
+                                return; // msg.ack() YOK
                             }
                             if (holder === null || holder === void 0 ? void 0 : holder.endsWith(`#${fingerprint}`)) {
                                 logger_service_1.logger.info(`Another instance actively processing the same payload (ttl: ${ttl}s): ${eventType}:${eventId}`);
@@ -839,7 +864,7 @@ RetryableListener.DEFAULT_OPTIONS = {
     ackWaitSec: 60, // NATS ack timeout - lock TTL'inden büyük olmalı
     deadLetterReplay: true, // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
     duplicateKeyRetries: 0, // constructor'da ortam değişkeniyle çözülür
-    lockRenewIntervalMs: 0, // kilit yenileme kapalı
+    lockRenewIntervalMs: 0, // constructor'da lockTimeoutSec'ten çözülür
     failFastOnPermanentError: false // constructor'da ortam değişkeniyle çözülür
 };
 //# sourceMappingURL=retryableListener.js.map
