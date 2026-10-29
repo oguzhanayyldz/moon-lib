@@ -85,18 +85,28 @@ export function maskConnectionUrisInText(text: string | undefined): string | und
     if (!text || (!text.includes('://') && !text.includes('@'))) {
         return text;
     }
+    // Indices into `text` instead of re-slicing: `rest.lastIndexOf('@')` per match rescanned the whole remainder
+    // (quadratic on many `@`-less addresses). The last `@` is found once; one before `pos` can never win `Math.max`.
+    const startPattern = new RegExp(URI_START_IN_TEXT.source, 'g');
+    const lastAt = text.lastIndexOf('@');
     let result = '';
-    let rest = text;
-    let start = rest.search(URI_START_IN_TEXT);
-    while (start !== -1) {
-        const anchor = Math.max(start, rest.lastIndexOf('@'));
-        const whitespaceIndex = rest.slice(anchor).search(WHITESPACE_PATTERN);
-        const end = whitespaceIndex === -1 ? rest.length : anchor + whitespaceIndex;
-        result += rest.slice(0, start) + maskUriList(rest.slice(start, end));
-        rest = rest.slice(end);
-        start = rest.search(URI_START_IN_TEXT);
+    let pos = 0;
+    for (;;) {
+        startPattern.lastIndex = pos;
+        const match = startPattern.exec(text);
+        if (!match) {
+            break;
+        }
+        const start = match.index;
+        const anchor = Math.max(start, lastAt);
+        let end = anchor;
+        while (end < text.length && !WHITESPACE_PATTERN.test(text[end])) {
+            end++;
+        }
+        result += text.slice(pos, start) + maskUriList(text.slice(start, end));
+        pos = end;
     }
-    return result + rest;
+    return result + text.slice(pos);
 }
 
 /**
