@@ -167,7 +167,8 @@ export class EventPublisherJob {
         
         // Servis adından deterministik offset hesapla (0-2500ms arası)
         this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
-        this.serviceLabel = resolvedServiceName || 'unknown';
+        // UC-1211: entegrasyon servislerinin çoğu ServiceName enum'unda yok; etiket SERVICE_NAME'den gelir
+        this.serviceLabel = resolvedServiceName || process.env.SERVICE_NAME?.trim().toLowerCase() || 'unknown';
 
         this.versionEventInterval = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_INTERVAL_MS', EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT);
         this.versionBatchSize = Math.min(
@@ -194,8 +195,13 @@ export class EventPublisherJob {
         const environment = process.env.NODE_ENV || 'production';
         const now = Date.now();
         const versionFilter = { environment, eventType: Subjects.EntityVersionUpdated };
+        // UC-1211: status + environment önekli indeksle sayılır; eventType elemesi indeks içinde kalır
+        const recordsFilter = { environment, eventType: { $ne: Subjects.EntityVersionUpdated } };
 
-        const [pending, processing, failed, oldest, stuckProcessing, failedFinal] = await Promise.all([
+        const [recordsPending, recordsProcessing, recordsFailed, pending, processing, failed, oldest, stuckProcessing, failedFinal] = await Promise.all([
+            this.outboxModel.countDocuments({ status: 'pending', ...recordsFilter }),
+            this.outboxModel.countDocuments({ status: 'processing', ...recordsFilter }),
+            this.outboxModel.countDocuments({ status: 'failed', ...recordsFilter }),
             this.outboxModel.countDocuments({ ...versionFilter, status: 'pending' }),
             this.outboxModel.countDocuments({ ...versionFilter, status: 'processing' }),
             this.outboxModel.countDocuments({ ...versionFilter, status: 'failed' }),
@@ -223,6 +229,7 @@ export class EventPublisherJob {
 
         const oldestCreated = (oldest as { creationDate?: Date } | null)?.creationDate;
         return {
+            records: { pending: recordsPending, processing: recordsProcessing, failed: recordsFailed },
             versionRecords: { pending, processing, failed },
             versionOldestPendingAgeSeconds: oldestCreated ? Math.max(0, (now - new Date(oldestCreated).getTime()) / 1000) : 0,
             stuckProcessing,

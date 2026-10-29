@@ -127,6 +127,7 @@ class EventMetrics {
         EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseExpiredTotal);
         EventMetrics.registry.registerMetric(EventMetrics.versionEventsDuplicatePreventedTotal);
         EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseUnavailableTotal);
+        EventMetrics.registry.registerMetric(EventMetrics.outboxRecords);
         EventMetrics.registry.registerMetric(EventMetrics.outboxVersionRecords);
         EventMetrics.registry.registerMetric(EventMetrics.outboxVersionOldestPendingAge);
         EventMetrics.registry.registerMetric(EventMetrics.outboxUnrecoveredRecords);
@@ -372,6 +373,27 @@ EventMetrics.versionEventWriteErrorsTotal = new prom_client_1.Counter({
     registers: [EventMetrics.registry]
 });
 /**
+ * Outbox kaydı sayısı (Gauge) — UC-1211. outbox_records{service,status}: pending/processing/failed, sürüm olayları
+ * (entity:version-updated) HARİÇ; onlar outbox_version_records'ta. Önceden yalnız orders ve inventory kendi yerel
+ * gauge'larıyla yayınlıyordu; EventPublisherJob'lu her servis artık buradan yayınlar (EventPublishFailureRate,
+ * OutboxPendingEvents* alarmları tüm servisleri görür).
+ */
+EventMetrics.outboxRecords = new prom_client_1.Gauge({
+    name: 'outbox_records',
+    help: 'Number of outbox records by status (entity version events excluded)',
+    labelNames: ['service', 'status'],
+    registers: [EventMetrics.registry],
+    async collect() {
+        const snapshot = await EventMetrics.readOutboxSnapshot();
+        this.reset();
+        if (!snapshot)
+            return;
+        for (const [status, count] of Object.entries(snapshot.records)) {
+            this.set({ service: snapshot.service, status }, count);
+        }
+    }
+});
+/**
  * Outbox durumu (Gauge) — UC-984. Değerler her scrape'te EventPublisherJob'un verdiği toplayıcıdan okunur;
  * toplayıcı yoksa (yayıncısı olmayan servis) seri yazılmaz.
  *
@@ -425,6 +447,6 @@ EventMetrics.outboxUnrecoveredRecords = new prom_client_1.Gauge({
 });
 EventMetrics.outboxCollector = null;
 EventMetrics.pendingSnapshot = null;
-// Aynı scrape'teki üç gauge tek sorgu turunu paylaşır
+// Aynı scrape'teki dört gauge tek sorgu turunu paylaşır
 EventMetrics.SNAPSHOT_TTL_MS = 2000;
 //# sourceMappingURL=EventMetrics.js.map

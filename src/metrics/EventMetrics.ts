@@ -286,6 +286,27 @@ export class EventMetrics {
   });
 
   /**
+   * Outbox kaydı sayısı (Gauge) — UC-1211. outbox_records{service,status}: pending/processing/failed, sürüm olayları
+   * (entity:version-updated) HARİÇ; onlar outbox_version_records'ta. Önceden yalnız orders ve inventory kendi yerel
+   * gauge'larıyla yayınlıyordu; EventPublisherJob'lu her servis artık buradan yayınlar (EventPublishFailureRate,
+   * OutboxPendingEvents* alarmları tüm servisleri görür).
+   */
+  static readonly outboxRecords = new Gauge<'service' | 'status'>({
+    name: 'outbox_records',
+    help: 'Number of outbox records by status (entity version events excluded)',
+    labelNames: ['service', 'status'],
+    registers: [EventMetrics.registry],
+    async collect() {
+      const snapshot = await EventMetrics.readOutboxSnapshot();
+      this.reset();
+      if (!snapshot) return;
+      for (const [status, count] of Object.entries(snapshot.records)) {
+        this.set({ service: snapshot.service, status }, count);
+      }
+    }
+  });
+
+  /**
    * Outbox durumu (Gauge) — UC-984. Değerler her scrape'te EventPublisherJob'un verdiği toplayıcıdan okunur;
    * toplayıcı yoksa (yayıncısı olmayan servis) seri yazılmaz.
    *
@@ -339,7 +360,7 @@ export class EventMetrics {
 
   private static outboxCollector: { service: string; collect: () => Promise<OutboxMetricsSnapshot> } | null = null;
   private static pendingSnapshot: { at: number; promise: Promise<(OutboxMetricsSnapshot & { service: string }) | null> } | null = null;
-  // Aynı scrape'teki üç gauge tek sorgu turunu paylaşır
+  // Aynı scrape'teki dört gauge tek sorgu turunu paylaşır
   private static readonly SNAPSHOT_TTL_MS = 2000;
 
   /** EventPublisherJob kendi outbox'ının toplayıcısını kaydeder (süreçte bir yayıncı: sonuncusu geçerlidir). */
@@ -442,6 +463,7 @@ export class EventMetrics {
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseExpiredTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsDuplicatePreventedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseUnavailableTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.outboxRecords);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionRecords);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionOldestPendingAge);
     EventMetrics.registry.registerMetric(EventMetrics.outboxUnrecoveredRecords);
@@ -450,6 +472,8 @@ export class EventMetrics {
 
 /** EventPublisherJob'un outbox toplayıcısının döndürdüğü anlık durum (UC-984). */
 export interface OutboxMetricsSnapshot {
+  /** Sürüm olayları hariç kayıtlar (UC-1211) */
+  records: { pending: number; processing: number; failed: number };
   versionRecords: { pending: number; processing: number; failed: number };
   versionOldestPendingAgeSeconds: number;
   stuckProcessing: number;

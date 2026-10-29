@@ -97,6 +97,7 @@ const stockCountFinished_publisher_1 = require("../events/publishers/stockCountF
 class EventPublisherJob {
     constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
     ) {
+        var _a;
         this.natsClient = natsClient;
         this.connection = connection;
         this.intervalId = null;
@@ -116,7 +117,8 @@ class EventPublisherJob {
         const resolvedServiceName = serviceName || this.resolveServiceNameFromEnv();
         // Servis adından deterministik offset hesapla (0-2500ms arası)
         this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
-        this.serviceLabel = resolvedServiceName || 'unknown';
+        // UC-1211: entegrasyon servislerinin çoğu ServiceName enum'unda yok; etiket SERVICE_NAME'den gelir
+        this.serviceLabel = resolvedServiceName || ((_a = process.env.SERVICE_NAME) === null || _a === void 0 ? void 0 : _a.trim().toLowerCase()) || 'unknown';
         this.versionEventInterval = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_INTERVAL_MS', EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT);
         this.versionBatchSize = Math.min(EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_BATCH_SIZE', EventPublisherJob.VERSION_BATCH_SIZE_MAX), EventPublisherJob.VERSION_BATCH_SIZE_MAX);
         this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
@@ -138,7 +140,12 @@ class EventPublisherJob {
             const environment = process.env.NODE_ENV || 'production';
             const now = Date.now();
             const versionFilter = { environment, eventType: common_1.Subjects.EntityVersionUpdated };
-            const [pending, processing, failed, oldest, stuckProcessing, failedFinal] = yield Promise.all([
+            // UC-1211: status + environment önekli indeksle sayılır; eventType elemesi indeks içinde kalır
+            const recordsFilter = { environment, eventType: { $ne: common_1.Subjects.EntityVersionUpdated } };
+            const [recordsPending, recordsProcessing, recordsFailed, pending, processing, failed, oldest, stuckProcessing, failedFinal] = yield Promise.all([
+                this.outboxModel.countDocuments(Object.assign({ status: 'pending' }, recordsFilter)),
+                this.outboxModel.countDocuments(Object.assign({ status: 'processing' }, recordsFilter)),
+                this.outboxModel.countDocuments(Object.assign({ status: 'failed' }, recordsFilter)),
                 this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'pending' })),
                 this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'processing' })),
                 this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'failed' })),
@@ -165,6 +172,7 @@ class EventPublisherJob {
             ]);
             const oldestCreated = oldest === null || oldest === void 0 ? void 0 : oldest.creationDate;
             return {
+                records: { pending: recordsPending, processing: recordsProcessing, failed: recordsFailed },
                 versionRecords: { pending, processing, failed },
                 versionOldestPendingAgeSeconds: oldestCreated ? Math.max(0, (now - new Date(oldestCreated).getTime()) / 1000) : 0,
                 stuckProcessing,

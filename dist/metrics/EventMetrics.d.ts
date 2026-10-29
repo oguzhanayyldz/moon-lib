@@ -174,6 +174,13 @@ export declare class EventMetrics {
      */
     static readonly versionEventWriteErrorsTotal: Counter<"service" | "entity_type">;
     /**
+     * Outbox kaydı sayısı (Gauge) — UC-1211. outbox_records{service,status}: pending/processing/failed, sürüm olayları
+     * (entity:version-updated) HARİÇ; onlar outbox_version_records'ta. Önceden yalnız orders ve inventory kendi yerel
+     * gauge'larıyla yayınlıyordu; EventPublisherJob'lu her servis artık buradan yayınlar (EventPublishFailureRate,
+     * OutboxPendingEvents* alarmları tüm servisleri görür).
+     */
+    static readonly outboxRecords: Gauge<"status" | "service">;
+    /**
      * Outbox durumu (Gauge) — UC-984. Değerler her scrape'te EventPublisherJob'un verdiği toplayıcıdan okunur;
      * toplayıcı yoksa (yayıncısı olmayan servis) seri yazılmaz.
      *
@@ -228,6 +235,12 @@ export declare class EventMetrics {
 }
 /** EventPublisherJob'un outbox toplayıcısının döndürdüğü anlık durum (UC-984). */
 export interface OutboxMetricsSnapshot {
+    /** Sürüm olayları hariç kayıtlar (UC-1211) */
+    records: {
+        pending: number;
+        processing: number;
+        failed: number;
+    };
     versionRecords: {
         pending: number;
         processing: number;
