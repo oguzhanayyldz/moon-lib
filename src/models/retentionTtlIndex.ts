@@ -12,8 +12,17 @@ import mongoose from 'mongoose';
 export type RetentionTtlIndexResult = 'disabled' | 'unchanged' | 'modified' | 'created';
 
 export const OUTBOX_RETENTION_TTL_INDEX = 'outbox_retention_ttl';
-/** pending/processing/failed yayınlanmayı bekler; silinmez. */
+/** pending/processing yayınlanmayı bekler; silinmez. failed için ayrı indeks: OUTBOX_FAILED_RETENTION_TTL_INDEX. */
 export const OUTBOX_RETENTION_STATUSES = ['published', 'completed', 'superseded'];
+
+/**
+ * UC-1210 — başarısız (failed) outbox kayıtları için AYRI indeks. `outbox_retention_ttl` indeksine failed eklemek
+ * iki süreyi tek değişkene bağlardı (published 180 gün, failed 10 gün); ayrı indeks bağımsız ayarlanır. Aynı anahtar
+ * ({creationDate:1}) + farklı partial filtre ile ikinci indeks, indeks adı farklı olduğu sürece Mongo'da kurulabilir.
+ * Tarih alanı `creationDate`: her kayıtta vardır; `lastAttempt` hiç denenmemiş failed kayıtta boştur ve TTL boş
+ * alanlı belgeyi asla silmez (KVKK sızıntısı). Yeniden denemeyle failed'a dönen kayıt yaşını creationDate'ten alır.
+ */
+export const OUTBOX_FAILED_RETENTION_TTL_INDEX = 'outbox_failed_retention_ttl';
 
 export const DEAD_LETTER_RETENTION_TTL_INDEX = 'deadletter_retention_ttl';
 /**
@@ -42,13 +51,12 @@ async function ensureRetentionTtlIndex(
     modelName: string,
     indexName: string,
     dateField: string,
-    statuses: string[],
+    partialFilterExpression: Record<string, unknown>,
     days: number | undefined
 ): Promise<RetentionTtlIndexResult> {
     if (days === undefined) return 'disabled';
 
     const expireAfterSeconds = days * 24 * 60 * 60;
-    const partialFilterExpression = { status: { $in: statuses } };
     const collection = connection.model(modelName).collection;
 
     let indexes: Array<{
@@ -98,7 +106,18 @@ export function ensureOutboxRetentionTtlIndex(
     days: number | undefined = parseRetentionDays(process.env.OUTBOX_RETENTION_DAYS, 'OUTBOX_RETENTION_DAYS')
 ): Promise<RetentionTtlIndexResult> {
     return ensureRetentionTtlIndex(
-        connection, 'Outbox', OUTBOX_RETENTION_TTL_INDEX, 'creationDate', OUTBOX_RETENTION_STATUSES, days
+        connection, 'Outbox', OUTBOX_RETENTION_TTL_INDEX, 'creationDate',
+        { status: { $in: OUTBOX_RETENTION_STATUSES } }, days
+    );
+}
+
+/** OUTBOX_FAILED_RETENTION_DAYS: failed outbox kayıtları `creationDate`'ten bu kadar gün sonra silinir. */
+export function ensureOutboxFailedRetentionTtlIndex(
+    connection: mongoose.Connection,
+    days: number | undefined = parseRetentionDays(process.env.OUTBOX_FAILED_RETENTION_DAYS, 'OUTBOX_FAILED_RETENTION_DAYS')
+): Promise<RetentionTtlIndexResult> {
+    return ensureRetentionTtlIndex(
+        connection, 'Outbox', OUTBOX_FAILED_RETENTION_TTL_INDEX, 'creationDate', { status: 'failed' }, days
     );
 }
 
@@ -108,7 +127,8 @@ export function ensureDeadLetterRetentionTtlIndex(
     days: number | undefined = parseRetentionDays(process.env.DEADLETTER_RETENTION_DAYS, 'DEADLETTER_RETENTION_DAYS')
 ): Promise<RetentionTtlIndexResult> {
     return ensureRetentionTtlIndex(
-        connection, 'DeadLetter', DEAD_LETTER_RETENTION_TTL_INDEX, 'timestamp', DEAD_LETTER_RETENTION_STATUSES, days
+        connection, 'DeadLetter', DEAD_LETTER_RETENTION_TTL_INDEX, 'timestamp',
+        { status: { $in: DEAD_LETTER_RETENTION_STATUSES } }, days
     );
 }
 
@@ -126,5 +146,6 @@ export function ensureRetentionTtlIndexes(
             }));
     };
     run('Outbox', () => ensureOutboxRetentionTtlIndex(connection));
+    run('OutboxFailed', () => ensureOutboxFailedRetentionTtlIndex(connection));
     run('DeadLetter', () => ensureDeadLetterRetentionTtlIndex(connection));
 }

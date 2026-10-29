@@ -11,8 +11,10 @@ import { createDeadLetterModel } from '../deadLetter.schema';
 import {
     DEAD_LETTER_RETENTION_TTL_INDEX,
     ensureDeadLetterRetentionTtlIndex,
+    ensureOutboxFailedRetentionTtlIndex,
     ensureOutboxRetentionTtlIndex,
     ensureRetentionTtlIndexes,
+    OUTBOX_FAILED_RETENTION_TTL_INDEX,
     OUTBOX_RETENTION_TTL_INDEX,
     parseRetentionDays
 } from '../retentionTtlIndex';
@@ -268,6 +270,102 @@ describe('ensure*RetentionTtlIndex (UC-1056)', () => {
             expect(await connection.db.collection('outboxes').countDocuments({ status: 'published', creationDate: fresh })).toBe(1);
             // archived ve queued da silinir; yalnız işlemci claim'i (replaying/processing) kalır
             expect(await remaining('deadletters')).toEqual(['processing', 'replaying']);
+        } finally {
+            await connection.close();
+            await ttlServer.stop();
+        }
+    });
+
+    it('UC-1210 failed: gün verilmezse indeks kurmaz', async () => {
+        const connection = await freshConnection();
+        await connection.db.collection('outboxes').insertOne({ status: 'failed', creationDate: new Date() });
+        expect(await ensureOutboxFailedRetentionTtlIndex(connection, undefined)).toBe('disabled');
+        expect(await namedIndex(connection, 'outboxes', OUTBOX_FAILED_RETENTION_TTL_INDEX)).toBeUndefined();
+    });
+
+    it('UC-1210 failed: published indeksiyle AYNI anahtarda, yalnız status:failed kapsayan ayrı TTL kurar; ikisi bir arada yaşar', async () => {
+        const connection = await freshConnection();
+        expect(await ensureOutboxRetentionTtlIndex(connection, 180)).toBe('created');
+
+        expect(await ensureOutboxFailedRetentionTtlIndex(connection, 10)).toBe('created');
+        const failed = await namedIndex(connection, 'outboxes', OUTBOX_FAILED_RETENTION_TTL_INDEX);
+        expect(failed?.key).toEqual({ creationDate: 1 });
+        expect(failed?.expireAfterSeconds).toBe(10 * DAY);
+        expect(failed?.partialFilterExpression).toEqual({ status: 'failed' });
+        // published indeksi bozulmadı
+        const published = await namedIndex(connection, 'outboxes', OUTBOX_RETENTION_TTL_INDEX);
+        expect(published?.expireAfterSeconds).toBe(180 * DAY);
+
+        expect(await ensureOutboxFailedRetentionTtlIndex(connection, 10)).toBe('unchanged');
+    });
+
+    it('UC-1210 failed: gün değişince collMod ile günceller, ikinci indeks açmaz', async () => {
+        const connection = await freshConnection();
+        expect(await ensureOutboxFailedRetentionTtlIndex(connection, 10)).toBe('created');
+
+        expect(await ensureOutboxFailedRetentionTtlIndex(connection, 20)).toBe('modified');
+        const indexes = (await connection.db.collection('outboxes').indexes())
+            .filter(index => index.name === OUTBOX_FAILED_RETENTION_TTL_INDEX);
+        expect(indexes).toHaveLength(1);
+        expect(indexes[0].expireAfterSeconds).toBe(20 * DAY);
+    });
+
+    it('UC-1210 failed: ensureRetentionTtlIndexes OUTBOX_FAILED_RETENTION_DAYS env değişkenini okur; geçersizse uyarır', async () => {
+        const previous = process.env.OUTBOX_FAILED_RETENTION_DAYS;
+        const info = jest.fn();
+        const warn = jest.fn();
+        try {
+            process.env.OUTBOX_FAILED_RETENTION_DAYS = '10';
+            const connection = await freshConnection();
+            ensureRetentionTtlIndexes(connection, { info, warn });
+            await new Promise(resolve => setTimeout(resolve, 800));
+            expect(info).toHaveBeenCalledWith('OutboxFailed retention TTL index: created');
+            expect((await namedIndex(connection, 'outboxes', OUTBOX_FAILED_RETENTION_TTL_INDEX))?.expireAfterSeconds).toBe(10 * DAY);
+
+            process.env.OUTBOX_FAILED_RETENTION_DAYS = '10d';
+            const other = await freshConnection();
+            ensureRetentionTtlIndexes(other, { info, warn });
+            await new Promise(resolve => setTimeout(resolve, 800));
+            expect(warn).toHaveBeenCalledWith('OutboxFailed retention TTL index could not be ensured', {
+                error: expect.stringContaining('OUTBOX_FAILED_RETENTION_DAYS')
+            });
+            expect(await namedIndex(other, 'outboxes', OUTBOX_FAILED_RETENTION_TTL_INDEX)).toBeUndefined();
+        } finally {
+            if (previous === undefined) delete process.env.OUTBOX_FAILED_RETENTION_DAYS;
+            else process.env.OUTBOX_FAILED_RETENTION_DAYS = previous;
+        }
+    });
+
+    it('UC-1210 failed: TTL monitörü yalnız eski failed kaydı siler; published/pending/processing ve taze failed kalır (gerçek silme)', async () => {
+        const ttlServer = await MongoMemoryServer.create({
+            binary: { version: process.env.MONGOMS_VERSION || '6.0.4' },
+            instance: { storageEngine: 'wiredTiger', args: ['--setParameter', 'ttlMonitorSleepSecs=1'] }
+        });
+        const connection = await mongoose.createConnection(ttlServer.getUri('uc1210_ttl'), { autoIndex: false }).asPromise();
+        try {
+            createOutboxModel(connection);
+            const old = new Date(Date.now() - 15 * DAY * 1000);
+            const fresh = new Date();
+            await connection.db.collection('outboxes').insertMany([
+                { status: 'failed', creationDate: old },
+                { status: 'failed', creationDate: fresh },
+                { status: 'published', creationDate: old },
+                { status: 'pending', creationDate: old },
+                { status: 'processing', creationDate: old }
+            ]);
+
+            // yalnız failed indeksi: 10 gün
+            await ensureOutboxFailedRetentionTtlIndex(connection, 10);
+
+            const deadline = Date.now() + 20000;
+            while (Date.now() < deadline && (await connection.db.collection('outboxes').countDocuments()) > 4) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            await new Promise(resolve => setTimeout(resolve, 2500));
+
+            const remaining = (await connection.db.collection('outboxes').find({}).toArray())
+                .map(doc => `${doc.status}:${doc.creationDate.getTime() === fresh.getTime() ? 'fresh' : 'old'}`).sort();
+            expect(remaining).toEqual(['failed:fresh', 'pending:old', 'processing:old', 'published:old']);
         } finally {
             await connection.close();
             await ttlServer.stop();
