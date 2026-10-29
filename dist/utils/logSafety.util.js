@@ -27,6 +27,8 @@ exports.escapeRegExp = escapeRegExp;
 exports.isLoggableError = isLoggableError;
 exports.toSafeLogError = toSafeLogError;
 exports.serializeLogMeta = serializeLogMeta;
+exports.isSensitiveLogMetaField = isSensitiveLogMetaField;
+exports.maskLogMessageText = maskLogMessageText;
 exports.maskErrorText = maskErrorText;
 exports.sanitizeRequestUrl = sanitizeRequestUrl;
 exports.maskResourceId = maskResourceId;
@@ -620,6 +622,13 @@ const URL_USERINFO_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/]*@/;
 // `Bearer <token>` / `Basic <base64>` in free text (a header echoed into an error message). Fail-closed:
 // the word after a plain-English "basic" is masked too, because a base64 value cannot be told apart from it.
 const AUTH_SCHEME_TOKEN_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
+// Log meta names that `isSensitiveFieldName` flags but that hold a Redis/lock/cache key, measured on the
+// services' logger calls (UC-832): `{ key }`, `{ cacheKey }`, `{ lockKey }` are the most common hits.
+const LOG_META_NON_SENSITIVE_NAMES = new Set(['key', 'cachekey', 'lockkey', 'rediskey', 'dedupkey', 'dedupekey', 'idempotencykey']);
+// `<name>Keys` holds `Object.keys(…)` output — field names, not values (`credentialsKeys`, `responseKeys`),
+// unless the name is key material in plural form (`apiKeys`, `secretKeys`).
+const FIELD_NAME_LIST_SUFFIX = 'keys';
+const KEY_MATERIAL_PREFIXES = ['api', 'access', 'private', 'secret', 'client', 'encryption', 'signing', 'license', 'master', 'auth'];
 /** Whether a value is an `Error` or an axios error (checked on the raw value, before any `toJSON`). */
 function isLoggableError(value) {
     if (value instanceof Error) {
@@ -686,6 +695,8 @@ function toSafeLogError(error, depth = 0) {
  * - Errors are caught on the RAW value (`this[key]`), before `toJSON` output replaces them: the value
  *   the replacer receives for an `AxiosError` is already `toJSON()`'s copy of the request config.
  *   They are written as `toSafeLogError` output.
+ * - The value of a credential-named field (`apiKey`, `headers.Authorization`, `credentials`) becomes
+ *   `REDACTED_FIELD_MASK`; see `isSensitiveLogMetaField` for what is kept.
  * - Cycles become `"[Circular]"`. Detection uses the stack of ancestors of the current value, not a
  *   `WeakSet` of every visited value: the same object referenced twice without a cycle is written twice.
  * - `bigint` is written as a string, a `Buffer` as its length only.
@@ -699,6 +710,9 @@ function serializeLogMeta(meta, maxLength = exports.MAX_LOG_META_LENGTH) {
         json = JSON.stringify(meta, function (key, value) {
             const raw = this[key];
             let result = value;
+            if (key && isSensitiveLogMetaField(key, raw)) {
+                return exports.REDACTED_FIELD_MASK;
+            }
             if (isLoggableError(raw)) {
                 result = toSafeLogError(raw);
             }
@@ -736,6 +750,41 @@ function serializeLogMeta(meta, maxLength = exports.MAX_LOG_META_LENGTH) {
         return '';
     }
     return json.length > maxLength ? `${json.slice(0, maxLength)}…[truncated ${json.length - maxLength} chars]` : json;
+}
+/**
+ * Whether a log meta field's value is masked: its name is credential-like (`isSensitiveFieldName`) and
+ * its value can hold a secret. Kept readable, as measured on the services' logger calls (UC-832):
+ * - booleans, numbers, `null`/`undefined` — flags and counts (`hasRefreshToken`, `revokedTokens: 3`)
+ * - errors — they are reduced by `toSafeLogError` instead (`tokenRefreshError`)
+ * - Redis/lock/cache keys (`key`, `cacheKey`, `lockKey`) and field-name lists (`credentialsKeys`)
+ */
+function isSensitiveLogMetaField(name, value) {
+    if (value === null || value === undefined || typeof value === 'boolean' || typeof value === 'number') {
+        return false;
+    }
+    if (isLoggableError(value) || !isSensitiveFieldName(name)) {
+        return false;
+    }
+    const normalized = normalizeFieldName(name);
+    if (LOG_META_NON_SENSITIVE_NAMES.has(normalized)) {
+        return false;
+    }
+    if (normalized.endsWith(FIELD_NAME_LIST_SUFFIX)) {
+        const prefix = normalized.slice(0, -FIELD_NAME_LIST_SUFFIX.length);
+        return prefix === '' || KEY_MATERIAL_PREFIXES.some((material) => prefix.endsWith(material));
+    }
+    return true;
+}
+/**
+ * Masks secrets in a log message: connection addresses (userinfo and query values), JWTs and `Bearer`
+ * tokens. Unlike `maskErrorText`, the name-based pair rules of `redactSensitiveText`
+ * are not applied: on the services' 11,316 logger messages (UC-832) they changed 46, all diagnostic ids
+ * (`LockKey: …`, `syncSessionId: …`, `dedup key: …`, "basic info") and no credential.
+ */
+function maskLogMessageText(text) {
+    return maskUriTextOrEmpty(text)
+        .replace(JWT_PATTERN, exports.REDACTED_FIELD_MASK)
+        .replace(BARE_BEARER_PATTERN, `$1 ${exports.REDACTED_FIELD_MASK}`);
 }
 /** Masks connection addresses, credential pairs and authorization tokens in an error message. */
 function maskErrorText(text) {

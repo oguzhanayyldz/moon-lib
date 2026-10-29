@@ -193,6 +193,8 @@ export declare function toSafeLogError(error: unknown, depth?: number): SafeLogE
  * - Errors are caught on the RAW value (`this[key]`), before `toJSON` output replaces them: the value
  *   the replacer receives for an `AxiosError` is already `toJSON()`'s copy of the request config.
  *   They are written as `toSafeLogError` output.
+ * - The value of a credential-named field (`apiKey`, `headers.Authorization`, `credentials`) becomes
+ *   `REDACTED_FIELD_MASK`; see `isSensitiveLogMetaField` for what is kept.
  * - Cycles become `"[Circular]"`. Detection uses the stack of ancestors of the current value, not a
  *   `WeakSet` of every visited value: the same object referenced twice without a cycle is written twice.
  * - `bigint` is written as a string, a `Buffer` as its length only.
@@ -200,6 +202,21 @@ export declare function toSafeLogError(error: unknown, depth?: number): SafeLogE
  * - Anything that still throws (a throwing getter or `toJSON`) yields `LOG_SERIALIZATION_ERROR`.
  */
 export declare function serializeLogMeta(meta: unknown, maxLength?: number): string;
+/**
+ * Whether a log meta field's value is masked: its name is credential-like (`isSensitiveFieldName`) and
+ * its value can hold a secret. Kept readable, as measured on the services' logger calls (UC-832):
+ * - booleans, numbers, `null`/`undefined` — flags and counts (`hasRefreshToken`, `revokedTokens: 3`)
+ * - errors — they are reduced by `toSafeLogError` instead (`tokenRefreshError`)
+ * - Redis/lock/cache keys (`key`, `cacheKey`, `lockKey`) and field-name lists (`credentialsKeys`)
+ */
+export declare function isSensitiveLogMetaField(name: string, value: unknown): boolean;
+/**
+ * Masks secrets in a log message: connection addresses (userinfo and query values), JWTs and `Bearer`
+ * tokens. Unlike `maskErrorText`, the name-based pair rules of `redactSensitiveText`
+ * are not applied: on the services' 11,316 logger messages (UC-832) they changed 46, all diagnostic ids
+ * (`LockKey: …`, `syncSessionId: …`, `dedup key: …`, "basic info") and no credential.
+ */
+export declare function maskLogMessageText(text: string): string;
 /** Masks connection addresses, credential pairs and authorization tokens in an error message. */
 export declare function maskErrorText(text: string): string;
 /** Drops the query string, fragment and userinfo of a request URL. */

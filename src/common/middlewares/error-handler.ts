@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { CustomError } from '../errors/custom-error';
+import { logger } from '../../services/logger.service';
+import { sanitizeRequestUrl } from '../../utils/logSafety.util';
 
 export const errorHandler = (
     err: Error,
@@ -16,7 +18,9 @@ export const errorHandler = (
         return res.status(413).send({ errors: [{ message: 'Request body too large' }] });
     }
 
-    console.error(err);
+    // console.error printed the raw error: an AxiosError dump carries the request headers (UC-832)
+    const path = typeof req.originalUrl === 'string' ? sanitizeRequestUrl(req.originalUrl) : '';
+    logger.error(`Unhandled error on ${req.method} ${path}:`, err);
     res.status(400).send({
         errors: [{ message: 'Something went wrong' }]
     });

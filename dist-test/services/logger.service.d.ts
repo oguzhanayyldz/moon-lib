@@ -10,6 +10,8 @@ type LogInfo = winston.Logform.TransformableInfo & {
  * winston copies the enumerable fields of an error passed as `logger.error(msg, err)` into the meta
  * (config, request, response, ... for an AxiosError) and appends `err.message` to the message. Those
  * copied fields are replaced by the `toSafeLogError` whitelist, and the appended message is masked.
+ * The caller's own message is masked by `maskLogMessageText`, and credential-named meta fields by
+ * `serializeLogMeta` (UC-832).
  */
 export declare function formatLogLine(info: LogInfo): string;
 export declare const logger: winston.Logger;

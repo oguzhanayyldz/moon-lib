@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireRelatedProductsCreate = exports.requireRelatedProductsRead = exports.requirePackagesDelete = exports.requirePackagesUpdate = exports.requirePackagesCreate = exports.requirePackagesRead = exports.requireCombinationsDelete = exports.requireCombinationsUpdate = exports.requireCombinationsCreate = exports.requireCombinationsRead = exports.requireAttributeValuesDelete = exports.requireAttributeValuesUpdate = exports.requireAttributeValuesCreate = exports.requireAttributeValuesRead = exports.requireAttributesDelete = exports.requireAttributesUpdate = exports.requireAttributesCreate = exports.requireAttributesRead = exports.requireCategoriesDelete = exports.requireCategoriesUpdate = exports.requireCategoriesCreate = exports.requireCategoriesRead = exports.requireBrandsDelete = exports.requireBrandsUpdate = exports.requireBrandsCreate = exports.requireBrandsRead = exports.requireInventoryDelete = exports.requireInventoryUpdate = exports.requireInventoryCreate = exports.requireInventoryRead = exports.requireOrdersDelete = exports.requireOrdersUpdate = exports.requireOrdersCreate = exports.requireOrdersRead = exports.requireProductsDelete = exports.requireProductsUpdate = exports.requireProductsCreate = exports.requireProductsRead = exports.requireSettings = exports.requireAnalytics = exports.requireSubUsers = exports.requireCatalogs = exports.requireIntegrations = exports.requirePricing = exports.requireInventory = exports.requireOrders = exports.requireProducts = exports.ACTIONS = exports.RESOURCES = exports.requirePermission = void 0;
 exports.requireFulfillmentDelete = exports.requireFulfillmentUpdate = exports.requireFulfillmentCreate = exports.requireFulfillmentRead = exports.requireFulfillment = exports.requireSettingsUpdate = exports.requireSettingsRead = exports.requireAnalyticsRead = exports.requireSubUsersDelete = exports.requireSubUsersUpdate = exports.requireSubUsersCreate = exports.requireSubUsersRead = exports.requireCatalogsDelete = exports.requireCatalogsUpdate = exports.requireCatalogsCreate = exports.requireCatalogsRead = exports.requireIntegrationsDelete = exports.requireIntegrationsUpdate = exports.requireIntegrationsCreate = exports.requireIntegrationsRead = exports.requirePricingDelete = exports.requirePricingUpdate = exports.requirePricingCreate = exports.requirePricingRead = exports.requireRelatedProductsDelete = exports.requireRelatedProductsUpdate = void 0;
 const current_user_1 = require("./current-user");
+const logger_service_1 = require("../../services/logger.service");
 /**
  * Basit ve Merkezi Permission Middleware Sistemi
  * Generic factory function ile tüm permission kontrolü
@@ -26,7 +27,7 @@ const requirePermission = (resource, action, options) => {
         if (!hasAccess) {
             // Audit log için
             if (logAccess) {
-                console.warn(`Permission denied: User ${currentUser.id} (role: ${currentUser.role}) attempted ${action} on ${resource}`);
+                logger_service_1.logger.warn(`Permission denied: User ${currentUser.id} (role: ${currentUser.role}) attempted ${action} on ${resource}`);
             }
             return res.status(403).json({
                 errors: [{
@@ -37,7 +38,7 @@ const requirePermission = (resource, action, options) => {
         }
         // Success log (opsiyonel)
         if (logAccess) {
-            console.log(`Permission granted: User ${currentUser.id} performing ${action} on ${resource}`);
+            logger_service_1.logger.debug(`Permission granted: User ${currentUser.id} performing ${action} on ${resource}`);
         }
         next();
     };
