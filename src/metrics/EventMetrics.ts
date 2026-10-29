@@ -131,6 +131,20 @@ export class EventMetrics {
   });
 
   /**
+   * Takılı iş sayacı (Counter) — UC-1183
+   *
+   * reason=max_lock_hold: kilit yenilemesi maxLockHoldMs'i aştığı için durduruldu.
+   * reason=redelivery: aynı mesaj kilit sahibi hâlâ işlerken N kez yeniden teslim edildi (olay başına bir kez sayılır).
+   * Includes labels: listener, reason
+   */
+  static readonly retryableListenerStuckTotal = new Counter<'listener' | 'reason'>({
+    name: 'retryable_listener_stuck_total',
+    help: 'Total number of stuck listener events (lock hold limit exceeded or repeated same-message redelivery)',
+    labelNames: ['listener', 'reason'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
    * DLQ oynatmaları (Counter)
    *
    * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
@@ -186,6 +200,20 @@ export class EventMetrics {
     name: 'version_events_coalesced_total',
     help: 'Total number of entity version events merged into a newer pending event for the same entity',
     labelNames: ['service', 'stage'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Yayın anında birleştirilen olay (Counter) — UC-1135
+   *
+   * OUTBOX_COALESCE_SUBJECTS bayrağıyla açılan birleştirmede aynı partide daha yüksek sürümü yayınlanan ve
+   * 'superseded' olan satır sayısı. Kayıp DEĞİLDİR: en son sürüm yayınlanır.
+   * Labels: service, event_type
+   */
+  static readonly outboxEventsCoalescedTotal = new Counter<'service' | 'event_type'>({
+    name: 'outbox_events_coalesced_total',
+    help: 'Total number of outbox events superseded by a newer version of the same entity at publish time',
+    labelNames: ['service', 'event_type'],
     registers: [EventMetrics.registry]
   });
 
@@ -386,6 +414,7 @@ export class EventMetrics {
     EventMetrics.outboxVersionEventsPublishedTotal.reset();
     EventMetrics.versionEventWriteErrorsTotal.reset();
     EventMetrics.versionEventsCoalescedTotal.reset();
+    EventMetrics.outboxEventsCoalescedTotal.reset();
     EventMetrics.versionEventsInflight.reset();
     EventMetrics.versionEventsLeaseExpiredTotal.reset();
     EventMetrics.versionEventsDuplicatePreventedTotal.reset();
@@ -408,6 +437,7 @@ export class EventMetrics {
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsCoalescedTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.outboxEventsCoalescedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsInflight);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseExpiredTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsDuplicatePreventedTotal);

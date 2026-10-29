@@ -7,6 +7,8 @@ exports.RetryableListener = void 0;
 exports.resolveDuplicateKeyRetries = resolveDuplicateKeyRetries;
 exports.resolveFailFastOnPermanentError = resolveFailFastOnPermanentError;
 exports.resolveLockRenewIntervalMs = resolveLockRenewIntervalMs;
+exports.resolveMaxLockHoldMs = resolveMaxLockHoldMs;
+exports.resolveStuckRedeliveryThreshold = resolveStuckRedeliveryThreshold;
 const crypto_1 = __importDefault(require("crypto"));
 const common_1 = require("../common");
 const retryManager_1 = require("../services/retryManager");
@@ -54,6 +56,28 @@ function resolveLockRenewIntervalMs(explicit, lockTimeoutSec) {
         return fallback;
     return raw;
 }
+// Varsayılan kapalı: parasut sendToErp ve büyük katalog senkronları meşru olarak >15 dk sürebilir; sınır dinleyici bazında açılır.
+const DEFAULT_MAX_LOCK_HOLD_MS = 0;
+const DEFAULT_STUCK_REDELIVERY_THRESHOLD = 5;
+const STUCK_REDELIVERY_KEY_PREFIX = 'event:same-message-redelivery:';
+const STUCK_REDELIVERY_TTL_SEC = 3600;
+/** Negatif olmayan tam sayı seçeneği çözer: açık değer, ortam değişkeni, varsayılan; geçersiz değer varsayılana düşer. */
+function resolveNonNegativeInt(explicit, envName, fallback) {
+    var _a;
+    const env = ((_a = process.env[envName]) !== null && _a !== void 0 ? _a : '').trim();
+    const raw = explicit !== null && explicit !== void 0 ? explicit : (env === '' ? undefined : Number(env));
+    if (raw === undefined || !Number.isInteger(raw) || raw < 0)
+        return fallback;
+    return raw;
+}
+/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 0 (sınır yok). */
+function resolveMaxLockHoldMs(explicit) {
+    return resolveNonNegativeInt(explicit, 'RETRYABLE_MAX_LOCK_HOLD_MS', DEFAULT_MAX_LOCK_HOLD_MS);
+}
+/** stuckRedeliveryThreshold'u çözer (UC-1183): açık değer, RETRYABLE_STUCK_REDELIVERY_THRESHOLD, 5. 0 = kapalı. */
+function resolveStuckRedeliveryThreshold(explicit) {
+    return resolveNonNegativeInt(explicit, 'RETRYABLE_STUCK_REDELIVERY_THRESHOLD', DEFAULT_STUCK_REDELIVERY_THRESHOLD);
+}
 /** Gölge modda kalıcı sayılan olayın işareti: sonraki teslimde başarı = yanlış pozitif (UC-1043). */
 const PERMANENT_SHADOW_KEY_PREFIX = 'event:permanent-shadow:';
 const PERMANENT_SHADOW_TTL_SEC = 86400;
@@ -63,10 +87,12 @@ const PERMANENT_SHADOW_TTL_SEC = 86400;
 class RetryableListener extends common_1.Listener {
     constructor(client, options = {}, connection = mongoose_1.default.connection) {
         super(client);
-        this.options = Object.assign(Object.assign(Object.assign({}, RetryableListener.DEFAULT_OPTIONS), options), { duplicateKeyRetries: resolveDuplicateKeyRetries(options.duplicateKeyRetries), failFastOnPermanentError: resolveFailFastOnPermanentError(options.failFastOnPermanentError) });
+        this.options = Object.assign(Object.assign(Object.assign({}, RetryableListener.DEFAULT_OPTIONS), options), { duplicateKeyRetries: resolveDuplicateKeyRetries(options.duplicateKeyRetries), maxLockHoldMs: resolveMaxLockHoldMs(options.maxLockHoldMs), stuckRedeliveryThreshold: resolveStuckRedeliveryThreshold(options.stuckRedeliveryThreshold), failFastOnPermanentError: resolveFailFastOnPermanentError(options.failFastOnPermanentError) });
         this.options.lockRenewIntervalMs = resolveLockRenewIntervalMs(options.lockRenewIntervalMs, this.options.lockTimeoutSec);
         if (this.options.enableLock && this.options.lockTimeoutSec >= this.options.ackWaitSec) {
-            logger_service_1.logger.warn(`lockTimeoutSec (${this.options.lockTimeoutSec}s) is not shorter than ackWaitSec (${this.options.ackWaitSec}s) in ${this.constructor.name}; a crashed owner holds the event until the lock expires`);
+            // Kilit ackWait'ten uzun tutulabilir (sync/shipment bilinçli: yeniden teslim 'aynı içerik işleniyor' diye tanınır).
+            // Yenileme açıkken canlı sahibin kilidi zaten düşmez; bedel yalnız çöken sahipte: kilit ilk yeniden teslimden sonra düşer.
+            logger_service_1.logger.info(`lockTimeoutSec (${this.options.lockTimeoutSec}s) is not shorter than ackWaitSec (${this.options.ackWaitSec}s) in ${this.constructor.name}; if the owner crashes, takeover waits for the lock to expire (one or more extra redeliveries)`);
         }
         if (this.options.lockRenewIntervalMs > 0 && this.options.lockRenewIntervalMs >= this.options.lockTimeoutSec * 1000) {
             logger_service_1.logger.warn(`lockRenewIntervalMs (${this.options.lockRenewIntervalMs}) is not shorter than lockTimeoutSec (${this.options.lockTimeoutSec}s); the lock can expire before it is renewed`);
@@ -110,7 +136,7 @@ class RetryableListener extends common_1.Listener {
         logger_service_1.logger.debug(`Lock acquired for ${this.subject}:${eventId}`);
         // Kendi kilit değerimizi bildiğimiz için yenileme tam eşleşmeyle yapılır (sonek yedeği gerekmez)
         const stopHeartbeat = this.options.lockRenewIntervalMs > 0
-            ? (0, lockHeartbeat_util_1.startLockHeartbeat)(lockKey, lockValue, '', this.options.lockTimeoutSec, this.options.lockRenewIntervalMs)
+            ? (0, lockHeartbeat_util_1.startLockHeartbeat)(lockKey, lockValue, '', this.options.lockTimeoutSec, this.options.lockRenewIntervalMs, this.options.maxLockHoldMs, () => this.recordStuck('max_lock_hold'))
             : undefined;
         try {
             const result = await callback();
@@ -122,6 +148,31 @@ class RetryableListener extends common_1.Listener {
             // İşlem tamamlandığında kilidi serbest bırak
             await this.releaseLock(lockKey, lockValue);
             logger_service_1.logger.debug(`Lock released for ${this.subject}:${eventId}`);
+        }
+    }
+    recordStuck(reason) {
+        EventMetrics_1.EventMetrics.retryableListenerStuckTotal.inc({ listener: this.constructor.name, reason });
+    }
+    /**
+     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (mesaj başına bir kez) metrik,
+     * eşikten itibaren her teslimde warn. Sayaç hatası teslim akışını bozmaz.
+     */
+    async noteSameMessageRedelivery(eventType, eventId, sequence) {
+        const threshold = this.options.stuckRedeliveryThreshold;
+        if (threshold <= 0)
+            return;
+        try {
+            // Sıra anahtarda: aynı eventId'li farklı mesajların yeniden teslimleri toplanmaz. INCR+EXPIRE tek MULTI'de (TTL'siz anahtar kalmaz).
+            const key = (0, redisEnvScope_util_1.envScopedKey)(`${STUCK_REDELIVERY_KEY_PREFIX}${eventType}:${eventId}:${sequence}`);
+            const [count] = await redisWrapper_service_1.redisWrapper.client.multi().incr(key).expire(key, STUCK_REDELIVERY_TTL_SEC).exec();
+            if (count < threshold)
+                return;
+            if (count === threshold)
+                this.recordStuck('redelivery');
+            logger_service_1.logger.warn(`Event looks stuck: lock holder still processing after ${count} redeliveries of the same message in ${this.constructor.name}: ${eventType}:${eventId}`);
+        }
+        catch (err) {
+            logger_service_1.logger.warn(`Failed to count same-message redelivery: ${eventType}:${eventId}`, err);
         }
     }
     /**
@@ -258,6 +309,7 @@ class RetryableListener extends common_1.Listener {
                             if (sequence !== undefined && (holder === null || holder === void 0 ? void 0 : holder.endsWith(RetryableListener.lockValueSuffix(fingerprint, sequence)))) {
                                 logger_service_1.logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
                                 span.setTag('lock.same_message', true);
+                                await this.noteSameMessageRedelivery(eventType, eventId, sequence);
                                 return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
                             }
                             // Sıra numarası yoksa yeniden teslim, kilit sahibinin işlediği mesajın kendisi olabilir: ack'lenirse
@@ -865,6 +917,8 @@ RetryableListener.DEFAULT_OPTIONS = {
     deadLetterReplay: true, // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
     duplicateKeyRetries: 0, // constructor'da ortam değişkeniyle çözülür
     lockRenewIntervalMs: 0, // constructor'da lockTimeoutSec'ten çözülür
+    maxLockHoldMs: 0, // constructor'da ortam değişkeniyle çözülür
+    stuckRedeliveryThreshold: 0, // constructor'da ortam değişkeniyle çözülür
     failFastOnPermanentError: false // constructor'da ortam değişkeniyle çözülür
 };
 //# sourceMappingURL=retryableListener.js.map

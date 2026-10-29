@@ -11,6 +11,9 @@ export declare const LOCK_RENEW_SCRIPT = "\n    local v = redis.call(\"get\", KE
  *
  * İmza orders/reporting/trendyol/parasut kopyalarıyla aynıdır; kopyalar bu fonksiyonla birebir değiştirilebilir.
  * expectedValue boşsa `suffix` ile eşleşir.
+ *
+ * maxHoldMs > 0 ise (UC-1183) yenileme bu süreden sonra durur ve onMaxHold çağrılır: takılı iş kilidi süresiz yenilemez,
+ * kilit TTL'inde düşer ve sonraki yeniden teslim devralır. 0/verilmezse sınır yok (eski davranış).
  */
-export declare function startLockHeartbeat(lockKey: string, expectedValue: string, suffix: string, ttlSec: number, intervalMs: number): () => void;
+export declare function startLockHeartbeat(lockKey: string, expectedValue: string, suffix: string, ttlSec: number, intervalMs: number, maxHoldMs?: number, onMaxHold?: () => void): () => void;
 //# sourceMappingURL=lockHeartbeat.util.d.ts.map

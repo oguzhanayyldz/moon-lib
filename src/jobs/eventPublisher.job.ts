@@ -143,6 +143,7 @@ export class EventPublisherJob {
     private versionDrainRunning = false;
     private normalDrainRunning = false;
     private readonly normalDrainBudgetMs: number;
+    private readonly coalesceSubjects: ReadonlySet<string>;
     private readonly versionLeases: VersionEventLeases;
     private readonly podId = process.env.HOSTNAME || os.hostname();
     private lastLeaseWarnAt = 0;
@@ -175,6 +176,7 @@ export class EventPublisherJob {
         );
         this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
         this.normalDrainBudgetMs = EventPublisherJob.readNonNegativeIntEnv('OUTBOX_DRAIN_BUDGET_MS', EventPublisherJob.NORMAL_DRAIN_BUDGET_MS_DEFAULT);
+        this.coalesceSubjects = EventPublisherJob.readCoalesceSubjects();
         this.versionLeases = new VersionEventLeases(() => redisWrapper.client, {
             leaseMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LEASE_MS', EventPublisherJob.VERSION_LEASE_MS_DEFAULT),
             latestTtlMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LATEST_TTL_MS', EventPublisherJob.VERSION_LATEST_TTL_MS_DEFAULT),
@@ -235,6 +237,15 @@ export class EventPublisherJob {
     }
 
     /** Sıfır ya da pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    /**
+     * UC-1135: yayın anında birleştirilecek olay tipleri (OUTBOX_COALESCE_SUBJECTS, virgüllü). Boş/yok = kapalı.
+     * Yalnız COALESCIBLE_SUBJECTS içindeki tipler kabul edilir; listede olmayan tip (ör. sync:requested) sessizce yok sayılır.
+     */
+    private static readCoalesceSubjects(): ReadonlySet<string> {
+        const requested = (process.env.OUTBOX_COALESCE_SUBJECTS ?? '').split(',').map(s => s.trim()).filter(Boolean);
+        return new Set(requested.filter(subject => EventPublisherJob.COALESCIBLE_SUBJECTS.includes(subject)));
+    }
+
     private static readNonNegativeIntEnv(name: string, fallback: number): number {
         const raw = process.env[name];
         if (raw === undefined || raw.trim() === '') return fallback;
@@ -511,16 +522,102 @@ export class EventPublisherJob {
      * Event batch'ini işle — paralel, concurrency limit ile
      */
     private static readonly CONCURRENCY_LIMIT = 5;
+    /** Her güncelleme tam durumu taşıyan, yalnız en yüksek sürümü anlamlı olan olay tipleri (payload.id + payload.version). */
+    private static readonly COALESCIBLE_SUBJECTS: readonly string[] = [Subjects.ProductStockUpdated];
 
     private async processEventBatch(events: any[]): Promise<number> {
+        const { toPublish, groups } = this.groupCoalescible(events);
+        const claimedAt = new Date();
+        if (groups.length > 0) {
+            await this.claimLosers(groups, claimedAt);
+        }
+
         let published = 0;
+        const publishedIds = new Set<string>();
         // Concurrency limit ile paralel işleme
-        for (let i = 0; i < events.length; i += EventPublisherJob.CONCURRENCY_LIMIT) {
-            const chunk = events.slice(i, i + EventPublisherJob.CONCURRENCY_LIMIT);
-            const results = await Promise.all(chunk.map(event => this.processOneEvent(event)));
+        for (let i = 0; i < toPublish.length; i += EventPublisherJob.CONCURRENCY_LIMIT) {
+            const chunk = toPublish.slice(i, i + EventPublisherJob.CONCURRENCY_LIMIT);
+            const results = await Promise.all(chunk.map(async event => {
+                const ok = await this.processOneEvent(event);
+                if (ok) publishedIds.add(event.id);
+                return ok;
+            }));
             published += results.filter(Boolean).length;
         }
+
+        if (groups.length > 0) {
+            await this.settleLosers(groups, publishedIds, claimedAt);
+        }
         return published;
+    }
+
+    /**
+     * UC-1135: bayraktaki tiplerde aynı (tip, kullanıcı, payload.id) için partideki en yüksek payload.version kazanır.
+     * Eşit sürümde ilk gelen (en eski) kazanır. Sürümü/id'si olmayan kayıt birleşmez, olduğu gibi yayınlanır.
+     * Bayrak kapalıyken toPublish = events (davranış değişmez).
+     */
+    private groupCoalescible(events: any[]): { toPublish: any[]; groups: Array<{ winner: any; losers: any[] }> } {
+        if (this.coalesceSubjects.size === 0) {
+            return { toPublish: events, groups: [] };
+        }
+        const byKey = new Map<string, { winner: any; losers: any[] }>();
+        const toPublish: any[] = [];
+        for (const event of events) {
+            const payload = event.payload;
+            if (!this.coalesceSubjects.has(event.eventType) || !payload?.id || typeof payload.version !== 'number') {
+                toPublish.push(event);
+                continue;
+            }
+            const key = [event.eventType, event.userId ?? '', payload.id].join('|');
+            const group = byKey.get(key);
+            if (!group) {
+                byKey.set(key, { winner: event, losers: [] });
+            } else if (payload.version > group.winner.payload.version) {
+                group.losers.push(group.winner);
+                group.winner = event;
+            } else {
+                group.losers.push(event);
+            }
+        }
+        const groups: Array<{ winner: any; losers: any[] }> = [];
+        for (const group of byKey.values()) {
+            toPublish.push(group.winner);
+            if (group.losers.length > 0) groups.push(group);
+        }
+        return { toPublish, groups };
+    }
+
+    /** Kaybedenleri claim et; başka pod'un aldığı satır dokunulmadan kalır (claimedAt filtresi sonraki adımda onu ayıklar). */
+    private async claimLosers(groups: Array<{ losers: any[] }>, claimedAt: Date): Promise<void> {
+        try {
+            await this.outboxModel.updateMany(
+                { _id: { $in: groups.flatMap(g => g.losers.map(e => e.id)) }, status: 'pending' },
+                { $set: { status: 'processing', processingStartedAt: claimedAt } }
+            );
+        } catch (error) {
+            // Claim düşerse kaybedenler pending kalır ve normal yoldan yayınlanır (kayıp yok)
+            logger.error('Failed to claim superseded stock events:', error);
+        }
+    }
+
+    /**
+     * Kazanan yayınlandıysa kaybedenler 'superseded' + supersededBy olur; yayınlanmadıysa pending'e döner.
+     * Güncelleme düşerse kaybedenler processing'te kalır, monitorFailedEvents 5 dk sonra kurtarır (çift, kayıp değil).
+     */
+    private async settleLosers(groups: Array<{ winner: any; losers: any[] }>, publishedIds: Set<string>, claimedAt: Date): Promise<void> {
+        for (const { winner, losers } of groups) {
+            const filter = { _id: { $in: losers.map(e => e.id) }, status: 'processing', processingStartedAt: claimedAt };
+            try {
+                if (publishedIds.has(winner.id)) {
+                    const result = await this.outboxModel.updateMany(filter, { $set: { status: 'superseded', supersededBy: winner.id } });
+                    EventMetrics.outboxEventsCoalescedTotal.inc({ service: this.serviceLabel, event_type: winner.eventType }, result.modifiedCount);
+                } else {
+                    await this.outboxModel.updateMany(filter, { $set: { status: 'pending' }, $unset: { processingStartedAt: 1 } });
+                }
+            } catch (error) {
+                logger.error(`Failed to settle superseded events of ${winner.id}:`, error);
+            }
+        }
     }
 
     /** Olay bu çağrıda yayınlanıp published işaretlendiyse true. */

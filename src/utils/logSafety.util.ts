@@ -85,18 +85,28 @@ export function maskConnectionUrisInText(text: string | undefined): string | und
     if (!text || (!text.includes('://') && !text.includes('@'))) {
         return text;
     }
+    // Indices into `text` instead of re-slicing: `rest.lastIndexOf('@')` per match rescanned the whole remainder
+    // (quadratic on many `@`-less addresses). The last `@` is found once; one before `pos` can never win `Math.max`.
+    const startPattern = new RegExp(URI_START_IN_TEXT.source, 'g');
+    const lastAt = text.lastIndexOf('@');
     let result = '';
-    let rest = text;
-    let start = rest.search(URI_START_IN_TEXT);
-    while (start !== -1) {
-        const anchor = Math.max(start, rest.lastIndexOf('@'));
-        const whitespaceIndex = rest.slice(anchor).search(WHITESPACE_PATTERN);
-        const end = whitespaceIndex === -1 ? rest.length : anchor + whitespaceIndex;
-        result += rest.slice(0, start) + maskUriList(rest.slice(start, end));
-        rest = rest.slice(end);
-        start = rest.search(URI_START_IN_TEXT);
+    let pos = 0;
+    for (;;) {
+        startPattern.lastIndex = pos;
+        const match = startPattern.exec(text);
+        if (!match) {
+            break;
+        }
+        const start = match.index;
+        const anchor = Math.max(start, lastAt);
+        let end = anchor;
+        while (end < text.length && !WHITESPACE_PATTERN.test(text[end])) {
+            end++;
+        }
+        result += text.slice(pos, start) + maskUriList(text.slice(start, end));
+        pos = end;
     }
-    return result + rest;
+    return result + text.slice(pos);
 }
 
 /**
@@ -780,6 +790,9 @@ export function serializeLogMeta(meta: unknown, maxLength: number = MAX_LOG_META
             } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(raw)) {
                 return `[Buffer ${raw.length} bytes]`;
             }
+            if (typeof result === 'string') {
+                result = maskDuplicateKeyValue(result);
+            }
             if (typeof result === 'object' && result !== null) {
                 while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
                     ancestors.pop();
@@ -835,6 +848,17 @@ export function maskLogMessageText(text: string): string {
     return maskUriTextOrEmpty(text)
         .replace(JWT_PATTERN, REDACTED_FIELD_MASK)
         .replace(BARE_BEARER_PATTERN, `$1 ${REDACTED_FIELD_MASK}`);
+}
+
+// MongoDB E11000 message: the conflicting value (an e-mail, a code) sits between the braces after `dup key:`.
+const DUPLICATE_KEY_VALUE_PATTERN = /(dup key:\s*\{)[^}]*\}/g;
+
+/**
+ * Masks the conflicting value of a MongoDB duplicate-key (E11000) message: `dup key: { email: "…" }` becomes
+ * `dup key: { **** }`. Collection and index name stay. Known limit: a value that itself holds `}` is cut there.
+ */
+export function maskDuplicateKeyValue(text: string): string {
+    return text.replace(DUPLICATE_KEY_VALUE_PATTERN, `$1 ${MASK} }`);
 }
 
 /** Masks connection addresses, credential pairs and authorization tokens in an error message. */

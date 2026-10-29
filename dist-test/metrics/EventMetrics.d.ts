@@ -85,6 +85,14 @@ export declare class EventMetrics {
      */
     static readonly eventPermanentErrorTotal: Counter<"service" | "event_type" | "queue_group" | "outcome">;
     /**
+     * Takılı iş sayacı (Counter) — UC-1183
+     *
+     * reason=max_lock_hold: kilit yenilemesi maxLockHoldMs'i aştığı için durduruldu.
+     * reason=redelivery: aynı mesaj kilit sahibi hâlâ işlerken N kez yeniden teslim edildi (olay başına bir kez sayılır).
+     * Includes labels: listener, reason
+     */
+    static readonly retryableListenerStuckTotal: Counter<"reason" | "listener">;
+    /**
      * DLQ oynatmaları (Counter)
      *
      * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
@@ -119,6 +127,14 @@ export declare class EventMetrics {
      * Labels: service, stage
      */
     static readonly versionEventsCoalescedTotal: Counter<"service" | "stage">;
+    /**
+     * Yayın anında birleştirilen olay (Counter) — UC-1135
+     *
+     * OUTBOX_COALESCE_SUBJECTS bayrağıyla açılan birleştirmede aynı partide daha yüksek sürümü yayınlanan ve
+     * 'superseded' olan satır sayısı. Kayıp DEĞİLDİR: en son sürüm yayınlanır.
+     * Labels: service, event_type
+     */
+    static readonly outboxEventsCoalescedTotal: Counter<"service" | "event_type">;
     /**
      * Redis iletim kirası tutulan varlık sayısı (Gauge) — UC-984 madde 9
      *
