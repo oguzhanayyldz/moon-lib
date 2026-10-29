@@ -29,6 +29,7 @@ exports.toSafeLogError = toSafeLogError;
 exports.serializeLogMeta = serializeLogMeta;
 exports.isSensitiveLogMetaField = isSensitiveLogMetaField;
 exports.maskLogMessageText = maskLogMessageText;
+exports.maskDuplicateKeyValue = maskDuplicateKeyValue;
 exports.maskErrorText = maskErrorText;
 exports.sanitizeRequestUrl = sanitizeRequestUrl;
 exports.maskResourceId = maskResourceId;
@@ -748,6 +749,9 @@ function serializeLogMeta(meta, maxLength = exports.MAX_LOG_META_LENGTH) {
             else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(raw)) {
                 return `[Buffer ${raw.length} bytes]`;
             }
+            if (typeof result === 'string') {
+                result = maskDuplicateKeyValue(result);
+            }
             if (typeof result === 'object' && result !== null) {
                 while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
                     ancestors.pop();
@@ -802,6 +806,15 @@ function maskLogMessageText(text) {
     return maskUriTextOrEmpty(text)
         .replace(JWT_PATTERN, exports.REDACTED_FIELD_MASK)
         .replace(BARE_BEARER_PATTERN, `$1 ${exports.REDACTED_FIELD_MASK}`);
+}
+// MongoDB E11000 message: the conflicting value (an e-mail, a code) sits between the braces after `dup key:`.
+const DUPLICATE_KEY_VALUE_PATTERN = /(dup key:\s*\{)[^}]*\}/g;
+/**
+ * Masks the conflicting value of a MongoDB duplicate-key (E11000) message: `dup key: { email: "…" }` becomes
+ * `dup key: { **** }`. Collection and index name stay. Known limit: a value that itself holds `}` is cut there.
+ */
+function maskDuplicateKeyValue(text) {
+    return text.replace(DUPLICATE_KEY_VALUE_PATTERN, `$1 ${MASK} }`);
 }
 /** Masks connection addresses, credential pairs and authorization tokens in an error message. */
 function maskErrorText(text) {
