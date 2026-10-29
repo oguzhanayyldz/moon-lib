@@ -34,6 +34,7 @@ __exportStar(require("./models/integrationCategoryAttributes.schema"), exports);
 __exportStar(require("./models/integrationRequestLog.schema"), exports);
 __exportStar(require("./models/retentionTtlIndex"), exports);
 __exportStar(require("./models/excelJob.schema"), exports);
+__exportStar(require("./models/sessionRevocation.schema"), exports);
 // Services
 __exportStar(require("./services/natsWrapper.service"), exports);
 __exportStar(require("./services/tracer.service"), exports);
@@ -139,6 +140,7 @@ __exportStar(require("./utils/eventErrorClassification.util"), exports);
 __exportStar(require("./utils/lockHeartbeat.util"), exports);
 __exportStar(require("./events/retryableListener"), exports);
 __exportStar(require("./events/listeners/BaseModernEntityDeletedListener"), exports);
+__exportStar(require("./events/listeners/BaseUserSessionsRevokedListener"), exports);
 __exportStar(require("./events/publishers/deleteProductImagesCompletedPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/deleteProductImagesPublisher.publisher"), exports);
 __exportStar(require("./events/publishers/importImagesFromUrlsCompletedPublisher.publisher"), exports);

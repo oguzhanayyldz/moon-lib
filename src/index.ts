@@ -19,6 +19,7 @@ export * from './models/integrationCategoryAttributes.schema';
 export * from './models/integrationRequestLog.schema';
 export * from './models/retentionTtlIndex';
 export * from './models/excelJob.schema';
+export * from './models/sessionRevocation.schema';
 
 // Services
 export * from './services/natsWrapper.service';
@@ -138,6 +139,7 @@ export * from './utils/eventErrorClassification.util';
 export * from './utils/lockHeartbeat.util';
 export * from './events/retryableListener';
 export * from './events/listeners/BaseModernEntityDeletedListener';
+export * from './events/listeners/BaseUserSessionsRevokedListener';
 export * from './events/publishers/deleteProductImagesCompletedPublisher.publisher';
 export * from './events/publishers/deleteProductImagesPublisher.publisher';
 export * from './events/publishers/importImagesFromUrlsCompletedPublisher.publisher';

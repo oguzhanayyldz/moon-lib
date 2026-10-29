@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { NotAuthorizedError } from '../errors/not-authorized-error';
+import { ServiceUnavailableError } from '../errors/service-unavailable-error';
 import { logger } from '../../services/logger.service';
 
 /**
@@ -82,7 +83,15 @@ const revocationHolderId = (user: NonNullable<Request['currentUser']>): string |
  *     zaten reddeder.
  *   - `sst` de `iat` de yoksa baslangic bilinmiyor: esigi olan hesapta red.
  */
-export const requireFreshSession = (lookup: SessionRevocationLookup) =>
+export interface RequireFreshSessionOptions {
+    /**
+     * Okuma hatasinin `next`'e hangi hata olarak iletilecegi. Varsayilan: hatanin kendisi
+     * (`errorHandler` CustomError olmayani 400 yapar). Istek her durumda durdurulur.
+     */
+    mapLookupError?: (error: unknown) => unknown;
+}
+
+export const requireFreshSession = (lookup: SessionRevocationLookup, options: RequireFreshSessionOptions = {}) =>
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
         const user = req.currentUser;
         if (!user) {
@@ -100,7 +109,8 @@ export const requireFreshSession = (lookup: SessionRevocationLookup) =>
             holder = await lookup(holderId);
         } catch (error) {
             logger.error('[requireFreshSession] revocation lookup failed, blocking request:', error);
-            return next(error);
+            // Eslemenin bos donusu `next()` olur ve istegi gecirirdi: hatanin kendisine dusulur
+            return next(options.mapLookupError?.(error) ?? error);
         }
 
         if (!holder) {
@@ -115,3 +125,42 @@ export const requireFreshSession = (lookup: SessionRevocationLookup) =>
 
         next();
     };
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+export interface RequireFreshSessionOnWritesOptions {
+    /**
+     * Esik okunamadiginda yanit (UC-923 N3). Varsayilan `'unavailable'`: 503 — gecici sunucu
+     * sorunu. `'propagate'`: ham hata iletilir (`errorHandler` → 400), servis kopyalarinin
+     * (UC-921/UC-922) eski davranisi. Iki durumda da istek uca ULASMAZ (fail-closed).
+     */
+    onLookupError?: 'unavailable' | 'propagate';
+}
+
+/**
+ * Yazma yontemlerinde (POST/PUT/PATCH/DELETE) iptalden once baslamis erisim JWT'sini
+ * reddeder (UC-921/UC-922 servis kopyalarinin tek hali, UC-923). `app.use(currentUser)`
+ * SONRASINA, rotalardan ONCE takilir: tek noktadan butun yazma yuzeyini kapsar, yeni rota
+ * eklendiginde unutulamaz. Oturumsuz istek (webhook vb.) `currentUser` yok → dokunulmaz;
+ * kimlik denetimini rotanin kendi `requireAuth`'u yapar. Okuma uclari etkilenmez.
+ *
+ * Sira: rate-limit'ten SONRA takilmasi onerilir — koruma her oturumlu yazmada bir indeksli
+ * `findOne` yapar; once takilirsa sinira takilacak istek de DB'ye ulasir.
+ */
+export const requireFreshSessionOnWrites = (
+    lookup: SessionRevocationLookup,
+    options: RequireFreshSessionOnWritesOptions = {}
+) => {
+    const freshSession = requireFreshSession(lookup, {
+        mapLookupError: options.onLookupError === 'propagate'
+            ? undefined
+            : () => new ServiceUnavailableError()
+    });
+
+    return (req: Request, res: Response, next: NextFunction): void => {
+        if (READ_METHODS.has(req.method)) {
+            return next();
+        }
+        freshSession(req, res, next).catch(next);
+    };
+};
