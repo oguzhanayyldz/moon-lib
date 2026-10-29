@@ -11,7 +11,8 @@ import {
     redactSensitiveFields,
     redactSensitiveText,
     sanitizeConnectionError,
-    toSafeError
+    toSafeError,
+    maskLogMessageText
 } from '../utils/logSafety.util';
 
 // Fake values. They appear in source as `${...}` templates; the plaintext credential K0 gate
@@ -855,6 +856,82 @@ describe('redactSensitiveText — name-free tokens, header lines, session/jwt/si
             const started = performance.now();
             runInNewContext('redact(input)', { redact: redactSensitiveText, input }, { timeout: HARD_LIMIT_MS });
             expect(performance.now() - started).toBeLessThan(LINEAR_BUDGET_MS);
+        });
+    });
+
+    // UC-832 B1: maskLogMessageText runs on every logger call, so a whitespace-free line must not cost O(n²)
+    describe('maskLogMessageText — whitespace-free message cost (UC-832 B1)', () => {
+        const KB32 = 32 * 1024;
+        const BUDGET_MS = 50;
+        const repeatTo = (unit: string, size: number): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+
+        // The prefix makes the pre-check start the scan; without the lookbehind anchors each body below is quadratic.
+        const bodies: Array<[string, string]> = [
+            ['repeated word', repeatTo('abcdefgh', KB32)],
+            ['repeated `a:`', repeatTo('a:', KB32)],
+            ['whitespace-free JSON', repeatTo('{"id":1,"sku":"A-1"},', KB32)],
+            ['base64', randomBytes(KB32).toString('base64').slice(0, KB32)]
+        ];
+        const hostile64: Array<[string, string]> = [
+            ['`1…1://`', `${'1'.repeat(64 * 1024)}://`],
+            ['`-…-a`', `${'-'.repeat(64 * 1024)}a`],
+            ['`1a1a…`', '1a'.repeat(32 * 1024)]
+        ];
+        const timed = (input: string): number => {
+            maskLogMessageText('warm up');
+            const started = performance.now();
+            maskLogMessageText(input);
+            return performance.now() - started;
+        };
+
+        it.each(bodies)('%s (32 KB) is masked under 50 ms', (_label, input) => {
+            expect(timed(input)).toBeLessThan(BUDGET_MS);
+        });
+
+        it.each(bodies)('%s (32 KB) after a `redis://h ` prefix is masked under 50 ms', (_label, input) => {
+            expect(timed(`redis://h ${input}`)).toBeLessThan(BUDGET_MS);
+        });
+
+        it.each(bodies)('%s (32 KB) after an `a@b ` prefix is masked under 50 ms', (_label, input) => {
+            expect(timed(`a@b ${input}`)).toBeLessThan(BUDGET_MS);
+        });
+
+        it.each(hostile64)('hostile %s (64 KB) is masked under 50 ms', (_label, input) => {
+            expect(timed(input)).toBeLessThan(BUDGET_MS);
+            expect(timed(`redis://h ${input}`)).toBeLessThan(BUDGET_MS);
+        });
+
+        // B5: a scheme word starting with a digit or `+ . -` must still have its query credential masked
+        it.each([
+            '2redis://h?password=FAKE_PASS_UC832',
+            '-redis://h?password=FAKE_PASS_UC832',
+            '.redis://h/?authSource=x&password=FAKE_PASS_UC832',
+            '+mongodb://h/?password=FAKE_PASS_UC832',
+            'x and 3redis://h?password=FAKE_PASS_UC832'
+        ])('masks the query password in %s', (input) => {
+            const out = maskLogMessageText(input);
+            expect(out).not.toContain('FAKE_PASS_UC832');
+            expect(out).toContain('****');
+        });
+
+        // regression set from the UC-832 review: these were already masked on main and must stay masked
+        it.each([
+            'x=https://u:FAKE_PASS_UC832@h',
+            '"url":"mongodb://u:FAKE_PASS_UC832@h"',
+            '(redis://u:FAKE_PASS_UC832@h)',
+            'url=redis://:FAKE_PASS_UC832@h',
+            'id=7mongodb://u:FAKE_PASS_UC832@h',
+            'v1.2redis://h?token=FAKE_PASS_UC832'
+        ])('keeps masking %s', (input) => {
+            const out = maskLogMessageText(input);
+            expect(out).not.toContain('FAKE_PASS_UC832');
+            expect(out).toContain('****');
+        });
+
+        it('still masks an address at a word start', () => {
+            const out = maskLogMessageText('cache redis://u:FAKE_PASS_UC832@h:6379/0 down');
+            expect(out).not.toContain('FAKE_PASS_UC832');
+            expect(out).toContain('redis://u:****@h:6379/0');
         });
     });
 });

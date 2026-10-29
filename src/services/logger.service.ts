@@ -1,5 +1,5 @@
 import winston from 'winston';
-import { isLoggableError, maskErrorText, serializeLogMeta, toSafeLogError } from '../utils/logSafety.util';
+import { isLoggableError, maskErrorText, maskLogMessageText, serializeLogMeta, toSafeLogError } from '../utils/logSafety.util';
 
 // Pod ve servis isimlerini almak için
 const POD_NAME = process.env.POD_NAME || process.env.HOSTNAME || 'unknown-pod';
@@ -19,6 +19,8 @@ type LogInfo = winston.Logform.TransformableInfo & { [SPLAT]?: unknown[] };
  * winston copies the enumerable fields of an error passed as `logger.error(msg, err)` into the meta
  * (config, request, response, ... for an AxiosError) and appends `err.message` to the message. Those
  * copied fields are replaced by the `toSafeLogError` whitelist, and the appended message is masked.
+ * The caller's own message is masked by `maskLogMessageText`, and credential-named meta fields by
+ * `serializeLogMeta` (UC-832).
  */
 export function formatLogLine(info: LogInfo): string {
     try {
@@ -44,6 +46,8 @@ export function formatLogLine(info: LogInfo): string {
             const { message: _ignored, ...safeFields } = toSafeLogError(rest);
             meta = { ...omitKeys(rest, new Set(UNPACKED_ERROR_KEYS)), ...safeFields };
             text = maskErrorText(text);
+        } else {
+            text = maskLogMessageText(text);
         }
         const metaStr = Object.keys(meta).length > 0 ? ' ' + serializeLogMeta(meta) : '';
         return `${prefix} ${text}${metaStr}`;
@@ -61,11 +65,12 @@ function looksLikeUnpackedAxiosError(meta: Record<string, unknown>): boolean {
     return isObject(meta.config) && isObject(meta.request) && ('url' in meta.config || 'headers' in meta.config);
 }
 
+// The caller's own part of the message is masked here; the appended error message is already masked.
 function replaceAppendedMessage(text: string, rawMessage: unknown, safeMessage: string): string {
     if (typeof rawMessage !== 'string' || !rawMessage || !text.endsWith(` ${rawMessage}`)) {
-        return text;
+        return maskLogMessageText(text);
     }
-    return `${text.slice(0, text.length - rawMessage.length)}${safeMessage}`;
+    return `${maskLogMessageText(text.slice(0, text.length - rawMessage.length))}${safeMessage}`;
 }
 
 function omitKeys(source: Record<string, unknown>, keys: Set<string>): Record<string, unknown> {
