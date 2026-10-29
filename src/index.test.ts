@@ -7,7 +7,7 @@
 // - Use: `npm run build:test` to build after modifying this file
 // - Agent script automatically detects if build is needed
 
-import { Subjects, OptimisticLockingUtil as RealOptimisticLockingUtil } from './index';
+import { Subjects, OptimisticLockingUtil as RealOptimisticLockingUtil, redisWrapper as realRedisWrapper } from './index';
 
 // Global test cleanup registry
 let testTimers: Set<any> = new Set();
@@ -441,6 +441,11 @@ export const createRedisWrapper = () => {
 
 // Export redisWrapper instance for direct usage
 export const redisWrapper = createRedisWrapper();
+
+// UC-923: BaseUserSessionsRevokedListener gerçek RetryableListener'dan türer (MockRetryableListener
+// ona dokunmaz); gerçek kurucu RetryManager üzerinden gerçek tekilin istemcisini ister. Mock istemci
+// bağlanır — servis testleri processEvent'i doğrudan çağırır, sayaç Redis'e yazmaz.
+(realRedisWrapper as any)._client = redisWrapper.client;
 
 // Security Services - Test-friendly version
 export const createMicroserviceSecurityService = (config: any = {}) => {

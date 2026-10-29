@@ -441,6 +441,10 @@ const createRedisWrapper = () => {
 exports.createRedisWrapper = createRedisWrapper;
 // Export redisWrapper instance for direct usage
 exports.redisWrapper = (0, exports.createRedisWrapper)();
+// UC-923: BaseUserSessionsRevokedListener gerçek RetryableListener'dan türer (MockRetryableListener
+// ona dokunmaz); gerçek kurucu RetryManager üzerinden gerçek tekilin istemcisini ister. Mock istemci
+// bağlanır — servis testleri processEvent'i doğrudan çağırır, sayaç Redis'e yazmaz.
+index_1.redisWrapper._client = exports.redisWrapper.client;
 // Security Services - Test-friendly version
 const createMicroserviceSecurityService = (config = {}) => {
     const defaultConfig = {
