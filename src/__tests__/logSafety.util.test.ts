@@ -11,7 +11,8 @@ import {
     redactSensitiveFields,
     redactSensitiveText,
     sanitizeConnectionError,
-    toSafeError
+    toSafeError,
+    maskLogMessageText
 } from '../utils/logSafety.util';
 
 // Fake values. They appear in source as `${...}` templates; the plaintext credential K0 gate
@@ -855,6 +856,31 @@ describe('redactSensitiveText — name-free tokens, header lines, session/jwt/si
             const started = performance.now();
             runInNewContext('redact(input)', { redact: redactSensitiveText, input }, { timeout: HARD_LIMIT_MS });
             expect(performance.now() - started).toBeLessThan(LINEAR_BUDGET_MS);
+        });
+    });
+
+    // UC-832 B1: maskLogMessageText runs on every logger call, so a whitespace-free line must not cost O(n²)
+    describe('maskLogMessageText — whitespace-free message cost (UC-832 B1)', () => {
+        const KB32 = 32 * 1024;
+        const BUDGET_MS = 50;
+        const repeatTo = (unit: string, size: number): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+
+        it.each([
+            ['repeated word', repeatTo('abcdefgh', KB32)],
+            ['repeated `a:`', repeatTo('a:', KB32)],
+            ['whitespace-free JSON', repeatTo('{"id":1,"sku":"A-1"},', KB32)],
+            ['base64', randomBytes(KB32).toString('base64').slice(0, KB32)]
+        ])('%s (32 KB) is masked under 50 ms', (_label, input) => {
+            maskLogMessageText('warm up');
+            const started = performance.now();
+            maskLogMessageText(input);
+            expect(performance.now() - started).toBeLessThan(BUDGET_MS);
+        });
+
+        it('still masks an address at a word start', () => {
+            const out = maskLogMessageText('cache redis://u:FAKE_PASS_UC832@h:6379/0 down');
+            expect(out).not.toContain('FAKE_PASS_UC832');
+            expect(out).toContain('redis://u:****@h:6379/0');
         });
     });
 });

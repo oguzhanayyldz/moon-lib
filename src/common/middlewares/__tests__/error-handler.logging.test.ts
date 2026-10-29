@@ -100,3 +100,54 @@ describe('errorHandler logging (UC-832)', () => {
         expect(line).toContain('"status":401');
     });
 });
+
+describe('errorHandler non-Error throws (UC-832 B3/B4)', () => {
+    const run = (thrown: unknown) => {
+        const app = express();
+        app.get('/x', () => {
+            throw thrown;
+        });
+        app.use(errorHandler);
+        return get(app, '/x');
+    };
+
+    beforeAll(() => {
+        logger.transports.forEach((transport) => {
+            transport.silent = true;
+        });
+        logger.add(capture);
+    });
+
+    afterAll(() => {
+        logger.remove(capture);
+        logger.transports.forEach((transport) => {
+            transport.silent = false;
+        });
+    });
+
+    beforeEach(() => {
+        lines.length = 0;
+    });
+
+    it('keeps the text of a thrown string, masked', async () => {
+        const res = await run('boom redis://u:FAKE_THROWN_PASS@h:6379');
+
+        expect(res.status).toBe(400);
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toContain('boom');
+        expect(lines[0]).not.toContain('FAKE_THROWN_PASS');
+    });
+
+    // Express routes a falsy value to 404 before the handler, so the handler is called directly
+    it.each([null, undefined])('answers 400 without a TypeError when %s reaches the handler', (thrown) => {
+        const status = jest.fn().mockReturnThis();
+        const send = jest.fn();
+        const req = { method: 'GET', originalUrl: '/x' } as any;
+
+        expect(() => errorHandler(thrown, req, { status, send } as any, jest.fn())).not.toThrow();
+
+        expect(status).toHaveBeenCalledWith(400);
+        expect(send).toHaveBeenCalledWith({ errors: [{ message: 'Something went wrong' }] });
+        expect(lines).toHaveLength(1);
+    });
+});

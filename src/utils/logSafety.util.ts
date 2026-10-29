@@ -18,7 +18,9 @@ const SAFE_QUERY_KEYS = new Set([
     'sockettimeoutms', 'ssl', 'tls', 'w'
 ]);
 // Start of an address in free text: a scheme (`redis://`) or the start of a word containing `@` (userinfo without scheme).
-const URI_START_IN_TEXT = /[A-Za-z][A-Za-z0-9+.-]*:\/\/|[^\s@]*@/;
+// Both alternatives are anchored at a word start (lookbehind): unanchored, `search()` rescanned the rest of a
+// long whitespace-free text from every position, which is quadratic (32 KB took over a second).
+const URI_START_IN_TEXT = /(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*:\/\/|(?<![^\s@])[^\s@]*@/;
 const WHITESPACE_PATTERN = /\s/;
 const SAFE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const SAFE_ERROR_CODE_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -77,7 +79,8 @@ export function maskConnectionUriSecret(value: string | undefined): string | und
  * Known limit: in userinfo without a scheme, the part of a password before a whitespace is not treated as an address.
  */
 export function maskConnectionUrisInText(text: string | undefined): string | undefined {
-    if (!text) {
+    // Cheap pre-check: an address needs `://` or `@`, so most log lines skip the scan entirely.
+    if (!text || (!text.includes('://') && !text.includes('@'))) {
         return text;
     }
     let result = '';
@@ -438,11 +441,24 @@ export function redactSensitiveText(text: string): string {
         .replace(BARE_BEARER_PATTERN, `$1 ${REDACTED_FIELD_MASK}`);
 }
 
+// Field names repeat on every log line, so normalized names are cached (bounded: names can be data-derived keys).
+const NORMALIZED_FIELD_NAME_CACHE = new Map<string, string>();
+const NORMALIZED_FIELD_NAME_CACHE_LIMIT = 2000;
+
 function normalizeFieldName(name: string): string {
-    return name
+    const cached = NORMALIZED_FIELD_NAME_CACHE.get(name);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const normalized = name
         .replace(/[çÇğĞıİöÖşŞüÜ]/g, (letter) => TURKISH_TO_ASCII[letter])
         .toLowerCase()
         .replace(NON_ALPHANUMERIC_PATTERN, '');
+    if (NORMALIZED_FIELD_NAME_CACHE.size >= NORMALIZED_FIELD_NAME_CACHE_LIMIT) {
+        NORMALIZED_FIELD_NAME_CACHE.clear();
+    }
+    NORMALIZED_FIELD_NAME_CACHE.set(name, normalized);
+    return normalized;
 }
 
 /** Marker written in place of a personal-data value (UC-979), kept apart from the credential marker. */
