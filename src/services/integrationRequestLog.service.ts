@@ -43,6 +43,52 @@ export function withIntegrationLogSizes<T extends { requestBytes?: number; respo
     return { ...log, requestSize, responseSize, totalSize };
 }
 
+/**
+ * Admin log listesinde sıralanabilen alanlar (UC-800): yalnız indeksli `requestTime`.
+ * İndekssiz alanda sıralama entegrasyonun tüm loglarını bellekte sıralatır; listede olmayan alan
+ * istenirse `requestTime`'a düşülür.
+ */
+export const ADMIN_LOG_SORT_FIELDS = ['requestTime'] as const;
+
+export interface AdminLogListParams {
+    sortField: string;
+    sortOrder: 'asc' | 'desc';
+    startDate?: Date;
+    endDate?: Date;
+    statusCode?: number;
+}
+
+const toValidDate = (value: unknown): Date | undefined => {
+    if (typeof value !== 'string' || !value) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+};
+
+/**
+ * Admin log rotalarının liste sorgu parametrelerini tek sözleşmeye çevirir (UC-800).
+ * İstemci adları: `startDate`/`endDate`, `statusCode`, `sortField`/`sort`.
+ * Geriye uyum: eski `dateFrom`/`dateTo` ve `sortOrder` adları da okunur (yeni ad önceliklidir).
+ */
+export function parseAdminLogListParams(query: Record<string, unknown> = {}): AdminLogListParams {
+    const requestedSortField = typeof query.sortField === 'string' ? query.sortField : '';
+    const sortField = (ADMIN_LOG_SORT_FIELDS as readonly string[]).includes(requestedSortField)
+        ? requestedSortField
+        : 'requestTime';
+    const requestedOrder = query.sort ?? query.sortOrder;
+    const sortOrder: 'asc' | 'desc' = requestedOrder === 'asc' ? 'asc' : 'desc';
+    const statusCode = typeof query.statusCode === 'string' && /^[1-5]\d{2}$/.test(query.statusCode)
+        ? Number(query.statusCode)
+        : undefined;
+
+    return {
+        sortField,
+        sortOrder,
+        startDate: toValidDate(query.startDate ?? query.dateFrom),
+        endDate: toValidDate(query.endDate ?? query.dateTo),
+        statusCode
+    };
+}
+
 export interface LogIntegrationRequestOptions {
     integrationName: ResourceName;
     userId: string;
@@ -497,6 +543,9 @@ export class IntegrationRequestLogService {
             success?: boolean | 'partial';
             search?: string;
             advancedSearch?: string;
+            startDate?: Date;
+            endDate?: Date;
+            statusCode?: number;
         }
     ) {
         try {
@@ -557,9 +606,24 @@ export class IntegrationRequestLogService {
                 query.$and.push(buildSearchKeysQuery(filters.advancedSearch));
             }
 
+            // HTTP kodu (UC-800): `success` filtresiyle aynı alanı ezmemesi için $and'e itiliyor
+            if (filters?.statusCode !== undefined) {
+                query.$and = query.$and || [];
+                query.$and.push({ responseStatus: filters.statusCode });
+            }
+
+            // Tarih aralığı filtresi (UC-800)
+            if (filters?.startDate || filters?.endDate) {
+                query.requestTime = {};
+                if (filters.startDate) query.requestTime.$gte = filters.startDate;
+                if (filters.endDate) query.requestTime.$lte = filters.endDate;
+            }
+
             const skip = (page - 1) * limit;
             const sortObj: any = {};
-            sortObj[sortField] = sortOrder === 'asc' ? 1 : -1;
+            // Yalnız indeksli alanda sıralama (UC-800); listede olmayan alan requestTime'a düşer
+            const safeSortField = (ADMIN_LOG_SORT_FIELDS as readonly string[]).includes(sortField) ? sortField : 'requestTime';
+            sortObj[safeSortField] = sortOrder === 'asc' ? 1 : -1;
 
             const [logs, total] = await Promise.all([
                 this.IntegrationRequestLogModel.find(query, INTEGRATION_LOG_LIST_PROJECTION)

@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IntegrationRequestLogService = exports.INTEGRATION_LOG_LIST_PROJECTION = exports.INTEGRATION_LOG_BODY_MAX_BYTES = void 0;
+exports.IntegrationRequestLogService = exports.ADMIN_LOG_SORT_FIELDS = exports.INTEGRATION_LOG_LIST_PROJECTION = exports.INTEGRATION_LOG_BODY_MAX_BYTES = void 0;
 exports.withIntegrationLogSizes = withIntegrationLogSizes;
+exports.parseAdminLogListParams = parseAdminLogListParams;
 const interpreter_factory_1 = require("./response-interpreters/interpreter.factory");
 const logger_service_1 = require("./logger.service");
 const logSafety_util_1 = require("../utils/logSafety.util");
@@ -28,6 +29,42 @@ function withIntegrationLogSizes(log) {
     const responseSize = typeof log.responseBytes === 'number' ? log.responseBytes : null;
     const totalSize = requestSize === null && responseSize === null ? null : (requestSize !== null && requestSize !== void 0 ? requestSize : 0) + (responseSize !== null && responseSize !== void 0 ? responseSize : 0);
     return Object.assign(Object.assign({}, log), { requestSize, responseSize, totalSize });
+}
+/**
+ * Admin log listesinde sıralanabilen alanlar (UC-800): yalnız indeksli `requestTime`.
+ * İndekssiz alanda sıralama entegrasyonun tüm loglarını bellekte sıralatır; listede olmayan alan
+ * istenirse `requestTime`'a düşülür.
+ */
+exports.ADMIN_LOG_SORT_FIELDS = ['requestTime'];
+const toValidDate = (value) => {
+    if (typeof value !== 'string' || !value)
+        return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+};
+/**
+ * Admin log rotalarının liste sorgu parametrelerini tek sözleşmeye çevirir (UC-800).
+ * İstemci adları: `startDate`/`endDate`, `statusCode`, `sortField`/`sort`.
+ * Geriye uyum: eski `dateFrom`/`dateTo` ve `sortOrder` adları da okunur (yeni ad önceliklidir).
+ */
+function parseAdminLogListParams(query = {}) {
+    var _a, _b, _c;
+    const requestedSortField = typeof query.sortField === 'string' ? query.sortField : '';
+    const sortField = exports.ADMIN_LOG_SORT_FIELDS.includes(requestedSortField)
+        ? requestedSortField
+        : 'requestTime';
+    const requestedOrder = (_a = query.sort) !== null && _a !== void 0 ? _a : query.sortOrder;
+    const sortOrder = requestedOrder === 'asc' ? 'asc' : 'desc';
+    const statusCode = typeof query.statusCode === 'string' && /^[1-5]\d{2}$/.test(query.statusCode)
+        ? Number(query.statusCode)
+        : undefined;
+    return {
+        sortField,
+        sortOrder,
+        startDate: toValidDate((_b = query.startDate) !== null && _b !== void 0 ? _b : query.dateFrom),
+        endDate: toValidDate((_c = query.endDate) !== null && _c !== void 0 ? _c : query.dateTo),
+        statusCode
+    };
 }
 class IntegrationRequestLogService {
     constructor(connection) {
@@ -446,9 +483,24 @@ class IntegrationRequestLogService {
                 query.$and = query.$and || [];
                 query.$and.push((0, integrationRequestLogPolicy_util_1.buildSearchKeysQuery)(filters.advancedSearch));
             }
+            // HTTP kodu (UC-800): `success` filtresiyle aynı alanı ezmemesi için $and'e itiliyor
+            if ((filters === null || filters === void 0 ? void 0 : filters.statusCode) !== undefined) {
+                query.$and = query.$and || [];
+                query.$and.push({ responseStatus: filters.statusCode });
+            }
+            // Tarih aralığı filtresi (UC-800)
+            if ((filters === null || filters === void 0 ? void 0 : filters.startDate) || (filters === null || filters === void 0 ? void 0 : filters.endDate)) {
+                query.requestTime = {};
+                if (filters.startDate)
+                    query.requestTime.$gte = filters.startDate;
+                if (filters.endDate)
+                    query.requestTime.$lte = filters.endDate;
+            }
             const skip = (page - 1) * limit;
             const sortObj = {};
-            sortObj[sortField] = sortOrder === 'asc' ? 1 : -1;
+            // Yalnız indeksli alanda sıralama (UC-800); listede olmayan alan requestTime'a düşer
+            const safeSortField = exports.ADMIN_LOG_SORT_FIELDS.includes(sortField) ? sortField : 'requestTime';
+            sortObj[safeSortField] = sortOrder === 'asc' ? 1 : -1;
             const [logs, total] = await Promise.all([
                 this.IntegrationRequestLogModel.find(query, exports.INTEGRATION_LOG_LIST_PROJECTION)
                     .sort(sortObj)
