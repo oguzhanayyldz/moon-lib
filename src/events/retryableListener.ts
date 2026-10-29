@@ -38,6 +38,17 @@ interface RetryOptions {
      */
     lockRenewIntervalMs?: number;
     /**
+     * Kilit yenilemesinin üst sınırı, ms (UC-1183). Aşılınca yenileme durur (logger.error + retryable_listener_stuck_total
+     * {reason="max_lock_hold"}); kilit TTL'inde düşer, sonraki yeniden teslim işi devralır. 0 = sınır yok.
+     * Verilmezse RETRYABLE_MAX_LOCK_HOLD_MS, o da yoksa 15 dk.
+     */
+    maxLockHoldMs?: number;
+    /**
+     * Kilit sahibi hâlâ işlerken aynı mesajın kaç yeniden teslimden sonra takılı sayılacağı (UC-1183): warn + metrik
+     * ({reason="redelivery"}, olay başına bir kez). 0 = kapalı. Verilmezse RETRYABLE_STUCK_REDELIVERY_THRESHOLD, o da yoksa 5.
+     */
+    stuckRedeliveryThreshold?: number;
+    /**
      * Kalıcı hatada (isPermanentError) NATS yeniden denemesini atla: ilk denemede 'failed' DLQ kaydı + ack (UC-1043).
      * false = eski davranış: maxRetries kez yeniden teslim, sonra 'queued' DLQ; kalıcı hata yalnız
      * event_permanent_error_total{outcome="shadow"} olarak sayılır (gölge mod).
@@ -78,6 +89,29 @@ export function resolveLockRenewIntervalMs(explicit: number | undefined, lockTim
     return raw;
 }
 
+const DEFAULT_MAX_LOCK_HOLD_MS = 15 * 60 * 1000;
+const DEFAULT_STUCK_REDELIVERY_THRESHOLD = 5;
+const STUCK_REDELIVERY_KEY_PREFIX = 'event:same-message-redelivery:';
+const STUCK_REDELIVERY_TTL_SEC = 3600;
+
+/** Negatif olmayan tam sayı seçeneği çözer: açık değer, ortam değişkeni, varsayılan; geçersiz değer varsayılana düşer. */
+function resolveNonNegativeInt(explicit: number | undefined, envName: string, fallback: number): number {
+    const env = (process.env[envName] ?? '').trim();
+    const raw = explicit ?? (env === '' ? undefined : Number(env));
+    if (raw === undefined || !Number.isInteger(raw) || raw < 0) return fallback;
+    return raw;
+}
+
+/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 15 dk. 0 = sınır yok. */
+export function resolveMaxLockHoldMs(explicit?: number): number {
+    return resolveNonNegativeInt(explicit, 'RETRYABLE_MAX_LOCK_HOLD_MS', DEFAULT_MAX_LOCK_HOLD_MS);
+}
+
+/** stuckRedeliveryThreshold'u çözer (UC-1183): açık değer, RETRYABLE_STUCK_REDELIVERY_THRESHOLD, 5. 0 = kapalı. */
+export function resolveStuckRedeliveryThreshold(explicit?: number): number {
+    return resolveNonNegativeInt(explicit, 'RETRYABLE_STUCK_REDELIVERY_THRESHOLD', DEFAULT_STUCK_REDELIVERY_THRESHOLD);
+}
+
 /** Gölge modda kalıcı sayılan olayın işareti: sonraki teslimde başarı = yanlış pozitif (UC-1043). */
 const PERMANENT_SHADOW_KEY_PREFIX = 'event:permanent-shadow:';
 const PERMANENT_SHADOW_TTL_SEC = 86400;
@@ -102,6 +136,8 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         deadLetterReplay: true,   // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
         duplicateKeyRetries: 0,   // constructor'da ortam değişkeniyle çözülür
         lockRenewIntervalMs: 0,   // constructor'da lockTimeoutSec'ten çözülür
+        maxLockHoldMs: 0,         // constructor'da ortam değişkeniyle çözülür
+        stuckRedeliveryThreshold: 0, // constructor'da ortam değişkeniyle çözülür
         failFastOnPermanentError: false // constructor'da ortam değişkeniyle çözülür
     };
 
@@ -111,11 +147,15 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             ...RetryableListener.DEFAULT_OPTIONS,
             ...options,
             duplicateKeyRetries: resolveDuplicateKeyRetries(options.duplicateKeyRetries),
+            maxLockHoldMs: resolveMaxLockHoldMs(options.maxLockHoldMs),
+            stuckRedeliveryThreshold: resolveStuckRedeliveryThreshold(options.stuckRedeliveryThreshold),
             failFastOnPermanentError: resolveFailFastOnPermanentError(options.failFastOnPermanentError)
         };
         this.options.lockRenewIntervalMs = resolveLockRenewIntervalMs(options.lockRenewIntervalMs, this.options.lockTimeoutSec);
         if (this.options.enableLock && this.options.lockTimeoutSec >= this.options.ackWaitSec) {
-            logger.warn(`lockTimeoutSec (${this.options.lockTimeoutSec}s) is not shorter than ackWaitSec (${this.options.ackWaitSec}s) in ${this.constructor.name}; a crashed owner holds the event until the lock expires`);
+            // Kilit ackWait'ten uzun tutulabilir (sync/shipment bilinçli: yeniden teslim 'aynı içerik işleniyor' diye tanınır).
+            // Yenileme açıkken canlı sahibin kilidi zaten düşmez; bedel yalnız çöken sahipte: kilit ilk yeniden teslimden sonra düşer.
+            logger.info(`lockTimeoutSec (${this.options.lockTimeoutSec}s) is not shorter than ackWaitSec (${this.options.ackWaitSec}s) in ${this.constructor.name}; if the owner crashes, takeover waits for the lock to expire (one or more extra redeliveries)`);
         }
         if (this.options.lockRenewIntervalMs > 0 && this.options.lockRenewIntervalMs >= this.options.lockTimeoutSec * 1000) {
             logger.warn(`lockRenewIntervalMs (${this.options.lockRenewIntervalMs}) is not shorter than lockTimeoutSec (${this.options.lockTimeoutSec}s); the lock can expire before it is renewed`);
@@ -171,7 +211,8 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
 
         // Kendi kilit değerimizi bildiğimiz için yenileme tam eşleşmeyle yapılır (sonek yedeği gerekmez)
         const stopHeartbeat = this.options.lockRenewIntervalMs > 0
-            ? startLockHeartbeat(lockKey, lockValue, '', this.options.lockTimeoutSec, this.options.lockRenewIntervalMs)
+            ? startLockHeartbeat(lockKey, lockValue, '', this.options.lockTimeoutSec, this.options.lockRenewIntervalMs,
+                this.options.maxLockHoldMs, () => this.recordStuck('max_lock_hold'))
             : undefined;
 
         try {
@@ -183,6 +224,29 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             // İşlem tamamlandığında kilidi serbest bırak
             await this.releaseLock(lockKey, lockValue);
             logger.debug(`Lock released for ${this.subject}:${eventId}`);
+        }
+    }
+
+    private recordStuck(reason: 'max_lock_hold' | 'redelivery'): void {
+        EventMetrics.retryableListenerStuckTotal.inc({ listener: this.constructor.name, reason });
+    }
+
+    /**
+     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (olay başına bir kez) metrik,
+     * eşikten itibaren her teslimde warn. Sayaç hatası teslim akışını bozmaz.
+     */
+    private async noteSameMessageRedelivery(eventType: string, eventId: string): Promise<void> {
+        const threshold = this.options.stuckRedeliveryThreshold;
+        if (threshold <= 0) return;
+        try {
+            const key = envScopedKey(`${STUCK_REDELIVERY_KEY_PREFIX}${eventType}:${eventId}`);
+            const count = await redisWrapper.client.incr(key);
+            if (count === 1) await redisWrapper.client.expire(key, STUCK_REDELIVERY_TTL_SEC);
+            if (count < threshold) return;
+            if (count === threshold) this.recordStuck('redelivery');
+            logger.warn(`Event looks stuck: lock holder still processing after ${count} redeliveries of the same message in ${this.constructor.name}: ${eventType}:${eventId}`);
+        } catch (err) {
+            logger.warn(`Failed to count same-message redelivery: ${eventType}:${eventId}`, err);
         }
     }
 
@@ -331,6 +395,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                             if (sequence !== undefined && holder?.endsWith(RetryableListener.lockValueSuffix(fingerprint, sequence))) {
                                 logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
                                 span.setTag('lock.same_message', true);
+                                await this.noteSameMessageRedelivery(eventType, eventId);
                                 return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
                             }
                             // Sıra numarası yoksa yeniden teslim, kilit sahibinin işlediği mesajın kendisi olabilir: ack'lenirse

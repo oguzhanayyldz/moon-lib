@@ -56,6 +56,20 @@ export class InMemoryRedis {
         return existed ? 1 : 0;
     }
 
+    async incr(key: string): Promise<number> {
+        const entry = this.liveEntry(key);
+        const next = Number(entry?.value ?? 0) + 1;
+        this.store.set(key, { value: String(next), expiresAt: entry?.expiresAt ?? null });
+        return next;
+    }
+
+    async expire(key: string, seconds: number): Promise<number> {
+        const entry = this.liveEntry(key);
+        if (!entry) return 0;
+        entry.expiresAt = Date.now() + seconds * 1000;
+        return 1;
+    }
+
     async ttl(key: string): Promise<number> {
         const entry = this.liveEntry(key);
         if (!entry) return -2;

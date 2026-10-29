@@ -23,17 +23,34 @@ export const LOCK_RENEW_SCRIPT = `
  *
  * İmza orders/reporting/trendyol/parasut kopyalarıyla aynıdır; kopyalar bu fonksiyonla birebir değiştirilebilir.
  * expectedValue boşsa `suffix` ile eşleşir.
+ *
+ * maxHoldMs > 0 ise (UC-1183) yenileme bu süreden sonra durur ve onMaxHold çağrılır: takılı iş kilidi süresiz yenilemez,
+ * kilit TTL'inde düşer ve sonraki yeniden teslim devralır. 0/verilmezse sınır yok (eski davranış).
  */
 export function startLockHeartbeat(
     lockKey: string,
     expectedValue: string,
     suffix: string,
     ttlSec: number,
-    intervalMs: number
+    intervalMs: number,
+    maxHoldMs: number = 0,
+    onMaxHold?: () => void
 ): () => void {
     let stopped = false;
+    const startedAt = Date.now();
     const timer = setInterval(async () => {
         if (stopped) return;
+        if (maxHoldMs > 0 && Date.now() - startedAt >= maxHoldMs) {
+            logger.error('[LockHeartbeat] Max lock hold exceeded, heartbeat stopped; the lock will expire', { lockKey, maxHoldMs });
+            stopped = true;
+            clearInterval(timer);
+            try {
+                onMaxHold?.();
+            } catch (err) {
+                logger.warn('[LockHeartbeat] onMaxHold callback failed', { lockKey, error: err instanceof Error ? err.message : String(err) });
+            }
+            return;
+        }
         try {
             const renewed = await redisWrapper.client.eval(LOCK_RENEW_SCRIPT, {
                 keys: [lockKey],

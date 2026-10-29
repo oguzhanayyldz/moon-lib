@@ -226,6 +226,19 @@ EventMetrics.eventPermanentErrorTotal = new prom_client_1.Counter({
     registers: [EventMetrics.registry]
 });
 /**
+ * Takılı iş sayacı (Counter) — UC-1183
+ *
+ * reason=max_lock_hold: kilit yenilemesi maxLockHoldMs'i aştığı için durduruldu.
+ * reason=redelivery: aynı mesaj kilit sahibi hâlâ işlerken N kez yeniden teslim edildi (olay başına bir kez sayılır).
+ * Includes labels: listener, reason
+ */
+EventMetrics.retryableListenerStuckTotal = new prom_client_1.Counter({
+    name: 'retryable_listener_stuck_total',
+    help: 'Total number of stuck listener events (lock hold limit exceeded or repeated same-message redelivery)',
+    labelNames: ['listener', 'reason'],
+    registers: [EventMetrics.registry]
+});
+/**
  * DLQ oynatmaları (Counter)
  *
  * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:

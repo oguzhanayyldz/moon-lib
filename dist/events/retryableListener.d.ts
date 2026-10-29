@@ -26,6 +26,17 @@ interface RetryOptions {
      */
     lockRenewIntervalMs?: number;
     /**
+     * Kilit yenilemesinin üst sınırı, ms (UC-1183). Aşılınca yenileme durur (logger.error + retryable_listener_stuck_total
+     * {reason="max_lock_hold"}); kilit TTL'inde düşer, sonraki yeniden teslim işi devralır. 0 = sınır yok.
+     * Verilmezse RETRYABLE_MAX_LOCK_HOLD_MS, o da yoksa 15 dk.
+     */
+    maxLockHoldMs?: number;
+    /**
+     * Kilit sahibi hâlâ işlerken aynı mesajın kaç yeniden teslimden sonra takılı sayılacağı (UC-1183): warn + metrik
+     * ({reason="redelivery"}, olay başına bir kez). 0 = kapalı. Verilmezse RETRYABLE_STUCK_REDELIVERY_THRESHOLD, o da yoksa 5.
+     */
+    stuckRedeliveryThreshold?: number;
+    /**
      * Kalıcı hatada (isPermanentError) NATS yeniden denemesini atla: ilk denemede 'failed' DLQ kaydı + ack (UC-1043).
      * false = eski davranış: maxRetries kez yeniden teslim, sonra 'queued' DLQ; kalıcı hata yalnız
      * event_permanent_error_total{outcome="shadow"} olarak sayılır (gölge mod).
@@ -46,6 +57,10 @@ export declare function resolveFailFastOnPermanentError(explicit?: boolean): boo
  * lockTimeoutSec/3. 0 = yenileme yok (açık değerle ya da ortam değişkeniyle kapatılır). Geçersiz değer varsayılana düşer.
  */
 export declare function resolveLockRenewIntervalMs(explicit: number | undefined, lockTimeoutSec: number): number;
+/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 15 dk. 0 = sınır yok. */
+export declare function resolveMaxLockHoldMs(explicit?: number): number;
+/** stuckRedeliveryThreshold'u çözer (UC-1183): açık değer, RETRYABLE_STUCK_REDELIVERY_THRESHOLD, 5. 0 = kapalı. */
+export declare function resolveStuckRedeliveryThreshold(explicit?: number): number;
 /**
  * Retry özellikli temel listener sınıfı
  */
@@ -64,6 +79,12 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      * Distributed lock ile işlem yapmak için yardımcı metod
      */
     protected processWithLock<R>(eventId: string, callback: () => Promise<R>, payloadFingerprint?: string, deliverySequence?: number): Promise<R>;
+    private recordStuck;
+    /**
+     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (olay başına bir kez) metrik,
+     * eşikten itibaren her teslimde warn. Sayaç hatası teslim akışını bozmaz.
+     */
+    private noteSameMessageRedelivery;
     /**
      * Kilit değerinin sahip adından sonraki kısmı: `@<sıra>#<parmak izi>`, sıra yoksa `#<parmak izi>`, parmak izi yoksa boş.
      * Kilidi uzatan alt sınıflar (heartbeat) beklenen değeri bununla kurar.
