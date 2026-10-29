@@ -4,7 +4,7 @@
  * - duplicateKeyRetries (default 0 = behaviour unchanged): an E11000 is rerun in process up to N times.
  *   A race (the competing write created the record) succeeds on the rerun → 'resolved';
  *   a real duplicate keeps failing → acked as before → 'acked'. Other errors are never rerun.
- * - lockRenewIntervalMs (default 0 = off): the event lock is renewed while processEvent runs, only while it is still ours,
+ * - lockRenewIntervalMs (explicit 0 = off; default lockTimeoutSec/3 since UC-821): the event lock is renewed while processEvent runs, only while it is still ours,
  *   and the renewal stops before the lock is released.
  * RetryableListener and RetryManager run as production code; Redis is the in-memory fake, NATS and Mongo are fakes.
  */
@@ -218,10 +218,10 @@ describe('UC-1020 lockRenewIntervalMs — lock heartbeat', () => {
     const renewCalls = (spy: jest.SpyInstance) =>
         spy.mock.calls.filter(([script]) => String(script).includes('redis.call("expire"')).length;
 
-    it('off by default: the lock is never renewed', async () => {
+    it('explicit 0 turns it off: the lock is never renewed', async () => {
         const evalSpy = jest.spyOn(redisWrapper.client, 'eval');
-        const listener = newListener({ lockTimeoutSec: 1 });
-        listener.work = () => sleep(150);
+        const listener = newListener({ lockTimeoutSec: 1, lockRenewIntervalMs: 0 });
+        listener.work = () => sleep(500);
 
         await listener.onMessage(payload, createFakeMessage(payload));
 

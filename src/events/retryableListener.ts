@@ -33,6 +33,8 @@ interface RetryOptions {
     /**
      * Olay kilidinin işlem sürdükçe kaç ms'de bir yenileneceği (UC-1020). 0 = yenileme yok (eski davranış).
      * lockTimeoutSec'ten kısa olmalı; uzun işlerde kilidin işin ortasında düşüp yeniden teslimin işi kopyalamasını önler.
+     * Verilmezse RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa lockTimeoutSec/3 (UC-430/UC-821: ackWait'i aşan iş,
+     * kilit düştüğü için yeniden teslimde ikinci kez koşuyordu).
      */
     lockRenewIntervalMs?: number;
     /**
@@ -64,6 +66,18 @@ export function resolveFailFastOnPermanentError(explicit?: boolean): boolean {
     return raw === 'true' || raw === '1';
 }
 
+/**
+ * Kilit yenileme aralığını çözer (UC-430/UC-821): açık değer, yoksa RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa
+ * lockTimeoutSec/3. 0 = yenileme yok (açık değerle ya da ortam değişkeniyle kapatılır). Geçersiz değer varsayılana düşer.
+ */
+export function resolveLockRenewIntervalMs(explicit: number | undefined, lockTimeoutSec: number): number {
+    const fallback = Math.max(1, Math.floor((lockTimeoutSec * 1000) / 3));
+    const env = (process.env.RETRYABLE_LOCK_RENEW_INTERVAL_MS ?? '').trim();
+    const raw = explicit ?? (env === '' ? undefined : Number(env));
+    if (raw === undefined || !Number.isInteger(raw) || raw < 0) return fallback;
+    return raw;
+}
+
 /** Gölge modda kalıcı sayılan olayın işareti: sonraki teslimde başarı = yanlış pozitif (UC-1043). */
 const PERMANENT_SHADOW_KEY_PREFIX = 'event:permanent-shadow:';
 const PERMANENT_SHADOW_TTL_SEC = 86400;
@@ -87,7 +101,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         ackWaitSec: 60,           // NATS ack timeout - lock TTL'inden büyük olmalı
         deadLetterReplay: true,   // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
         duplicateKeyRetries: 0,   // constructor'da ortam değişkeniyle çözülür
-        lockRenewIntervalMs: 0,   // kilit yenileme kapalı
+        lockRenewIntervalMs: 0,   // constructor'da lockTimeoutSec'ten çözülür
         failFastOnPermanentError: false // constructor'da ortam değişkeniyle çözülür
     };
 
@@ -99,6 +113,10 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             duplicateKeyRetries: resolveDuplicateKeyRetries(options.duplicateKeyRetries),
             failFastOnPermanentError: resolveFailFastOnPermanentError(options.failFastOnPermanentError)
         };
+        this.options.lockRenewIntervalMs = resolveLockRenewIntervalMs(options.lockRenewIntervalMs, this.options.lockTimeoutSec);
+        if (this.options.enableLock && this.options.lockTimeoutSec >= this.options.ackWaitSec) {
+            logger.warn(`lockTimeoutSec (${this.options.lockTimeoutSec}s) is not shorter than ackWaitSec (${this.options.ackWaitSec}s) in ${this.constructor.name}; a crashed owner holds the event until the lock expires`);
+        }
         if (this.options.lockRenewIntervalMs > 0 && this.options.lockRenewIntervalMs >= this.options.lockTimeoutSec * 1000) {
             logger.warn(`lockRenewIntervalMs (${this.options.lockRenewIntervalMs}) is not shorter than lockTimeoutSec (${this.options.lockTimeoutSec}s); the lock can expire before it is renewed`);
         }
@@ -314,6 +332,13 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                                 logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
                                 span.setTag('lock.same_message', true);
                                 return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
+                            }
+                            // Sıra numarası yoksa yeniden teslim, kilit sahibinin işlediği mesajın kendisi olabilir: ack'lenirse
+                            // sahip sonra hata verdiğinde mesaj bir daha gelmez (UC-821 F-02).
+                            if (sequence === undefined && msg.isRedelivered?.()) {
+                                logger.info(`Redelivered message without sequence while the same payload is locked (ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
+                                span.setTag('lock.same_payload_redelivered', true);
+                                return; // msg.ack() YOK
                             }
                             if (holder?.endsWith(`#${fingerprint}`)) {
                                 logger.info(`Another instance actively processing the same payload (ttl: ${ttl}s): ${eventType}:${eventId}`);

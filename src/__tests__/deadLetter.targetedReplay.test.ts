@@ -384,9 +384,35 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
             .toEqual({ started: 1, applied: 1, status: 'completed', retryCount: DEFAULT_RETRY_LIMIT });
     });
 
-    it('DLQ-H5: a processor whose claim was taken over after the stuck timeout does not overwrite the record', async () => {
+    it('DLQ-H5: with the default lock renewal, a processor taking over after the stuck timeout does not start a second replay (UC-821)', async () => {
         const svcA = createServiceA();
         const listener = new FailFirstGatedListener(svcA.client, {}, svcA.deadLetters.connection);
+        listener.failing = false;
+        listener.listen();
+        const record = seedQueued(svcA.deadLetters);
+        const takeoverProcessor = svcA.createProcessor();
+
+        const stuckCycle = svcA.processor.processPendingEvents();
+        await waitUntil(() => listener.started === 1);
+        record.processingStartedAt = new Date(Date.now() - 11 * 60_000);
+        // The event lock is renewed while the first replay runs, so it is still held after its 30 s TTL.
+        await clock.advance(31_000);
+        await takeoverProcessor.processPendingEvents();
+        const startedDuringTakeover = listener.started;
+        listener.release();
+        await stuckCycle;
+
+        // No concurrent second replay. The takeover released the record as busy and owns the claim, so the late result of
+        // the first processor does not overwrite it: the record stays queued and is replayed once more (at-least-once).
+        expect({ startedDuringTakeover, started: listener.started, status: record.status })
+            .toEqual({ startedDuringTakeover: 1, started: 1, status: 'queued' });
+    });
+
+    // The two tests below exercise the claim guard when the event lock is lost (renewal off: explicit 0 or
+    // RETRYABLE_LOCK_RENEW_INTERVAL_MS=0, or the renewal failed); with the default renewal the lock does not expire mid-replay.
+    it('DLQ-H5: a processor whose claim was taken over after the stuck timeout does not overwrite the record', async () => {
+        const svcA = createServiceA();
+        const listener = new FailFirstGatedListener(svcA.client, { lockRenewIntervalMs: 0 }, svcA.deadLetters.connection);
         listener.failing = false;
         listener.listen();
         const record = seedQueued(svcA.deadLetters);
@@ -409,7 +435,7 @@ describe('#648 DLQ-H — DeadLetterProcessorJob replay safety', () => {
 
     it('DLQ-H5: a processor whose replay times out after the record was taken over does not put the claim of the other processor back to queued', async () => {
         const svcA = createServiceA();
-        const listener = new FailFirstGatedListener(svcA.client, {}, svcA.deadLetters.connection);
+        const listener = new FailFirstGatedListener(svcA.client, { lockRenewIntervalMs: 0 }, svcA.deadLetters.connection);
         listener.failing = false;
         listener.listen();
         const record = seedQueued(svcA.deadLetters);

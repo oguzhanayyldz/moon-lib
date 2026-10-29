@@ -21,6 +21,8 @@ interface RetryOptions {
     /**
      * Olay kilidinin işlem sürdükçe kaç ms'de bir yenileneceği (UC-1020). 0 = yenileme yok (eski davranış).
      * lockTimeoutSec'ten kısa olmalı; uzun işlerde kilidin işin ortasında düşüp yeniden teslimin işi kopyalamasını önler.
+     * Verilmezse RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa lockTimeoutSec/3 (UC-430/UC-821: ackWait'i aşan iş,
+     * kilit düştüğü için yeniden teslimde ikinci kez koşuyordu).
      */
     lockRenewIntervalMs?: number;
     /**
@@ -39,6 +41,11 @@ export declare function resolveDuplicateKeyRetries(explicit?: number): number;
  * RETRYABLE_PERMANENT_FAIL_FAST'ı okur: yalnız 'true' ya da '1' açar; başka her değer kapalı.
  */
 export declare function resolveFailFastOnPermanentError(explicit?: boolean): boolean;
+/**
+ * Kilit yenileme aralığını çözer (UC-430/UC-821): açık değer, yoksa RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa
+ * lockTimeoutSec/3. 0 = yenileme yok (açık değerle ya da ortam değişkeniyle kapatılır). Geçersiz değer varsayılana düşer.
+ */
+export declare function resolveLockRenewIntervalMs(explicit: number | undefined, lockTimeoutSec: number): number;
 /**
  * Retry özellikli temel listener sınıfı
  */
