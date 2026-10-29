@@ -24,11 +24,14 @@ exports.PRODUCT_PRE_MATCH_STATUSES = [
  * - auto_approve_off     : "otomatik onayla" ayarı kapalı ya da bu örnek güncel ayarı taşımıyor
  * - decision_in_progress : aynı SKU için elle karar / başka takip işi sürüyor (kilit meşgul)
  * - lock_unavailable     : karar kilidi alınamadı (geçici hata) — gece taraması yeniden dener
+ * - settings_unverified  : ayarın güncelliği doğrulanamadı (Redis okuma hatası / ayar yeni değişti) — geçici,
+ *                          sonraki taramada güncel ayarla yeniden denenir
  */
 exports.PRODUCT_PRE_MATCH_SKIP_REASONS = [
     'not_sent_by_moon',
     'auto_approve_off',
     'decision_in_progress',
-    'lock_unavailable'
+    'lock_unavailable',
+    'settings_unverified'
 ];
 //# sourceMappingURL=product-pre-match-updated-event.js.map

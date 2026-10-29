@@ -19,8 +19,10 @@ export type ProductPreMatchDecisionSource = 'auto' | 'user';
  * - auto_approve_off     : "otomatik onayla" ayarı kapalı ya da bu örnek güncel ayarı taşımıyor
  * - decision_in_progress : aynı SKU için elle karar / başka takip işi sürüyor (kilit meşgul)
  * - lock_unavailable     : karar kilidi alınamadı (geçici hata) — gece taraması yeniden dener
+ * - settings_unverified  : ayarın güncelliği doğrulanamadı (Redis okuma hatası / ayar yeni değişti) — geçici,
+ *                          sonraki taramada güncel ayarla yeniden denenir
  */
-export declare const PRODUCT_PRE_MATCH_SKIP_REASONS: readonly ["not_sent_by_moon", "auto_approve_off", "decision_in_progress", "lock_unavailable"];
+export declare const PRODUCT_PRE_MATCH_SKIP_REASONS: readonly ["not_sent_by_moon", "auto_approve_off", "decision_in_progress", "lock_unavailable", "settings_unverified"];
 export type ProductPreMatchSkipReason = typeof PRODUCT_PRE_MATCH_SKIP_REASONS[number];
 /** Olayı üreten akış — tanı/log içindir, tüketici davranışını değiştirmez */
 export type ProductPreMatchTrigger = 'match_products' | 'tracking' | 'manual';
