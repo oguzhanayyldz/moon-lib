@@ -100,12 +100,17 @@ const requireFreshSession = (lookup, options = {}) => (req, res, next) => __awai
 });
 exports.requireFreshSession = requireFreshSession;
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// Taklitte OPTIONS (CORS preflight) kimliksiz gelir; yalniz veri okuyan GET/HEAD kapiya girer
+const IMPERSONATION_GATED_READ_METHODS = new Set(['GET', 'HEAD']);
 /**
  * Yazma yontemlerinde (POST/PUT/PATCH/DELETE) iptalden once baslamis erisim JWT'sini
  * reddeder (UC-921/UC-922 servis kopyalarinin tek hali, UC-923). `app.use(currentUser)`
  * SONRASINA, rotalardan ONCE takilir: tek noktadan butun yazma yuzeyini kapsar, yeni rota
  * eklendiginde unutulamaz. Oturumsuz istek (webhook vb.) `currentUser` yok → dokunulmaz;
- * kimlik denetimini rotanin kendi `requireAuth`'u yapar. Okuma uclari etkilenmez.
+ * kimlik denetimini rotanin kendi `requireAuth`'u yapar. Okuma uclari etkilenmez; TEK istisna
+ * taklit (`isImpersonating`) JWT'sinde GET/HEAD de denetlenir (UC-1198): `id` hedef musterinin
+ * kiracisini gosterir, pasiflestirilen admin kalan omru boyunca musteri verisini okuyamasin.
+ * Esigin sahibi yine `adminId`; normal kullanicinin okumasi degismez.
  *
  * Sira: rate-limit'ten SONRA takilmasi onerilir — koruma her oturumlu yazmada bir indeksli
  * `findOne` yapar; once takilirsa sinira takilacak istek de DB'ye ulasir.
@@ -117,7 +122,10 @@ const requireFreshSessionOnWrites = (lookup, options = {}) => {
             : () => new service_unavailable_error_1.ServiceUnavailableError()
     });
     return (req, res, next) => {
-        if (READ_METHODS.has(req.method)) {
+        var _a;
+        const gatedRead = ((_a = req.currentUser) === null || _a === void 0 ? void 0 : _a.isImpersonating)
+            && IMPERSONATION_GATED_READ_METHODS.has(req.method);
+        if (READ_METHODS.has(req.method) && !gatedRead) {
             return next();
         }
         freshSession(req, res, next).catch(next);

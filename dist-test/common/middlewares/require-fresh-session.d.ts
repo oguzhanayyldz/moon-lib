@@ -70,7 +70,10 @@ export interface RequireFreshSessionOnWritesOptions {
  * reddeder (UC-921/UC-922 servis kopyalarinin tek hali, UC-923). `app.use(currentUser)`
  * SONRASINA, rotalardan ONCE takilir: tek noktadan butun yazma yuzeyini kapsar, yeni rota
  * eklendiginde unutulamaz. Oturumsuz istek (webhook vb.) `currentUser` yok → dokunulmaz;
- * kimlik denetimini rotanin kendi `requireAuth`'u yapar. Okuma uclari etkilenmez.
+ * kimlik denetimini rotanin kendi `requireAuth`'u yapar. Okuma uclari etkilenmez; TEK istisna
+ * taklit (`isImpersonating`) JWT'sinde GET/HEAD de denetlenir (UC-1198): `id` hedef musterinin
+ * kiracisini gosterir, pasiflestirilen admin kalan omru boyunca musteri verisini okuyamasin.
+ * Esigin sahibi yine `adminId`; normal kullanicinin okumasi degismez.
  *
  * Sira: rate-limit'ten SONRA takilmasi onerilir — koruma her oturumlu yazmada bir indeksli
  * `findOne` yapar; once takilirsa sinira takilacak istek de DB'ye ulasir.

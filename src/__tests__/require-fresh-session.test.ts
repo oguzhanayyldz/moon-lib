@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import {
     requireFreshSession,
+    requireFreshSessionOnWrites,
     startedBeforeRevocation,
     tokenSessionStartedAt,
     SessionRevocationLookup
 } from '../common/middlewares/require-fresh-session';
 import { NotAuthorizedError } from '../common/errors/not-authorized-error';
+import { ServiceUnavailableError } from '../common/errors/service-unavailable-error';
 import { UserRole } from '../common/types/user-role';
 
 const REVOKED_AT = new Date('2026-09-24T12:00:00.000Z');
@@ -126,5 +128,63 @@ describe('requireFreshSession', () => {
         const lookup = jest.fn().mockResolvedValue(null);
         await run(owner({ sst: AFTER, isSubUserMode: true, subUserId: 'sub-3' }), lookup);
         expect(lookup).toHaveBeenCalledWith('sub-3');
+    });
+});
+
+describe('requireFreshSessionOnWrites — okuma yontemleri (UC-1198)', () => {
+    const runMethod = async (method: string, currentUser: any, lookup: SessionRevocationLookup) => {
+        const req = { method, currentUser } as Request;
+        const next = jest.fn() as jest.MockedFunction<NextFunction>;
+        requireFreshSessionOnWrites(lookup)(req, {} as Response, next);
+        await new Promise(resolve => setImmediate(resolve));
+        expect(next).toHaveBeenCalledTimes(1);
+        return next.mock.calls[0][0];
+    };
+    const revoked = () => jest.fn().mockResolvedValue({ sessionsRevokedAt: REVOKED_AT });
+    const impersonating = (claims: Record<string, unknown> = {}) =>
+        owner({ sst: BEFORE, isImpersonating: true, adminId: 'admin-9', ...claims });
+
+    it.each(['GET', 'HEAD'])('taklitte %s, iptalden once baslamis oturumda 401', async method => {
+        const lookup = revoked();
+        expect(await runMethod(method, impersonating(), lookup)).toBeInstanceOf(NotAuthorizedError);
+        expect(lookup).toHaveBeenCalledWith('admin-9');
+    });
+
+    it('taklitte GET, iptalden sonra baslamis oturumda gecer', async () => {
+        expect(await runMethod('GET', impersonating({ sst: AFTER }), revoked())).toBeUndefined();
+    });
+
+    it('taklitte GET, adminId yoksa 401 (lookup cagrilmaz)', async () => {
+        const lookup = jest.fn();
+        expect(await runMethod('GET', impersonating({ adminId: undefined }), lookup)).toBeInstanceOf(NotAuthorizedError);
+        expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('taklitte GET, izdusum okunamazsa yazmadaki gibi 503', async () => {
+        const lookup = jest.fn().mockRejectedValue(new Error('mongo down'));
+        expect(await runMethod('GET', impersonating(), lookup)).toBeInstanceOf(ServiceUnavailableError);
+        expect(await runMethod('POST', impersonating(), lookup)).toBeInstanceOf(ServiceUnavailableError);
+    });
+
+    it('taklitte OPTIONS (preflight) denetlenmez', async () => {
+        const lookup = revoked();
+        expect(await runMethod('OPTIONS', impersonating(), lookup)).toBeUndefined();
+        expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it.each(['GET', 'HEAD'])('normal kullanicida damga sonrasi %s gecer, lookup cagrilmaz', async method => {
+        const lookup = revoked();
+        expect(await runMethod(method, owner({ sst: BEFORE }), lookup)).toBeUndefined();
+        expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('normal kullanicida yazma hala 401', async () => {
+        expect(await runMethod('POST', owner({ sst: BEFORE }), revoked())).toBeInstanceOf(NotAuthorizedError);
+    });
+
+    it('oturumsuz GET dokunulmaz', async () => {
+        const lookup = revoked();
+        expect(await runMethod('GET', undefined, lookup)).toBeUndefined();
+        expect(lookup).not.toHaveBeenCalled();
     });
 });
