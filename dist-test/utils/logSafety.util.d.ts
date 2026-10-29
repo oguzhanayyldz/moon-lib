@@ -217,6 +217,11 @@ export declare function isSensitiveLogMetaField(name: string, value: unknown): b
  * (`LockKey: …`, `syncSessionId: …`, `dedup key: …`, "basic info") and no credential.
  */
 export declare function maskLogMessageText(text: string): string;
+/**
+ * Masks the conflicting value of a MongoDB duplicate-key (E11000) message: `dup key: { email: "…" }` becomes
+ * `dup key: { **** }`. Collection and index name stay. Known limit: a value that itself holds `}` is cut there.
+ */
+export declare function maskDuplicateKeyValue(text: string): string;
 /** Masks connection addresses, credential pairs and authorization tokens in an error message. */
 export declare function maskErrorText(text: string): string;
 /** Drops the query string, fragment and userinfo of a request URL. */
