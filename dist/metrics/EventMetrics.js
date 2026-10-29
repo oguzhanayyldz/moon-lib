@@ -109,6 +109,7 @@ class EventMetrics {
         EventMetrics.outboxVersionEventsPublishedTotal.reset();
         EventMetrics.versionEventWriteErrorsTotal.reset();
         EventMetrics.versionEventsCoalescedTotal.reset();
+        EventMetrics.outboxEventsCoalescedTotal.reset();
         EventMetrics.versionEventsInflight.reset();
         EventMetrics.versionEventsLeaseExpiredTotal.reset();
         EventMetrics.versionEventsDuplicatePreventedTotal.reset();
@@ -130,6 +131,7 @@ class EventMetrics {
         EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
         EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);
         EventMetrics.registry.registerMetric(EventMetrics.versionEventsCoalescedTotal);
+        EventMetrics.registry.registerMetric(EventMetrics.outboxEventsCoalescedTotal);
         EventMetrics.registry.registerMetric(EventMetrics.versionEventsInflight);
         EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseExpiredTotal);
         EventMetrics.registry.registerMetric(EventMetrics.versionEventsDuplicatePreventedTotal);
@@ -287,6 +289,19 @@ EventMetrics.versionEventsCoalescedTotal = new prom_client_1.Counter({
     name: 'version_events_coalesced_total',
     help: 'Total number of entity version events merged into a newer pending event for the same entity',
     labelNames: ['service', 'stage'],
+    registers: [EventMetrics.registry]
+});
+/**
+ * Yayın anında birleştirilen olay (Counter) — UC-1135
+ *
+ * OUTBOX_COALESCE_SUBJECTS bayrağıyla açılan birleştirmede aynı partide daha yüksek sürümü yayınlanan ve
+ * 'superseded' olan satır sayısı. Kayıp DEĞİLDİR: en son sürüm yayınlanır.
+ * Labels: service, event_type
+ */
+EventMetrics.outboxEventsCoalescedTotal = new prom_client_1.Counter({
+    name: 'outbox_events_coalesced_total',
+    help: 'Total number of outbox events superseded by a newer version of the same entity at publish time',
+    labelNames: ['service', 'event_type'],
     registers: [EventMetrics.registry]
 });
 /**

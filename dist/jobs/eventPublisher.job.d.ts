@@ -40,6 +40,7 @@ export declare class EventPublisherJob {
     private versionDrainRunning;
     private normalDrainRunning;
     private readonly normalDrainBudgetMs;
+    private readonly coalesceSubjects;
     private readonly versionLeases;
     private readonly podId;
     private lastLeaseWarnAt;
@@ -56,6 +57,11 @@ export declare class EventPublisherJob {
     /** Pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
     private static readPositiveIntEnv;
     /** Sıfır ya da pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    /**
+     * UC-1135: yayın anında birleştirilecek olay tipleri (OUTBOX_COALESCE_SUBJECTS, virgüllü). Boş/yok = kapalı.
+     * Yalnız COALESCIBLE_SUBJECTS içindeki tipler kabul edilir; listede olmayan tip (ör. sync:requested) sessizce yok sayılır.
+     */
+    private static readCoalesceSubjects;
     private static readNonNegativeIntEnv;
     /**
      * Environment variable'dan servis adını çöz
@@ -98,7 +104,22 @@ export declare class EventPublisherJob {
      * Event batch'ini işle — paralel, concurrency limit ile
      */
     private static readonly CONCURRENCY_LIMIT;
+    /** Her güncelleme tam durumu taşıyan, yalnız en yüksek sürümü anlamlı olan olay tipleri (payload.id + payload.version). */
+    private static readonly COALESCIBLE_SUBJECTS;
     private processEventBatch;
+    /**
+     * UC-1135: bayraktaki tiplerde aynı (tip, kullanıcı, payload.id) için partideki en yüksek payload.version kazanır.
+     * Eşit sürümde ilk gelen (en eski) kazanır. Sürümü/id'si olmayan kayıt birleşmez, olduğu gibi yayınlanır.
+     * Bayrak kapalıyken toPublish = events (davranış değişmez).
+     */
+    private groupCoalescible;
+    /** Kaybedenleri claim et; başka pod'un aldığı satır dokunulmadan kalır (claimedAt filtresi sonraki adımda onu ayıklar). */
+    private claimLosers;
+    /**
+     * Kazanan yayınlandıysa kaybedenler 'superseded' + supersededBy olur; yayınlanmadıysa pending'e döner.
+     * Güncelleme düşerse kaybedenler processing'te kalır, monitorFailedEvents 5 dk sonra kurtarır (çift, kayıp değil).
+     */
+    private settleLosers;
     /** Olay bu çağrıda yayınlanıp published işaretlendiyse true. */
     private processOneEvent;
     /**
