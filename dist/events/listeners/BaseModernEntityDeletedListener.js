@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseModernEntityDeletedListener = void 0;
 const __1 = require("../..");
 const entityDeletionRegistry_1 = require("../../services/entityDeletionRegistry");
+const entityDeletedOutbox_util_1 = require("../../utils/entityDeletedOutbox.util");
 const mongoose_1 = __importDefault(require("mongoose"));
 /**
  * Abstract base class for Modern EntityDeleted Listeners
@@ -341,8 +342,14 @@ class BaseModernEntityDeletedListener extends __1.RetryableListener {
                 if (data.list.length === 0) {
                     throw new Error('Invalid event data: list cannot be empty');
                 }
-                if (data.list.length > 100) {
-                    throw new Error('Invalid event data: list cannot contain more than 100 items');
+                // Üst sınır kalıcı hata DEĞİL (UC-831 F-07): reddedilen olay yeniden teslimde de reddedilir ve silme kaybolur.
+                // Yayıncı writeEntityDeletedEventsToOutbox ile ENTITY_DELETED_MAX_LIST'lik parçalara böler; eski kopyalar bölmez.
+                if (data.list.length > entityDeletedOutbox_util_1.ENTITY_DELETED_MAX_LIST) {
+                    __1.logger.warn('Entity deletion event list exceeds recommended size, processing anyway', {
+                        serviceName: this.serviceName,
+                        entitiesCount: data.list.length,
+                        maxListSize: entityDeletedOutbox_util_1.ENTITY_DELETED_MAX_LIST
+                    });
                 }
                 // Validate each entity in the list
                 for (let i = 0; i < data.list.length; i++) {
@@ -455,31 +462,8 @@ class BaseModernEntityDeletedListener extends __1.RetryableListener {
                         totalCount: data.list.length
                     });
                 }
-                // Rate limiting check with bulk operation support
-                const currentTime = Date.now();
-                const rateLimitKey = `entity_deletion_${this.serviceName}_${userId}`;
-                // Note: In a real implementation, you would use Redis or similar for rate limiting
-                // This is a basic in-memory implementation for demonstration
-                if (!this.rateLimitCache) {
-                    this.rateLimitCache = new Map();
-                }
-                const lastRequest = this.rateLimitCache.get(rateLimitKey) || 0;
-                const timeDiff = currentTime - lastRequest;
-                // Bulk operation detection: if multiple entities, use relaxed rate limit
-                // Single entity: 1 req/second, Bulk (2-10 entities): 100ms, Large bulk (>10): no limit
-                const isBulkOperation = data.list.length >= 2;
-                const isLargeBulk = data.list.length > 10;
-                let rateLimitMs = 1000; // Default: 1 request per second for single entities
-                if (isLargeBulk) {
-                    rateLimitMs = 0; // No rate limit for large bulk operations (admin bulk delete)
-                }
-                else if (isBulkOperation) {
-                    rateLimitMs = 100; // 100ms for small bulk operations (2-10 entities)
-                }
-                if (rateLimitMs > 0 && timeDiff < rateLimitMs) {
-                    throw new Error('Rate limit exceeded: too many deletion requests');
-                }
-                this.rateLimitCache.set(rateLimitKey, currentTime);
+                // Bellek içi hız sınırı UC-831 F-08 ile kaldırıldı: yayıncı iç servistir, aynı kullanıcının art arda gelen meşru
+                // silme olayları reddedilip yeniden teslim bütçesi bitince kayboluyordu (canlı DLQ: catalog+inventory 182 kayıt).
                 // Service-specific authorization
                 yield this.performServiceSpecificAuthorization(data, userId, authSpan);
                 authSpan === null || authSpan === void 0 ? void 0 : authSpan.setTag('authorization.success', true);

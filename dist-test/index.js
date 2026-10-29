@@ -93,6 +93,7 @@ __exportStar(require("./middleware/httpMetrics"), exports);
 // Utils
 __exportStar(require("./utils/optimisticLocking.util"), exports);
 __exportStar(require("./utils/versionEventOutbox.util"), exports);
+__exportStar(require("./utils/entityDeletedOutbox.util"), exports);
 __exportStar(require("./utils/versionEventLease.util"), exports);
 __exportStar(require("./utils/typeGuards.util"), exports);
 __exportStar(require("./utils/performanceMonitor.util"), exports);

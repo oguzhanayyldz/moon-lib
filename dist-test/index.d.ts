@@ -56,6 +56,7 @@ export * from './metrics/OwnershipMetrics';
 export * from './middleware/httpMetrics';
 export * from './utils/optimisticLocking.util';
 export * from './utils/versionEventOutbox.util';
+export * from './utils/entityDeletedOutbox.util';
 export * from './utils/versionEventLease.util';
 export * from './utils/typeGuards.util';
 export * from './utils/performanceMonitor.util';
