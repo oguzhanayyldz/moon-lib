@@ -178,9 +178,9 @@ describe('UC-821 F-02 redelivery without sequence while the same payload is lock
     });
 });
 
-describe('UC-821 constructor check lockTimeoutSec >= ackWaitSec', () => {
+describe('UC-821/UC-1183 constructor note lockTimeoutSec >= ackWaitSec (info, not warn: intentional in sync/shipment)', () => {
     const lockWarnings = () =>
-        (logger.warn as jest.Mock).mock.calls.filter(([m]) => String(m).includes('is not shorter than ackWaitSec')).map(([m]) => String(m));
+        (logger.info as jest.Mock).mock.calls.filter(([m]) => String(m).includes('is not shorter than ackWaitSec')).map(([m]) => String(m));
 
     it.each([
         [{ lockTimeoutSec: 60, ackWaitSec: 60 }, 1],
@@ -193,8 +193,9 @@ describe('UC-821 constructor check lockTimeoutSec >= ackWaitSec', () => {
         expect(lockWarnings()).toHaveLength(expected);
     });
 
-    it('names the listener class in the warning', () => {
+    it('names the listener class in the note and logs no warn', () => {
         newListener({ lockTimeoutSec: 90 });
         expect(lockWarnings()[0]).toContain('CommandListener');
+        expect((logger.warn as jest.Mock).mock.calls.some(([m]) => String(m).includes('is not shorter than ackWaitSec'))).toBe(false);
     });
 });

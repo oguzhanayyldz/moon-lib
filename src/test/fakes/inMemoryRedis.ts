@@ -56,6 +56,35 @@ export class InMemoryRedis {
         return existed ? 1 : 0;
     }
 
+    async incr(key: string): Promise<number> {
+        const entry = this.liveEntry(key);
+        const next = Number(entry?.value ?? 0) + 1;
+        this.store.set(key, { value: String(next), expiresAt: entry?.expiresAt ?? null });
+        return next;
+    }
+
+    async expire(key: string, seconds: number): Promise<number> {
+        const entry = this.liveEntry(key);
+        if (!entry) return 0;
+        entry.expiresAt = Date.now() + seconds * 1000;
+        return 1;
+    }
+
+    /** node-redis `multi().incr().expire().exec()` subset: commands run in order, exec returns their replies. */
+    multi() {
+        const queue: Array<() => Promise<number>> = [];
+        const chain = {
+            incr: (key: string) => { queue.push(() => this.incr(key)); return chain; },
+            expire: (key: string, seconds: number) => { queue.push(() => this.expire(key, seconds)); return chain; },
+            exec: async () => {
+                const replies: number[] = [];
+                for (const command of queue) replies.push(await command());
+                return replies;
+            }
+        };
+        return chain;
+    }
+
     async ttl(key: string): Promise<number> {
         const entry = this.liveEntry(key);
         if (!entry) return -2;
