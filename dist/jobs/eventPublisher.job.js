@@ -121,6 +121,7 @@ class EventPublisherJob {
         this.versionBatchSize = Math.min(EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_BATCH_SIZE', EventPublisherJob.VERSION_BATCH_SIZE_MAX), EventPublisherJob.VERSION_BATCH_SIZE_MAX);
         this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
         this.normalDrainBudgetMs = EventPublisherJob.readNonNegativeIntEnv('OUTBOX_DRAIN_BUDGET_MS', EventPublisherJob.NORMAL_DRAIN_BUDGET_MS_DEFAULT);
+        this.coalesceSubjects = EventPublisherJob.readCoalesceSubjects();
         this.versionLeases = new versionEventLease_util_1.VersionEventLeases(() => redisWrapper_service_1.redisWrapper.client, {
             leaseMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LEASE_MS', EventPublisherJob.VERSION_LEASE_MS_DEFAULT),
             latestTtlMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LATEST_TTL_MS', EventPublisherJob.VERSION_LATEST_TTL_MS_DEFAULT),
@@ -177,6 +178,15 @@ class EventPublisherJob {
         return Number.isInteger(value) && value > 0 ? value : fallback;
     }
     /** Sıfır ya da pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    /**
+     * UC-1135: yayın anında birleştirilecek olay tipleri (OUTBOX_COALESCE_SUBJECTS, virgüllü). Boş/yok = kapalı.
+     * Yalnız COALESCIBLE_SUBJECTS içindeki tipler kabul edilir; listede olmayan tip (ör. sync:requested) sessizce yok sayılır.
+     */
+    static readCoalesceSubjects() {
+        var _a;
+        const requested = ((_a = process.env.OUTBOX_COALESCE_SUBJECTS) !== null && _a !== void 0 ? _a : '').split(',').map(s => s.trim()).filter(Boolean);
+        return new Set(requested.filter(subject => EventPublisherJob.COALESCIBLE_SUBJECTS.includes(subject)));
+    }
     static readNonNegativeIntEnv(name, fallback) {
         const raw = process.env[name];
         if (raw === undefined || raw.trim() === '')
@@ -433,14 +443,102 @@ class EventPublisherJob {
     }
     processEventBatch(events) {
         return __awaiter(this, void 0, void 0, function* () {
+            const { toPublish, groups } = this.groupCoalescible(events);
+            const claimedAt = new Date();
+            if (groups.length > 0) {
+                yield this.claimLosers(groups, claimedAt);
+            }
             let published = 0;
+            const publishedIds = new Set();
             // Concurrency limit ile paralel işleme
-            for (let i = 0; i < events.length; i += EventPublisherJob.CONCURRENCY_LIMIT) {
-                const chunk = events.slice(i, i + EventPublisherJob.CONCURRENCY_LIMIT);
-                const results = yield Promise.all(chunk.map(event => this.processOneEvent(event)));
+            for (let i = 0; i < toPublish.length; i += EventPublisherJob.CONCURRENCY_LIMIT) {
+                const chunk = toPublish.slice(i, i + EventPublisherJob.CONCURRENCY_LIMIT);
+                const results = yield Promise.all(chunk.map((event) => __awaiter(this, void 0, void 0, function* () {
+                    const ok = yield this.processOneEvent(event);
+                    if (ok)
+                        publishedIds.add(event.id);
+                    return ok;
+                })));
                 published += results.filter(Boolean).length;
             }
+            if (groups.length > 0) {
+                yield this.settleLosers(groups, publishedIds, claimedAt);
+            }
             return published;
+        });
+    }
+    /**
+     * UC-1135: bayraktaki tiplerde aynı (tip, kullanıcı, payload.id) için partideki en yüksek payload.version kazanır.
+     * Eşit sürümde ilk gelen (en eski) kazanır. Sürümü/id'si olmayan kayıt birleşmez, olduğu gibi yayınlanır.
+     * Bayrak kapalıyken toPublish = events (davranış değişmez).
+     */
+    groupCoalescible(events) {
+        var _a;
+        if (this.coalesceSubjects.size === 0) {
+            return { toPublish: events, groups: [] };
+        }
+        const byKey = new Map();
+        const toPublish = [];
+        for (const event of events) {
+            const payload = event.payload;
+            if (!this.coalesceSubjects.has(event.eventType) || !(payload === null || payload === void 0 ? void 0 : payload.id) || typeof payload.version !== 'number') {
+                toPublish.push(event);
+                continue;
+            }
+            const key = [event.eventType, (_a = event.userId) !== null && _a !== void 0 ? _a : '', payload.id].join('|');
+            const group = byKey.get(key);
+            if (!group) {
+                byKey.set(key, { winner: event, losers: [] });
+            }
+            else if (payload.version > group.winner.payload.version) {
+                group.losers.push(group.winner);
+                group.winner = event;
+            }
+            else {
+                group.losers.push(event);
+            }
+        }
+        const groups = [];
+        for (const group of byKey.values()) {
+            toPublish.push(group.winner);
+            if (group.losers.length > 0)
+                groups.push(group);
+        }
+        return { toPublish, groups };
+    }
+    /** Kaybedenleri claim et; başka pod'un aldığı satır dokunulmadan kalır (claimedAt filtresi sonraki adımda onu ayıklar). */
+    claimLosers(groups, claimedAt) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.outboxModel.updateMany({ _id: { $in: groups.flatMap(g => g.losers.map(e => e.id)) }, status: 'pending' }, { $set: { status: 'processing', processingStartedAt: claimedAt } });
+            }
+            catch (error) {
+                // Claim düşerse kaybedenler pending kalır ve normal yoldan yayınlanır (kayıp yok)
+                logger_service_1.logger.error('Failed to claim superseded stock events:', error);
+            }
+        });
+    }
+    /**
+     * Kazanan yayınlandıysa kaybedenler 'superseded' + supersededBy olur; yayınlanmadıysa pending'e döner.
+     * Güncelleme düşerse kaybedenler processing'te kalır, monitorFailedEvents 5 dk sonra kurtarır (çift, kayıp değil).
+     */
+    settleLosers(groups, publishedIds, claimedAt) {
+        return __awaiter(this, void 0, void 0, function* () {
+            for (const { winner, losers } of groups) {
+                const filter = { _id: { $in: losers.map(e => e.id) }, status: 'processing', processingStartedAt: claimedAt };
+                try {
+                    if (publishedIds.has(winner.id)) {
+                        const result = yield this.outboxModel.updateMany(filter, { $set: { status: 'superseded', supersededBy: winner.id } });
+                        EventMetrics_1.EventMetrics.outboxEventsCoalescedTotal.inc({ service: this.serviceLabel, event_type: winner.eventType }, result.modifiedCount);
+                    }
+                    else {
+                        yield this.outboxModel.updateMany(filter, { $set: { status: 'pending' }, $unset: { processingStartedAt: 1 } });
+                    }
+                }
+                catch (error) {
+                    logger_service_1.logger.error(`Failed to settle superseded events of ${winner.id}:`, error);
+                }
+            }
         });
     }
     /** Olay bu çağrıda yayınlanıp published işaretlendiyse true. */
@@ -1149,3 +1247,5 @@ EventPublisherJob.PRIORITY_MAP_MAX_SIZE = 2000; // Maksimum kullanıcı sayısı
  * Event batch'ini işle — paralel, concurrency limit ile
  */
 EventPublisherJob.CONCURRENCY_LIMIT = 5;
+/** Her güncelleme tam durumu taşıyan, yalnız en yüksek sürümü anlamlı olan olay tipleri (payload.id + payload.version). */
+EventPublisherJob.COALESCIBLE_SUBJECTS = [common_1.Subjects.ProductStockUpdated];

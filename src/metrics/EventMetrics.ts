@@ -204,6 +204,20 @@ export class EventMetrics {
   });
 
   /**
+   * Yayın anında birleştirilen olay (Counter) — UC-1135
+   *
+   * OUTBOX_COALESCE_SUBJECTS bayrağıyla açılan birleştirmede aynı partide daha yüksek sürümü yayınlanan ve
+   * 'superseded' olan satır sayısı. Kayıp DEĞİLDİR: en son sürüm yayınlanır.
+   * Labels: service, event_type
+   */
+  static readonly outboxEventsCoalescedTotal = new Counter<'service' | 'event_type'>({
+    name: 'outbox_events_coalesced_total',
+    help: 'Total number of outbox events superseded by a newer version of the same entity at publish time',
+    labelNames: ['service', 'event_type'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
    * Redis iletim kirası tutulan varlık sayısı (Gauge) — UC-984 madde 9
    *
    * Bu pod'un şu an yayınlamakta olduğu (kirasını tuttuğu) varlık sayısı; parti bitince 0'a döner.
@@ -400,6 +414,7 @@ export class EventMetrics {
     EventMetrics.outboxVersionEventsPublishedTotal.reset();
     EventMetrics.versionEventWriteErrorsTotal.reset();
     EventMetrics.versionEventsCoalescedTotal.reset();
+    EventMetrics.outboxEventsCoalescedTotal.reset();
     EventMetrics.versionEventsInflight.reset();
     EventMetrics.versionEventsLeaseExpiredTotal.reset();
     EventMetrics.versionEventsDuplicatePreventedTotal.reset();
@@ -422,6 +437,7 @@ export class EventMetrics {
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsCoalescedTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.outboxEventsCoalescedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsInflight);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseExpiredTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsDuplicatePreventedTotal);

@@ -128,6 +128,14 @@ export declare class EventMetrics {
      */
     static readonly versionEventsCoalescedTotal: Counter<"service" | "stage">;
     /**
+     * Yayın anında birleştirilen olay (Counter) — UC-1135
+     *
+     * OUTBOX_COALESCE_SUBJECTS bayrağıyla açılan birleştirmede aynı partide daha yüksek sürümü yayınlanan ve
+     * 'superseded' olan satır sayısı. Kayıp DEĞİLDİR: en son sürüm yayınlanır.
+     * Labels: service, event_type
+     */
+    static readonly outboxEventsCoalescedTotal: Counter<"service" | "event_type">;
+    /**
      * Redis iletim kirası tutulan varlık sayısı (Gauge) — UC-984 madde 9
      *
      * Bu pod'un şu an yayınlamakta olduğu (kirasını tuttuğu) varlık sayısı; parti bitince 0'a döner.
