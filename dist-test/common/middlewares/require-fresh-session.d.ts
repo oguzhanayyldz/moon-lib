@@ -49,5 +49,31 @@ export type SessionRevocationLookup = (userId: string) => Promise<SessionRevocat
  *     zaten reddeder.
  *   - `sst` de `iat` de yoksa baslangic bilinmiyor: esigi olan hesapta red.
  */
-export declare const requireFreshSession: (lookup: SessionRevocationLookup) => (req: Request, res: Response, next: NextFunction) => Promise<void>;
+export interface RequireFreshSessionOptions {
+    /**
+     * Okuma hatasinin `next`'e hangi hata olarak iletilecegi. Varsayilan: hatanin kendisi
+     * (`errorHandler` CustomError olmayani 400 yapar). Istek her durumda durdurulur.
+     */
+    mapLookupError?: (error: unknown) => unknown;
+}
+export declare const requireFreshSession: (lookup: SessionRevocationLookup, options?: RequireFreshSessionOptions) => (req: Request, res: Response, next: NextFunction) => Promise<void>;
+export interface RequireFreshSessionOnWritesOptions {
+    /**
+     * Esik okunamadiginda yanit (UC-923 N3). Varsayilan `'unavailable'`: 503 — gecici sunucu
+     * sorunu. `'propagate'`: ham hata iletilir (`errorHandler` → 400), servis kopyalarinin
+     * (UC-921/UC-922) eski davranisi. Iki durumda da istek uca ULASMAZ (fail-closed).
+     */
+    onLookupError?: 'unavailable' | 'propagate';
+}
+/**
+ * Yazma yontemlerinde (POST/PUT/PATCH/DELETE) iptalden once baslamis erisim JWT'sini
+ * reddeder (UC-921/UC-922 servis kopyalarinin tek hali, UC-923). `app.use(currentUser)`
+ * SONRASINA, rotalardan ONCE takilir: tek noktadan butun yazma yuzeyini kapsar, yeni rota
+ * eklendiginde unutulamaz. Oturumsuz istek (webhook vb.) `currentUser` yok → dokunulmaz;
+ * kimlik denetimini rotanin kendi `requireAuth`'u yapar. Okuma uclari etkilenmez.
+ *
+ * Sira: rate-limit'ten SONRA takilmasi onerilir — koruma her oturumlu yazmada bir indeksli
+ * `findOne` yapar; once takilirsa sinira takilacak istek de DB'ye ulasir.
+ */
+export declare const requireFreshSessionOnWrites: (lookup: SessionRevocationLookup, options?: RequireFreshSessionOnWritesOptions) => (req: Request, res: Response, next: NextFunction) => void;
 //# sourceMappingURL=require-fresh-session.d.ts.map

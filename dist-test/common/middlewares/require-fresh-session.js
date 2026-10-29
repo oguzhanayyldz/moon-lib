@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireFreshSession = exports.startedBeforeRevocation = exports.tokenSessionStartedAt = void 0;
+exports.requireFreshSessionOnWrites = exports.requireFreshSession = exports.startedBeforeRevocation = exports.tokenSessionStartedAt = void 0;
 const not_authorized_error_1 = require("../errors/not-authorized-error");
+const service_unavailable_error_1 = require("../errors/service-unavailable-error");
 const logger_service_1 = require("../../services/logger.service");
 /**
  * Hesap duzeyindeki oturum iptalini auth disindaki servislerde uygular
@@ -58,19 +59,8 @@ const revocationHolderId = (user) => {
     }
     return user.isSubUserMode && user.subUserId ? user.subUserId : user.id;
 };
-/**
- * `requireAuth` (ya da `requireAuthAdmin`) SONRASINA takilir.
- *
- * Kurallar (lead karari, TASK-MUFJ7F2IFKC77):
- *   - Kopya yok → GECER (damga henuz ulasmamis ya da kullanici kopyalanmamis).
- *   - Okuma hatasi → FAIL-CLOSED: hata `next(error)` ile iletilir, uca gecilmez.
- *   - Iptalden once baslamis oturum → 401, YAN ETKISIZ (cerez silinmez, oturum
- *     kapatilmaz). Istemci 401'de yeniler; auth'un refresh zinciri ayni oturumu
- *     zaten reddeder.
- *   - `sst` de `iat` de yoksa baslangic bilinmiyor: esigi olan hesapta red.
- */
-const requireFreshSession = (lookup) => async (req, res, next) => {
-    var _a;
+const requireFreshSession = (lookup, options = {}) => async (req, res, next) => {
+    var _a, _b, _c;
     const user = req.currentUser;
     if (!user) {
         return next();
@@ -86,12 +76,13 @@ const requireFreshSession = (lookup) => async (req, res, next) => {
     }
     catch (error) {
         logger_service_1.logger.error('[requireFreshSession] revocation lookup failed, blocking request:', error);
-        return next(error);
+        // Eslemenin bos donusu `next()` olur ve istegi gecirirdi: hatanin kendisine dusulur
+        return next((_b = (_a = options.mapLookupError) === null || _a === void 0 ? void 0 : _a.call(options, error)) !== null && _b !== void 0 ? _b : error);
     }
     if (!holder) {
         return next();
     }
-    const sessionStartedAt = (_a = (0, exports.tokenSessionStartedAt)(user)) !== null && _a !== void 0 ? _a : Number.NEGATIVE_INFINITY;
+    const sessionStartedAt = (_c = (0, exports.tokenSessionStartedAt)(user)) !== null && _c !== void 0 ? _c : Number.NEGATIVE_INFINITY;
     if ((0, exports.startedBeforeRevocation)(holder.sessionsRevokedAt, sessionStartedAt)) {
         logger_service_1.logger.info(`[requireFreshSession] Session predates account-wide revocation: ${holderId}`);
         return next(new not_authorized_error_1.NotAuthorizedError());
@@ -99,4 +90,29 @@ const requireFreshSession = (lookup) => async (req, res, next) => {
     next();
 };
 exports.requireFreshSession = requireFreshSession;
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/**
+ * Yazma yontemlerinde (POST/PUT/PATCH/DELETE) iptalden once baslamis erisim JWT'sini
+ * reddeder (UC-921/UC-922 servis kopyalarinin tek hali, UC-923). `app.use(currentUser)`
+ * SONRASINA, rotalardan ONCE takilir: tek noktadan butun yazma yuzeyini kapsar, yeni rota
+ * eklendiginde unutulamaz. Oturumsuz istek (webhook vb.) `currentUser` yok → dokunulmaz;
+ * kimlik denetimini rotanin kendi `requireAuth`'u yapar. Okuma uclari etkilenmez.
+ *
+ * Sira: rate-limit'ten SONRA takilmasi onerilir — koruma her oturumlu yazmada bir indeksli
+ * `findOne` yapar; once takilirsa sinira takilacak istek de DB'ye ulasir.
+ */
+const requireFreshSessionOnWrites = (lookup, options = {}) => {
+    const freshSession = (0, exports.requireFreshSession)(lookup, {
+        mapLookupError: options.onLookupError === 'propagate'
+            ? undefined
+            : () => new service_unavailable_error_1.ServiceUnavailableError()
+    });
+    return (req, res, next) => {
+        if (READ_METHODS.has(req.method)) {
+            return next();
+        }
+        freshSession(req, res, next).catch(next);
+    };
+};
+exports.requireFreshSessionOnWrites = requireFreshSessionOnWrites;
 //# sourceMappingURL=require-fresh-session.js.map
