@@ -20,7 +20,9 @@ const SAFE_QUERY_KEYS = new Set([
 // Start of an address in free text: a scheme (`redis://`) or the start of a word containing `@` (userinfo without scheme).
 // Both alternatives are anchored at a word start (lookbehind): unanchored, `search()` rescanned the rest of a
 // long whitespace-free text from every position, which is quadratic (32 KB took over a second).
-const URI_START_IN_TEXT = /(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*:\/\/|(?<![^\s@])[^\s@]*@/;
+// The scheme may follow a prefix of digits/`+.-` (`6379.redis://h?password=x`): the prefix class must NOT contain
+// letters, otherwise `[A-Za-z0-9+.-]*[A-Za-z]` is two-star and quadratic again.
+const URI_START_IN_TEXT = /(?<![A-Za-z0-9+.-])[0-9+.-]*[A-Za-z][A-Za-z0-9+.-]*:\/\/|(?<![^\s@])[^\s@]*@/;
 const WHITESPACE_PATTERN = /\s/;
 const SAFE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const SAFE_ERROR_CODE_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
