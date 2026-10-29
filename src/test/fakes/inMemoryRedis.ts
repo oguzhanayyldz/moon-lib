@@ -70,6 +70,21 @@ export class InMemoryRedis {
         return 1;
     }
 
+    /** node-redis `multi().incr().expire().exec()` subset: commands run in order, exec returns their replies. */
+    multi() {
+        const queue: Array<() => Promise<number>> = [];
+        const chain = {
+            incr: (key: string) => { queue.push(() => this.incr(key)); return chain; },
+            expire: (key: string, seconds: number) => { queue.push(() => this.expire(key, seconds)); return chain; },
+            exec: async () => {
+                const replies: number[] = [];
+                for (const command of queue) replies.push(await command());
+                return replies;
+            }
+        };
+        return chain;
+    }
+
     async ttl(key: string): Promise<number> {
         const entry = this.liveEntry(key);
         if (!entry) return -2;

@@ -1,8 +1,8 @@
 /**
  * UC-1183 — RetryableListener: a stuck job must not hold its lock forever, and must become visible.
  *
- * - maxLockHoldMs: once exceeded the lock renewal stops (logger.error + retryable_listener_stuck_total{reason="max_lock_hold"});
- *   the lock then expires at its TTL. 0 = no limit.
+ * - maxLockHoldMs (default 0 = off): once exceeded the moon-lib heartbeat stops (logger.warn + retryable_listener_stuck_total{reason="max_lock_hold"});
+ *   the lock then expires at its TTL.
  * - same-message redelivery counter: while the lock holder is still working, every redelivery of the same message is counted;
  *   at stuckRedeliveryThreshold the metric ticks once (reason="redelivery") and a warn is logged on every delivery from there on.
  * RetryableListener runs as production code; Redis is the in-memory fake, NATS and Mongo are fakes.
@@ -80,13 +80,13 @@ beforeEach(() => {
 
 describe('UC-1183 option resolvers', () => {
     it.each([
-        [undefined, undefined, 900000],
+        [undefined, undefined, 0],
         [5000, undefined, 5000],
         [0, '3000', 0],
         [undefined, '3000', 3000],
-        [undefined, 'abc', 900000],
-        [-1, undefined, 900000],
-        [1.5, undefined, 900000],
+        [undefined, 'abc', 0],
+        [-1, undefined, 0],
+        [1.5, undefined, 0],
     ])('maxLockHoldMs explicit %p, env %p → %p', (explicit, env, expected) => {
         if (env !== undefined) process.env.RETRYABLE_MAX_LOCK_HOLD_MS = env;
         expect(resolveMaxLockHoldMs(explicit as number | undefined)).toBe(expected);
@@ -105,7 +105,7 @@ describe('UC-1183 option resolvers', () => {
 });
 
 describe('UC-1183 maxLockHoldMs', () => {
-    it('stuck job: renewal stops after the limit, the lock expires, error logged and metric counted', async () => {
+    it('stuck job: renewal stops after the limit, the lock expires, warn logged (not error) and metric counted', async () => {
         const listener = newListener({ lockTimeoutSec: 1, maxLockHoldMs: 700 }); // renew every 333 ms
         listener.work = () => sleep(2600);
         const msg = createFakeMessage(payload, 3);
@@ -116,8 +116,9 @@ describe('UC-1183 maxLockHoldMs', () => {
         expect({
             lock: await redisWrapper.client.get(lockKey),
             metric: stuckMetric(),
-            errorLogged: (logger.error as jest.Mock).mock.calls.some(([m]) => String(m).includes('Max lock hold exceeded')),
-        }).toEqual({ lock: null, metric: [{ listener: 'StuckListener', reason: 'max_lock_hold' }], errorLogged: true });
+            warnLogged: (logger.warn as jest.Mock).mock.calls.some(([m]) => String(m).includes('heartbeat stopped after maxLockHoldMs')),
+            errorLogged: (logger.error as jest.Mock).mock.calls.length > 0,
+        }).toEqual({ lock: null, metric: [{ listener: 'StuckListener', reason: 'max_lock_hold' }], warnLogged: true, errorLogged: false });
 
         await running;
         expect(wasAcked(msg)).toBe(true);
@@ -168,7 +169,57 @@ describe('UC-1183 same-message redelivery counter', () => {
         await running;
     });
 
-    it('threshold 0 turns the counter off', async () => {
+    it('counts per message: redeliveries of two different sequences under the same eventId are not added up', async () => {
+        const listener = newListener({ lockTimeoutSec: 10, stuckRedeliveryThreshold: 5 });
+        listener.work = () => sleep(900);
+        const first = listener.onMessage(payload, createFakeMessage(payload, 9));
+        await sleep(50);
+        for (let i = 0; i < 3; i++) await listener.onMessage(payload, createFakeMessage(payload, 9));
+        await first;
+
+        const second = listener.onMessage(payload, createFakeMessage(payload, 20));
+        await sleep(50);
+        for (let i = 0; i < 3; i++) await listener.onMessage(payload, createFakeMessage(payload, 20));
+
+        expect({ metric: stuckMetric(), warns: stuckWarns() }).toEqual({ metric: [], warns: 0 });
+        await second;
+    });
+
+    it('the counter key carries a TTL', async () => {
+        const listener = newListener({ lockTimeoutSec: 10, stuckRedeliveryThreshold: 3 });
+        listener.work = () => sleep(500);
+        const running = listener.onMessage(payload, createFakeMessage(payload, 9));
+        await sleep(50);
+        await redeliver(listener, 1);
+
+        const ttl = await redisWrapper.client.ttl(envScopedKey(`event:same-message-redelivery:${Subjects.OrderCreated}:stuck-${payload.id}:9`));
+
+        expect(ttl).toBeGreaterThan(3500);
+        expect(ttl).toBeLessThanOrEqual(3600);
+        await running;
+    });
+
+    it('a failing counter does not break delivery: onMessage does not throw and the redelivery is not acked', async () => {
+        const listener = newListener({ lockTimeoutSec: 10, stuckRedeliveryThreshold: 3 });
+        listener.work = () => sleep(500);
+        const running = listener.onMessage(payload, createFakeMessage(payload, 9));
+        await sleep(50);
+        const multi = jest.spyOn(redisWrapper.client as unknown as InMemoryRedis, 'multi')
+            .mockImplementation(() => { throw new Error('redis down'); });
+        const redelivery = createFakeMessage(payload, 9);
+
+        await expect(listener.onMessage(payload, redelivery)).resolves.toBeUndefined();
+
+        expect({
+            acked: wasAcked(redelivery),
+            metric: stuckMetric(),
+            counterFailureLogged: (logger.warn as jest.Mock).mock.calls.some(([m]) => String(m).includes('Failed to count same-message redelivery')),
+        }).toEqual({ acked: false, metric: [], counterFailureLogged: true });
+        multi.mockRestore();
+        await running;
+    });
+
+    it('threshold 0 turns the counter off: no warn, no counter key', async () => {
         const listener = newListener({ lockTimeoutSec: 10, stuckRedeliveryThreshold: 0 });
         listener.work = () => sleep(600);
         const running = listener.onMessage(payload, createFakeMessage(payload, 9));
@@ -176,7 +227,11 @@ describe('UC-1183 same-message redelivery counter', () => {
 
         await redeliver(listener, 6);
 
-        expect(stuckMetric()).toEqual([]);
+        expect({
+            metric: stuckMetric(),
+            warns: stuckWarns(),
+            key: await redisWrapper.client.get(envScopedKey(`event:same-message-redelivery:${Subjects.OrderCreated}:stuck-${payload.id}:9`)),
+        }).toEqual({ metric: [], warns: 0, key: null });
         await running;
     });
 });

@@ -41,7 +41,7 @@ export function startLockHeartbeat(
     const timer = setInterval(async () => {
         if (stopped) return;
         if (maxHoldMs > 0 && Date.now() - startedAt >= maxHoldMs) {
-            logger.error('[LockHeartbeat] Max lock hold exceeded, heartbeat stopped; the lock will expire', { lockKey, maxHoldMs });
+            logger.warn('[LockHeartbeat] moon-lib heartbeat stopped after maxLockHoldMs; lock expires unless the subclass renews it', { lockKey, maxHoldMs });
             stopped = true;
             clearInterval(timer);
             try {

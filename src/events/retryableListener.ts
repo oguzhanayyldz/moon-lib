@@ -38,14 +38,14 @@ interface RetryOptions {
      */
     lockRenewIntervalMs?: number;
     /**
-     * Kilit yenilemesinin üst sınırı, ms (UC-1183). Aşılınca yenileme durur (logger.error + retryable_listener_stuck_total
-     * {reason="max_lock_hold"}); kilit TTL'inde düşer, sonraki yeniden teslim işi devralır. 0 = sınır yok.
-     * Verilmezse RETRYABLE_MAX_LOCK_HOLD_MS, o da yoksa 15 dk.
+     * Kilit yenilemesinin üst sınırı, ms (UC-1183). Aşılınca moon-lib heartbeat'i durur (logger.warn + retryable_listener_stuck_total
+     * {reason="max_lock_hold"}); alt sınıf kendi heartbeat'ini sarmıyorsa kilit TTL'inde düşer, sonraki yeniden teslim işi devralır.
+     * 0 = sınır yok (varsayılan). Verilmezse RETRYABLE_MAX_LOCK_HOLD_MS, o da yoksa 0.
      */
     maxLockHoldMs?: number;
     /**
      * Kilit sahibi hâlâ işlerken aynı mesajın kaç yeniden teslimden sonra takılı sayılacağı (UC-1183): warn + metrik
-     * ({reason="redelivery"}, olay başına bir kez). 0 = kapalı. Verilmezse RETRYABLE_STUCK_REDELIVERY_THRESHOLD, o da yoksa 5.
+     * ({reason="redelivery"}, mesaj (eventId + sıra) başına bir kez). 0 = kapalı. Verilmezse RETRYABLE_STUCK_REDELIVERY_THRESHOLD, o da yoksa 5.
      */
     stuckRedeliveryThreshold?: number;
     /**
@@ -89,7 +89,8 @@ export function resolveLockRenewIntervalMs(explicit: number | undefined, lockTim
     return raw;
 }
 
-const DEFAULT_MAX_LOCK_HOLD_MS = 15 * 60 * 1000;
+// Varsayılan kapalı: parasut sendToErp ve büyük katalog senkronları meşru olarak >15 dk sürebilir; sınır dinleyici bazında açılır.
+const DEFAULT_MAX_LOCK_HOLD_MS = 0;
 const DEFAULT_STUCK_REDELIVERY_THRESHOLD = 5;
 const STUCK_REDELIVERY_KEY_PREFIX = 'event:same-message-redelivery:';
 const STUCK_REDELIVERY_TTL_SEC = 3600;
@@ -102,7 +103,7 @@ function resolveNonNegativeInt(explicit: number | undefined, envName: string, fa
     return raw;
 }
 
-/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 15 dk. 0 = sınır yok. */
+/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 0 (sınır yok). */
 export function resolveMaxLockHoldMs(explicit?: number): number {
     return resolveNonNegativeInt(explicit, 'RETRYABLE_MAX_LOCK_HOLD_MS', DEFAULT_MAX_LOCK_HOLD_MS);
 }
@@ -232,16 +233,16 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
     }
 
     /**
-     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (olay başına bir kez) metrik,
+     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (mesaj başına bir kez) metrik,
      * eşikten itibaren her teslimde warn. Sayaç hatası teslim akışını bozmaz.
      */
-    private async noteSameMessageRedelivery(eventType: string, eventId: string): Promise<void> {
+    private async noteSameMessageRedelivery(eventType: string, eventId: string, sequence: number): Promise<void> {
         const threshold = this.options.stuckRedeliveryThreshold;
         if (threshold <= 0) return;
         try {
-            const key = envScopedKey(`${STUCK_REDELIVERY_KEY_PREFIX}${eventType}:${eventId}`);
-            const count = await redisWrapper.client.incr(key);
-            if (count === 1) await redisWrapper.client.expire(key, STUCK_REDELIVERY_TTL_SEC);
+            // Sıra anahtarda: aynı eventId'li farklı mesajların yeniden teslimleri toplanmaz. INCR+EXPIRE tek MULTI'de (TTL'siz anahtar kalmaz).
+            const key = envScopedKey(`${STUCK_REDELIVERY_KEY_PREFIX}${eventType}:${eventId}:${sequence}`);
+            const [count] = await redisWrapper.client.multi().incr(key).expire(key, STUCK_REDELIVERY_TTL_SEC).exec() as [number, unknown];
             if (count < threshold) return;
             if (count === threshold) this.recordStuck('redelivery');
             logger.warn(`Event looks stuck: lock holder still processing after ${count} redeliveries of the same message in ${this.constructor.name}: ${eventType}:${eventId}`);
@@ -395,7 +396,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                             if (sequence !== undefined && holder?.endsWith(RetryableListener.lockValueSuffix(fingerprint, sequence))) {
                                 logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
                                 span.setTag('lock.same_message', true);
-                                await this.noteSameMessageRedelivery(eventType, eventId);
+                                await this.noteSameMessageRedelivery(eventType, eventId, sequence);
                                 return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
                             }
                             // Sıra numarası yoksa yeniden teslim, kilit sahibinin işlediği mesajın kendisi olabilir: ack'lenirse

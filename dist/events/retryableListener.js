@@ -65,7 +65,8 @@ function resolveLockRenewIntervalMs(explicit, lockTimeoutSec) {
         return fallback;
     return raw;
 }
-const DEFAULT_MAX_LOCK_HOLD_MS = 15 * 60 * 1000;
+// Varsayılan kapalı: parasut sendToErp ve büyük katalog senkronları meşru olarak >15 dk sürebilir; sınır dinleyici bazında açılır.
+const DEFAULT_MAX_LOCK_HOLD_MS = 0;
 const DEFAULT_STUCK_REDELIVERY_THRESHOLD = 5;
 const STUCK_REDELIVERY_KEY_PREFIX = 'event:same-message-redelivery:';
 const STUCK_REDELIVERY_TTL_SEC = 3600;
@@ -78,7 +79,7 @@ function resolveNonNegativeInt(explicit, envName, fallback) {
         return fallback;
     return raw;
 }
-/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 15 dk. 0 = sınır yok. */
+/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 0 (sınır yok). */
 function resolveMaxLockHoldMs(explicit) {
     return resolveNonNegativeInt(explicit, 'RETRYABLE_MAX_LOCK_HOLD_MS', DEFAULT_MAX_LOCK_HOLD_MS);
 }
@@ -164,19 +165,18 @@ class RetryableListener extends common_1.Listener {
         EventMetrics_1.EventMetrics.retryableListenerStuckTotal.inc({ listener: this.constructor.name, reason });
     }
     /**
-     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (olay başına bir kez) metrik,
+     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (mesaj başına bir kez) metrik,
      * eşikten itibaren her teslimde warn. Sayaç hatası teslim akışını bozmaz.
      */
-    noteSameMessageRedelivery(eventType, eventId) {
+    noteSameMessageRedelivery(eventType, eventId, sequence) {
         return __awaiter(this, void 0, void 0, function* () {
             const threshold = this.options.stuckRedeliveryThreshold;
             if (threshold <= 0)
                 return;
             try {
-                const key = (0, redisEnvScope_util_1.envScopedKey)(`${STUCK_REDELIVERY_KEY_PREFIX}${eventType}:${eventId}`);
-                const count = yield redisWrapper_service_1.redisWrapper.client.incr(key);
-                if (count === 1)
-                    yield redisWrapper_service_1.redisWrapper.client.expire(key, STUCK_REDELIVERY_TTL_SEC);
+                // Sıra anahtarda: aynı eventId'li farklı mesajların yeniden teslimleri toplanmaz. INCR+EXPIRE tek MULTI'de (TTL'siz anahtar kalmaz).
+                const key = (0, redisEnvScope_util_1.envScopedKey)(`${STUCK_REDELIVERY_KEY_PREFIX}${eventType}:${eventId}:${sequence}`);
+                const [count] = yield redisWrapper_service_1.redisWrapper.client.multi().incr(key).expire(key, STUCK_REDELIVERY_TTL_SEC).exec();
                 if (count < threshold)
                     return;
                 if (count === threshold)
@@ -327,7 +327,7 @@ class RetryableListener extends common_1.Listener {
                                 if (sequence !== undefined && (holder === null || holder === void 0 ? void 0 : holder.endsWith(RetryableListener.lockValueSuffix(fingerprint, sequence)))) {
                                     logger_service_1.logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
                                     span.setTag('lock.same_message', true);
-                                    yield this.noteSameMessageRedelivery(eventType, eventId);
+                                    yield this.noteSameMessageRedelivery(eventType, eventId, sequence);
                                     return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
                                 }
                                 // Sıra numarası yoksa yeniden teslim, kilit sahibinin işlediği mesajın kendisi olabilir: ack'lenirse
