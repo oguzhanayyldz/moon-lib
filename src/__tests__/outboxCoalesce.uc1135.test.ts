@@ -172,6 +172,26 @@ describe('UC-1135 — yayın anında stok olayı birleştirme', () => {
         expect(v1.supersededBy).toBeUndefined();
     });
 
+    it('başka pod kaybedeni claim filtresinden önce aldıysa gerçek filtre onu dışarıda bırakır', async () => {
+        const v1 = outbox.seed(Subjects.ProductStockUpdated, stockPayload('p-1', 1));
+        const v2 = outbox.seed(Subjects.ProductStockUpdated, stockPayload('p-1', 2));
+        const realUpdateMany = outbox.collection.updateMany.bind(outbox.collection);
+        const otherPodClaimedAt = new Date(0);
+        jest.spyOn(outbox.collection, 'updateMany').mockImplementationOnce(async (filter: any, update: any) => {
+            // başka pod v1'i aldı; claim gerçek filtreyle koşar (status:'pending' v1'i dışarıda bırakmalı)
+            v1.status = 'processing';
+            v1.processingStartedAt = otherPodClaimedAt;
+            return realUpdateMany(filter, update);
+        }).mockImplementation(realUpdateMany);
+
+        await newJob().processEventsOnce();
+
+        expect(v2.status).toBe('published');
+        expect(v1.status).toBe('processing');
+        expect(v1.processingStartedAt).toBe(otherPodClaimedAt);
+        expect(v1.supersededBy).toBeUndefined();
+    });
+
     it('en yüksek sürüm silme (deleted) olayı olsa da kazanır', async () => {
         const update = outbox.seed(Subjects.ProductStockUpdated, stockPayload('p-1', 1));
         const deleted = outbox.seed(Subjects.ProductStockUpdated, { ...stockPayload('p-1', 2), deleted: true });
