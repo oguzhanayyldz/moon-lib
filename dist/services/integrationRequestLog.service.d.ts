@@ -27,6 +27,25 @@ export declare function withIntegrationLogSizes<T extends {
     responseSize: number | null;
     totalSize: number | null;
 };
+/**
+ * Admin log listesinde sıralanabilen alanlar (UC-800): yalnız indeksli `requestTime`.
+ * İndekssiz alanda sıralama entegrasyonun tüm loglarını bellekte sıralatır; listede olmayan alan
+ * istenirse `requestTime`'a düşülür.
+ */
+export declare const ADMIN_LOG_SORT_FIELDS: readonly ["requestTime"];
+export interface AdminLogListParams {
+    sortField: string;
+    sortOrder: 'asc' | 'desc';
+    startDate?: Date;
+    endDate?: Date;
+    statusCode?: number;
+}
+/**
+ * Admin log rotalarının liste sorgu parametrelerini tek sözleşmeye çevirir (UC-800).
+ * İstemci adları: `startDate`/`endDate`, `statusCode`, `sortField`/`sort`.
+ * Geriye uyum: eski `dateFrom`/`dateTo` ve `sortOrder` adları da okunur (yeni ad önceliklidir).
+ */
+export declare function parseAdminLogListParams(query?: Record<string, unknown>): AdminLogListParams;
 export interface LogIntegrationRequestOptions {
     integrationName: ResourceName;
     userId: string;
@@ -122,6 +141,9 @@ export declare class IntegrationRequestLogService {
         success?: boolean | 'partial';
         search?: string;
         advancedSearch?: string;
+        startDate?: Date;
+        endDate?: Date;
+        statusCode?: number;
     }): Promise<{
         logs: (mongoose.FlattenMaps<IntegrationRequestLogDoc> & {
             _id: mongoose.Types.ObjectId;
