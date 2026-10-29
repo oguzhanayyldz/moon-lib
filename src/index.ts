@@ -135,6 +135,7 @@ export * from './events/publishers/orderProductUpdated.publisher';
 export * from './events/publishers/orderStatusUpdated.publisher';
 export * from './utils/duplicateKeyError.util';
 export * from './utils/eventErrorClassification.util';
+export * from './utils/itemErrorCollector.util';
 export * from './utils/lockHeartbeat.util';
 export * from './events/retryableListener';
 export * from './events/listeners/BaseModernEntityDeletedListener';

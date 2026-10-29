@@ -136,6 +136,7 @@ __exportStar(require("./events/publishers/orderProductUpdated.publisher"), expor
 __exportStar(require("./events/publishers/orderStatusUpdated.publisher"), exports);
 __exportStar(require("./utils/duplicateKeyError.util"), exports);
 __exportStar(require("./utils/eventErrorClassification.util"), exports);
+__exportStar(require("./utils/itemErrorCollector.util"), exports);
 __exportStar(require("./utils/lockHeartbeat.util"), exports);
 __exportStar(require("./events/retryableListener"), exports);
 __exportStar(require("./events/listeners/BaseModernEntityDeletedListener"), exports);
