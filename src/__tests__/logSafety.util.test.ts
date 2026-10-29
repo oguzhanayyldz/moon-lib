@@ -901,6 +901,25 @@ describe('redactSensitiveText — name-free tokens, header lines, session/jwt/si
             expect(timed(`redis://h ${input}`)).toBeLessThan(BUDGET_MS);
         });
 
+        // UC-1184 (UC-832 B7): many whitespace-separated `@`-less addresses made `lastIndexOf('@')` + slice quadratic
+        // (64 KB ~ 200 ms). The `a@b ` prefix puts an `@` before the region, so the cheap pre-check cannot skip the scan.
+        const KB64 = 64 * 1024;
+        it.each([
+            ['redis://h ', 'redis://h '],
+            ['mongodb://h:27017/db ', 'mongodb://h:27017/db '],
+            ['bare `a://` words', 'a:// ']
+        ])('64 KB of `@`-less %s addresses is masked under 50 ms', (_label, unit) => {
+            const body = repeatTo(unit, KB64);
+            expect(timed(body)).toBeLessThan(BUDGET_MS);
+            expect(timed(`a@b ${body}`)).toBeLessThan(BUDGET_MS);
+        });
+
+        // behaviour unchanged: the region of the first address runs to the end of the word holding the LAST `@`
+        it('keeps the same output when `@`-less addresses precede the last `@`', () => {
+            const out = maskConnectionUrisInText('redis://h  x redis://h2 y redis://u:FAKE_PASS_UC1184@h3 tail');
+            expect(out).toBe('redis://**** tail');
+        });
+
         // B5: a scheme word starting with a digit or `+ . -` must still have its query credential masked
         it.each([
             '2redis://h?password=FAKE_PASS_UC832',
