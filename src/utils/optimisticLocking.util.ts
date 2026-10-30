@@ -221,7 +221,8 @@ export class OptimisticLockingUtil {
         const targetVersion = updateFields?.$set?.version ?? updateFields?.version;
         if (targetVersion !== undefined && result) {
             try {
-                await this.publishVersionEventForUpdate(Model, result, targetVersion);
+                // Session ile: transaction abort edilirse EVU satırı da geri alınır (UC-835)
+                await this.publishVersionEventForUpdate(Model, result, targetVersion, 'updateWithRetry', session);
             } catch (error) {
                 logger.error(`❌ Failed to publish version event after updateWithRetry:`, error);
                 // Event publish hatası işlemi engellemesin
@@ -444,7 +445,8 @@ export class OptimisticLockingUtil {
         const targetVersion = updateFields?.$set?.version ?? updateFields?.version;
         if (targetVersion !== undefined && result) {
             try {
-                await this.publishVersionEventForUpdate(Model, result, targetVersion);
+                // Session ile: transaction abort edilirse EVU satırı da geri alınır (UC-835)
+                await this.publishVersionEventForUpdate(Model, result, targetVersion, 'updateWithRetry', session);
             } catch (error) {
                 logger.error(`❌ Failed to publish version event after updateMetadataWithRetry:`, error);
                 // Event publish hatası işlemi engellemesin
