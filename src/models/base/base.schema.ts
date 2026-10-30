@@ -16,6 +16,15 @@ export const VERSION_TRACKING_CONFIGS = new Map<string, {
     versionTrackingConfig?: any;
 }>();
 
+/**
+ * Silinmemiş kayıt filtresi: find/findOne kancası ve findByCustom/findByEvent ile aynı kaynak (UC-1221).
+ * Sorguya HER ZAMAN kopyası verilir (`{ ...NOT_DELETED }`); mongoose koşul nesnesini değiştirebilir.
+ */
+export const NOT_DELETED = Object.freeze({
+    deleted: { $exists: false },
+    deletionDate: { $exists: false }
+});
+
 export interface BaseAttrs {
     id?: string;
     _id?: string;
@@ -196,7 +205,7 @@ export function createBaseSchema(
 
         findByCustom: function (id: string) {
             return this.findById(id)
-                .where({ deletionDate: { $exists: false }, deleted: { $exists: false } })
+                .where({ ...NOT_DELETED })
                 .exec();
         },
 
@@ -204,8 +213,7 @@ export function createBaseSchema(
             return this.findOne({
                 _id: event.id,
                 version: event.version - 1,
-                deletionDate: { $exists: false },
-                deleted: { $exists: false }
+                ...NOT_DELETED
             });
         },
 
@@ -344,7 +352,7 @@ export function createBaseSchema(
                         modelName: Model.modelName
                     } : undefined,
                     parentEntity  // Parent entity bilgisi
-                });
+                }, doc.$session() ?? undefined); // transaction içi kayıt: EVU aynı transaction'da yazılır, abort'ta hayalet satır kalmaz
             } catch (error) {
                 logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}: ${error instanceof Error ? error.message : String(error)}`);
                 // Hata logla ama işlemi engelleme. Outbox yazımı kaydın kendi işlemine bağlı değil: burada düşen
@@ -404,7 +412,7 @@ export function createBaseSchema(
         delete queryConditions.includeDeleted;
 
         if (!includeDeleted) {
-            query.where({ deletionDate: { $exists: false }, deleted: { $exists: false } });
+            query.where({ ...NOT_DELETED });
         }
         next();
     });
@@ -416,7 +424,7 @@ export function createBaseSchema(
         delete queryConditions.includeDeleted;
 
         if (!includeDeleted) {
-            query.where({ deletionDate: { $exists: false }, deleted: { $exists: false } });
+            query.where({ ...NOT_DELETED });
         }
         next();
     });

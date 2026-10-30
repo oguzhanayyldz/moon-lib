@@ -182,6 +182,8 @@ const integrationRequestLogSchema = createBaseSchema(integrationRequestLogSchema
 // Virtual field: success - Computed from responseStatus
 integrationRequestLogSchema.virtual('success').get(function(this: IntegrationRequestLogDoc) {
     if (!this.responseStatus) return false;
+    // 409 + gövde success:true (idempotent) başarılı sayılır (UC-569 Ö-4)
+    if (this.responseStatus === 409 && this.idempotentSuccess) return true;
     return this.responseStatus >= 200 && this.responseStatus < 300;
 });
 

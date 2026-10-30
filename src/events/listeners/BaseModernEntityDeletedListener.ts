@@ -255,15 +255,11 @@ export abstract class BaseModernEntityDeletedListener extends RetryableListener<
             metadata: result.metadata
           };
           
-          logger.error(`Strategy deletion failed, checking for resilience options`, errorDetails);
-          
-          // Check if this is a strategy initialization issue
-          if (result.metadata?.initializationErrors) {
-            logger.warn(`Strategy deletion failed due to initialization errors, attempting fallback`);
-            // Don't throw, let it fall through to legacy fallback
-          } else {
-            throw new Error(`Strategy deletion failed: ${result.error}`);
-          }
+          logger.error(`Strategy deletion failed`, errorDetails);
+
+          // `initializationErrors` yalnız strateji ÇÖZÜLEMEDİĞİNDE set edilir (executeWithoutTransaction);
+          // bu dal strateji çözülmüşken çalıştığından fallback'e düşen yol yoktu (UC-1220 G)
+          throw new Error(`Strategy deletion failed: ${result.error}`);
         }
       } else {
         // Step 2: Check if this entity is managed by this service

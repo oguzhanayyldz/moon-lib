@@ -169,7 +169,7 @@ class MicroserviceSecurityService {
     async getStatus(usernameOrEmail) {
         try {
             if (!this.bruteForceProtection || typeof this.bruteForceProtection.getStatus !== 'function') {
-                index_1.logger.error('BruteForceProtection getStatus fonksiyonu bulunamadı');
+                index_1.logger.warn('BruteForceProtection getStatus fonksiyonu bulunamadı, brute-force kontrolü atlandı (fail-open)');
                 return { allowed: true };
             }
             const status = await this.bruteForceProtection.getStatus(usernameOrEmail);
@@ -191,9 +191,10 @@ class MicroserviceSecurityService {
             };
         }
         catch (error) {
-            // Herhangi bir hata durumunda güvenli mod - login izni verme
-            index_1.logger.error('getStatus fonksiyonunda hata:', error);
-            return { allowed: true }; // Hata durumunda login izni ver
+            // Bilinçli FAIL-OPEN (patron kararı K-573869): brute-force durumu okunamazsa (Redis kesintisi vb.)
+            // girişi kilitlemeyiz; hata görünür kalsın diye warn loglanır.
+            index_1.logger.warn('getStatus fonksiyonunda hata, brute-force kontrolü atlandı (fail-open):', error);
+            return { allowed: true };
         }
     }
     /**

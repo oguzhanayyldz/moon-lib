@@ -62,7 +62,10 @@ describe('UC-800 getAdminLogs — tarih / statusCode / sıralama', () => {
             statusCode: 201
         });
 
-        expect(calls.findQuery.responseStatus).toEqual({ $gte: 200, $lt: 300, $ne: 207 });
+        // 2xx (207 hariç) ya da idempotent 409 (UC-569 Ö-4) — $and'de, statusCode ile aynı alanı ezmez
+        expect(calls.findQuery.$and).toContainEqual({
+            $or: [{ responseStatus: { $gte: 200, $lt: 300, $ne: 207 } }, { idempotentSuccess: true }]
+        });
         expect(calls.findQuery.$and).toContainEqual({ responseStatus: 201 });
     });
 

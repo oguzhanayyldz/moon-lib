@@ -111,8 +111,10 @@ export class SecurityValidator {
             
             return sanitized;
         } catch (error) {
+            // Kapalı davranış (validateInput ile tutarlı): temizlenemeyen girdi ham dönmez. Çağıranlar
+            // (validateInput, MicroserviceSecurityService middleware) fırlatmayı yakalar ve isteği reddeder.
             logger.error('Input sanitization error:', error);
-            return input;
+            throw new Error('Input sanitization failed');
         }
     }
 

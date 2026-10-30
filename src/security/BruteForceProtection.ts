@@ -244,7 +244,8 @@ export class BruteForceProtection {
                     return res.status(429).json({
                         error: 'Too many failed login attempts. Please try again later.',
                         retryAfter: Math.ceil(status.timeUntilReset / 1000),
-                        blockExpiresAt: status.blockExpiresAt
+                        blockExpiresAt: status.blockExpiresAt,
+                        errors: [{ message: 'errors.auth.tooManyLoginAttempts' }]
                     });
                 }
 

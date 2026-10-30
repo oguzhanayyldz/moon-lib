@@ -112,6 +112,9 @@ const integrationRequestLogSchema = (0, base_schema_1.createBaseSchema)(integrat
 integrationRequestLogSchema.virtual('success').get(function () {
     if (!this.responseStatus)
         return false;
+    // 409 + gövde success:true (idempotent) başarılı sayılır (UC-569 Ö-4)
+    if (this.responseStatus === 409 && this.idempotentSuccess)
+        return true;
     return this.responseStatus >= 200 && this.responseStatus < 300;
 });
 // Enable virtuals in JSON and object output

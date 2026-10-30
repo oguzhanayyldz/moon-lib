@@ -284,7 +284,14 @@ class IntegrationRequestLogService {
                         query.responseStatus = 207;
                     }
                     else if (filters.success) {
-                        query.responseStatus = { $gte: 200, $lt: 300, $ne: 207 };
+                        // 409 + success:true (idempotentSuccess) istemcide "Başarılı" gösterilir — filtre de saysın (UC-569 Ö-4)
+                        query.$and = query.$and || [];
+                        query.$and.push({
+                            $or: [
+                                { responseStatus: { $gte: 200, $lt: 300, $ne: 207 } },
+                                { idempotentSuccess: true }
+                            ]
+                        });
                     }
                     else {
                         // $or search filtresiyle aynı anahtarı ezmemesi için $and'e itiliyor (issue #877 ek bulgu 3)
@@ -295,7 +302,7 @@ class IntegrationRequestLogService {
                                 { responseStatus: { $lt: 200 } },
                                 { responseStatus: { $gte: 300 } }
                             ]
-                        });
+                        }, { idempotentSuccess: { $ne: true } });
                     }
                 }
                 if (filters === null || filters === void 0 ? void 0 : filters.search) {
@@ -474,7 +481,14 @@ class IntegrationRequestLogService {
                         query.responseStatus = 207;
                     }
                     else if (filters.success) {
-                        query.responseStatus = { $gte: 200, $lt: 300, $ne: 207 };
+                        // 409 + success:true (idempotentSuccess) istemcide "Başarılı" gösterilir — filtre de saysın (UC-569 Ö-4)
+                        query.$and = query.$and || [];
+                        query.$and.push({
+                            $or: [
+                                { responseStatus: { $gte: 200, $lt: 300, $ne: 207 } },
+                                { idempotentSuccess: true }
+                            ]
+                        });
                     }
                     else {
                         // $or search filtresiyle aynı anahtarı ezmemesi için $and'e itiliyor (issue #877 ek bulgu 3)
@@ -485,7 +499,7 @@ class IntegrationRequestLogService {
                                 { responseStatus: { $lt: 200 } },
                                 { responseStatus: { $gte: 300 } }
                             ]
-                        });
+                        }, { idempotentSuccess: { $ne: true } });
                     }
                 }
                 if (filters === null || filters === void 0 ? void 0 : filters.search) {

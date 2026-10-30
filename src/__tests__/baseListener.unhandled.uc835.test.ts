@@ -92,4 +92,15 @@ describe('Listener.listen — işlenmeyen hatalar (UC-835)', () => {
         expect(seen).toEqual(['o-2']);
         expect(logger.error).not.toHaveBeenCalled();
     });
+
+    it('senkron fırlatan onMessage olay döngüsüne fırlamaz, loglanır ve ack\'lenmez', () => {
+        const { subscription, message } = harness(() => {
+            throw new Error('sync boom');
+        });
+        const msg = message('{"id":"o-3"}');
+
+        expect(() => subscription.emit('message', msg)).not.toThrow();
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        expect(msg.ack).not.toHaveBeenCalled();
+    });
 });

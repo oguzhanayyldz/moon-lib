@@ -5,6 +5,18 @@ export declare const VERSION_TRACKING_CONFIGS: Map<string, {
     enableVersionTracking: boolean;
     versionTrackingConfig?: any;
 }>;
+/**
+ * Silinmemiş kayıt filtresi: find/findOne kancası ve findByCustom/findByEvent ile aynı kaynak (UC-1221).
+ * Sorguya HER ZAMAN kopyası verilir (`{ ...NOT_DELETED }`); mongoose koşul nesnesini değiştirebilir.
+ */
+export declare const NOT_DELETED: Readonly<{
+    deleted: {
+        $exists: boolean;
+    };
+    deletionDate: {
+        $exists: boolean;
+    };
+}>;
 export interface BaseAttrs {
     id?: string;
     _id?: string;
@@ -91,8 +103,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             creationDate: Date;
             updatedOn: Date;
             deleted?: boolean | undefined;
-            uuid?: string | undefined;
             deletionDate?: Date | undefined;
+            uuid?: string | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
@@ -105,8 +117,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             creationDate: Date;
             updatedOn: Date;
             deleted?: boolean | undefined;
-            uuid?: string | undefined;
             deletionDate?: Date | undefined;
+            uuid?: string | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
@@ -123,8 +135,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     creationDate: Date;
     updatedOn: Date;
     deleted?: boolean | undefined;
-    uuid?: string | undefined;
     deletionDate?: Date | undefined;
+    uuid?: string | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
@@ -137,8 +149,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     creationDate: Date;
     updatedOn: Date;
     deleted?: boolean | undefined;
-    uuid?: string | undefined;
     deletionDate?: Date | undefined;
+    uuid?: string | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
@@ -151,8 +163,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     creationDate: Date;
     updatedOn: Date;
     deleted?: boolean | undefined;
-    uuid?: string | undefined;
     deletionDate?: Date | undefined;
+    uuid?: string | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {

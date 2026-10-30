@@ -185,4 +185,40 @@ describe('EVU — sorgu yazımlarında açık yayın (gerçek replica set)', () 
             expect(await evus(id)).toEqual([{ version: 1, previousVersion: 0, source: 'updateWithRetry' }]);
         });
     });
+
+    describe('post(save) kancası (UC-1223)', () => {
+        it('transaction içi doc.save() abort edilirse hayalet EVU kalmaz; commit edilirse yazılır; session\'sız save eskisi gibi yazar', async () => {
+            const id = await seed();
+
+            const aborted = await conn.startSession();
+            try {
+                aborted.startTransaction();
+                const doc = await Tracked.findById(id).session(aborted);
+                doc!.qty = 9;
+                await doc!.save();
+                await aborted.abortTransaction();
+            } finally {
+                await aborted.endSession();
+            }
+            expect(await evus(id)).toEqual([]);
+
+            const committed = await conn.startSession();
+            try {
+                committed.startTransaction();
+                const doc = await Tracked.findById(id).session(committed);
+                doc!.qty = 10;
+                await doc!.save();
+                await committed.commitTransaction();
+            } finally {
+                await committed.endSession();
+            }
+            expect(await evus(id)).toHaveLength(1);
+
+            await Outbox.deleteMany({});
+            const plain = await Tracked.findById(id);
+            plain!.qty = 11;
+            await plain!.save();
+            expect(await evus(id)).toHaveLength(1);
+        });
+    });
 });

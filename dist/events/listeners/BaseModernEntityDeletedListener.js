@@ -157,7 +157,7 @@ class BaseModernEntityDeletedListener extends __1.RetryableListener {
      */
     processEntityDeletion(entity, userId, parentSpan) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c;
+            var _a, _b;
             const span = (_a = this.tracer) === null || _a === void 0 ? void 0 : _a.startSpan(`${this.serviceName}_process_entity_deletion`, { childOf: parentSpan });
             try {
                 span === null || span === void 0 ? void 0 : span.setTag('entity.type', entity.entity);
@@ -215,15 +215,10 @@ class BaseModernEntityDeletedListener extends __1.RetryableListener {
                             strategyError: result.error,
                             metadata: result.metadata
                         };
-                        __1.logger.error(`Strategy deletion failed, checking for resilience options`, errorDetails);
-                        // Check if this is a strategy initialization issue
-                        if ((_c = result.metadata) === null || _c === void 0 ? void 0 : _c.initializationErrors) {
-                            __1.logger.warn(`Strategy deletion failed due to initialization errors, attempting fallback`);
-                            // Don't throw, let it fall through to legacy fallback
-                        }
-                        else {
-                            throw new Error(`Strategy deletion failed: ${result.error}`);
-                        }
+                        __1.logger.error(`Strategy deletion failed`, errorDetails);
+                        // `initializationErrors` yalnız strateji ÇÖZÜLEMEDİĞİNDE set edilir (executeWithoutTransaction);
+                        // bu dal strateji çözülmüşken çalıştığından fallback'e düşen yol yoktu (UC-1220 G)
+                        throw new Error(`Strategy deletion failed: ${result.error}`);
                     }
                 }
                 else {
