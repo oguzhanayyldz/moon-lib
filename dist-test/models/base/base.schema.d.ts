@@ -7,8 +7,18 @@ export declare const VERSION_TRACKING_CONFIGS: Map<string, {
 }>;
 /**
  * Silinmemiş kayıt filtresi: find/findOne kancası ve findByCustom/findByEvent ile aynı kaynak (UC-1221).
- * Sorguya HER ZAMAN kopyası verilir (`{ ...NOT_DELETED }`); mongoose koşul nesnesini değiştirebilir.
+ * Her çağrıda TAZE nesne üretir: mongoose koşul nesnesine (iç `$exists` nesneleri dahil) yerinde yazabilir,
+ * paylaşılan bir nesne süreç genelinde soft-delete filtresini tersine çevirirdi (UC-1223 B1).
  */
+export declare const notDeleted: () => {
+    deleted: {
+        $exists: boolean;
+    };
+    deletionDate: {
+        $exists: boolean;
+    };
+};
+/** @deprecated Yalnız geriye uyum için; iç kullanım `notDeleted()` fabrikasından. Sorguya VERİLMEZ. */
 export declare const NOT_DELETED: Readonly<{
     deleted: {
         $exists: boolean;

@@ -18,12 +18,16 @@ export const VERSION_TRACKING_CONFIGS = new Map<string, {
 
 /**
  * Silinmemiş kayıt filtresi: find/findOne kancası ve findByCustom/findByEvent ile aynı kaynak (UC-1221).
- * Sorguya HER ZAMAN kopyası verilir (`{ ...NOT_DELETED }`); mongoose koşul nesnesini değiştirebilir.
+ * Her çağrıda TAZE nesne üretir: mongoose koşul nesnesine (iç `$exists` nesneleri dahil) yerinde yazabilir,
+ * paylaşılan bir nesne süreç genelinde soft-delete filtresini tersine çevirirdi (UC-1223 B1).
  */
-export const NOT_DELETED = Object.freeze({
+export const notDeleted = () => ({
     deleted: { $exists: false },
     deletionDate: { $exists: false }
 });
+
+/** @deprecated Yalnız geriye uyum için; iç kullanım `notDeleted()` fabrikasından. Sorguya VERİLMEZ. */
+export const NOT_DELETED = Object.freeze(notDeleted());
 
 export interface BaseAttrs {
     id?: string;
@@ -205,7 +209,7 @@ export function createBaseSchema(
 
         findByCustom: function (id: string) {
             return this.findById(id)
-                .where({ ...NOT_DELETED })
+                .where(notDeleted())
                 .exec();
         },
 
@@ -213,7 +217,7 @@ export function createBaseSchema(
             return this.findOne({
                 _id: event.id,
                 version: event.version - 1,
-                ...NOT_DELETED
+                ...notDeleted()
             });
         },
 
@@ -355,8 +359,11 @@ export function createBaseSchema(
                 }, doc.$session() ?? undefined); // transaction içi kayıt: EVU aynı transaction'da yazılır, abort'ta hayalet satır kalmaz
             } catch (error) {
                 logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}: ${error instanceof Error ? error.message : String(error)}`);
-                // Hata logla ama işlemi engelleme. Outbox yazımı kaydın kendi işlemine bağlı değil: burada düşen
-                // sürüm olayı sync'e hiç gitmez, kayıp yalnız bu sayaçtan görünür (UC-984)
+                // Session varken EVU kaydın transaction'ında yazılır: hata transaction'ı zaten abort etmiştir,
+                // yutmak çağıranı yanıltır; yeniden fırlatılır (withTransaction yeniden dener) (UC-1223 B2).
+                if (doc.$session()) throw error;
+                // Session yokken hata logla ama işlemi engelleme: burada düşen sürüm olayı sync'e hiç
+                // gitmez, kayıp yalnız bu sayaçtan görünür (UC-984)
                 EventMetrics.versionEventWriteErrorsTotal.inc({ service: serviceName, entity_type: entityType });
             }
         };
@@ -369,7 +376,8 @@ export function createBaseSchema(
                 next();
             } catch (error) {
                 logger.error('❌ [VERSION-TRACKING-HOOK-ERROR] post(save) hook error:', error);
-                next();
+                // Transaction içi EVU hatası save'i düşürür (UC-1223 B2); session'sız hata yutulur
+                next(doc.$session() ? (error as Error) : undefined);
             }
         });
 
@@ -412,7 +420,7 @@ export function createBaseSchema(
         delete queryConditions.includeDeleted;
 
         if (!includeDeleted) {
-            query.where({ ...NOT_DELETED });
+            query.where(notDeleted());
         }
         next();
     });
@@ -424,7 +432,7 @@ export function createBaseSchema(
         delete queryConditions.includeDeleted;
 
         if (!includeDeleted) {
-            query.where({ ...NOT_DELETED });
+            query.where(notDeleted());
         }
         next();
     });

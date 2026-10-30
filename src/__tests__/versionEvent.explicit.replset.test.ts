@@ -5,6 +5,7 @@ import { createOutboxModel } from '../models/outbox.schema';
 import { OptimisticLockingUtil } from '../utils/optimisticLocking.util';
 import { EntityType, ServiceName } from '../common/types/entity.types';
 import { Subjects } from '../common/events/subjects';
+import { EventMetrics } from '../metrics/EventMetrics';
 
 /**
  * EntityVersionUpdated (EVU) sözleşmesi — sorgu yazımları EVU'yu YALNIZ açıkça üretir (TASK-MUHKJ49C3M25J).
@@ -219,6 +220,33 @@ describe('EVU — sorgu yazımlarında açık yayın (gerçek replica set)', () 
             plain!.qty = 11;
             await plain!.save();
             expect(await evus(id)).toHaveLength(1);
+        });
+
+        it('session\'lı EVU yazım hatası save\'i düşürür (yeniden fırlatılır, metrik artmaz); session\'sız hata yutulur ve sayılır (UC-1223 B2)', async () => {
+            const id = await seed();
+            const counter = EventMetrics.versionEventWriteErrorsTotal;
+            const failures = jest.spyOn(Outbox, 'create').mockRejectedValue(new Error('WriteConflict'));
+            try {
+                counter.reset();
+                const session = await conn.startSession();
+                try {
+                    session.startTransaction();
+                    const doc = await Tracked.findById(id).session(session);
+                    doc!.qty = 20;
+                    await expect(doc!.save()).rejects.toThrow('WriteConflict');
+                    await session.abortTransaction();
+                } finally {
+                    await session.endSession();
+                }
+                expect((await counter.get()).values).toEqual([]);
+
+                const plain = await Tracked.findById(id);
+                plain!.qty = 21;
+                await expect(plain!.save()).resolves.toBeDefined();
+                expect((await counter.get()).values.map((v) => v.value)).toEqual([1]);
+            } finally {
+                failures.mockRestore();
+            }
         });
     });
 });

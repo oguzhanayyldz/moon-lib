@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NOT_DELETED = exports.VERSION_TRACKING_CONFIGS = void 0;
+exports.NOT_DELETED = exports.notDeleted = exports.VERSION_TRACKING_CONFIGS = void 0;
 exports.createBaseSchema = createBaseSchema;
 const mongoose_1 = __importStar(require("mongoose"));
 const mongoose_update_if_current_1 = require("mongoose-update-if-current");
@@ -47,12 +47,16 @@ const versionEventOutbox_util_1 = require("../../utils/versionEventOutbox.util")
 exports.VERSION_TRACKING_CONFIGS = new Map();
 /**
  * Silinmemiş kayıt filtresi: find/findOne kancası ve findByCustom/findByEvent ile aynı kaynak (UC-1221).
- * Sorguya HER ZAMAN kopyası verilir (`{ ...NOT_DELETED }`); mongoose koşul nesnesini değiştirebilir.
+ * Her çağrıda TAZE nesne üretir: mongoose koşul nesnesine (iç `$exists` nesneleri dahil) yerinde yazabilir,
+ * paylaşılan bir nesne süreç genelinde soft-delete filtresini tersine çevirirdi (UC-1223 B1).
  */
-exports.NOT_DELETED = Object.freeze({
+const notDeleted = () => ({
     deleted: { $exists: false },
     deletionDate: { $exists: false }
 });
+exports.notDeleted = notDeleted;
+/** @deprecated Yalnız geriye uyum için; iç kullanım `notDeleted()` fabrikasından. Sorguya VERİLMEZ. */
+exports.NOT_DELETED = Object.freeze((0, exports.notDeleted)());
 /**
  * Lean query sonuçlarına `id` property ekler.
  * Mongoose'un `id` virtual getter'ı lean objelerde çalışmadığı için,
@@ -135,11 +139,11 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         },
         findByCustom: function (id) {
             return this.findById(id)
-                .where(Object.assign({}, exports.NOT_DELETED))
+                .where((0, exports.notDeleted)())
                 .exec();
         },
         findByEvent: function (event) {
-            return this.findOne(Object.assign({ _id: event.id, version: event.version - 1 }, exports.NOT_DELETED));
+            return this.findOne(Object.assign({ _id: event.id, version: event.version - 1 }, (0, exports.notDeleted)()));
         },
         filter: function (where, limit = 20, offset = 0, order, populate) {
             return this.find()
@@ -262,8 +266,12 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
             }
             catch (error) {
                 logger_service_1.logger.error(`❌ [VERSION-TRACKING-ERROR] Publish failed for ${entityType}/${docId}: ${error instanceof Error ? error.message : String(error)}`);
-                // Hata logla ama işlemi engelleme. Outbox yazımı kaydın kendi işlemine bağlı değil: burada düşen
-                // sürüm olayı sync'e hiç gitmez, kayıp yalnız bu sayaçtan görünür (UC-984)
+                // Session varken EVU kaydın transaction'ında yazılır: hata transaction'ı zaten abort etmiştir,
+                // yutmak çağıranı yanıltır; yeniden fırlatılır (withTransaction yeniden dener) (UC-1223 B2).
+                if (doc.$session())
+                    throw error;
+                // Session yokken hata logla ama işlemi engelleme: burada düşen sürüm olayı sync'e hiç
+                // gitmez, kayıp yalnız bu sayaçtan görünür (UC-984)
                 EventMetrics_1.EventMetrics.versionEventWriteErrorsTotal.inc({ service: serviceName, entity_type: entityType });
             }
         };
@@ -276,7 +284,8 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
             }
             catch (error) {
                 logger_service_1.logger.error('❌ [VERSION-TRACKING-HOOK-ERROR] post(save) hook error:', error);
-                next();
+                // Transaction içi EVU hatası save'i düşürür (UC-1223 B2); session'sız hata yutulur
+                next(doc.$session() ? error : undefined);
             }
         });
         // Sorgu yazımlarında (findOneAndUpdate/findByIdAndUpdate) EVU kancası YOK: EVU'yu
@@ -314,7 +323,7 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         const includeDeleted = queryConditions.includeDeleted;
         delete queryConditions.includeDeleted;
         if (!includeDeleted) {
-            query.where(Object.assign({}, exports.NOT_DELETED));
+            query.where((0, exports.notDeleted)());
         }
         next();
     });
@@ -324,7 +333,7 @@ function createBaseSchema(schemaDefinition = {}, options = {}) {
         const includeDeleted = queryConditions.includeDeleted;
         delete queryConditions.includeDeleted;
         if (!includeDeleted) {
-            query.where(Object.assign({}, exports.NOT_DELETED));
+            query.where((0, exports.notDeleted)());
         }
         next();
     });
