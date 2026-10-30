@@ -9,7 +9,6 @@ export interface RetryConfig {
 }
 
 export class RetryManager {
-    private readonly redisClient: RedisClientType;
     // Anahtarlar envScopedKey ile ortam kapsamlı (ENV-ISO): ad yalnız çözülen ortam 'production'
     // ise aynı kalır (REDIS_KEY_ENV || NODE_ENV || 'production'). invoice ve shipment prod'da
     // NODE_ENV=development koşar; REDIS_KEY_ENV=production verilmezse orada da önek alır.
@@ -23,8 +22,15 @@ export class RetryManager {
     private readonly config: RetryConfig;
 
     constructor (config?: Partial<RetryConfig>) {
-        this.redisClient = redisWrapper.client;
         this.config = { ...this.defaultConfig, ...config };
+    }
+
+    /**
+     * Her çağrıda redisWrapper'dan okunur (UC-835): Redis kopunca servisin 'end' işleyicisi yeni istemci kurar;
+     * kurucuda yakalanan istemci kapalı kalır ve deneme sayacı çağrıları fırlardı.
+     */
+    private get redisClient(): RedisClientType {
+        return redisWrapper.client;
     }
 
     /**
