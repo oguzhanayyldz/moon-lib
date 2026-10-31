@@ -158,7 +158,7 @@ class BaseApiClient {
     }
     // Core request method
     async makeRequest(requestConfig) {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         const startTime = Date.now();
         let logId;
         // Merge default headers with request headers
@@ -308,18 +308,26 @@ class BaseApiClient {
             }
             // Update metrics
             this.updateMetrics(false, duration);
-            // Auth failure tracking (issue #521, #566) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez.
+            // Auth failure tracking (issue #521, #566) — 401/403 (+ UC-1268: isAuthFailureError kancasinin
+            // kesin dedigi hatalar) sayilir, 5xx/network/429 etkilemez.
             // Sayim operasyon bazinda yapilir: tek bozuk operasyon tum entegrasyonu pasife cekmez.
             const errorStatus = (_g = error.response) === null || _g === void 0 ? void 0 : _g.status;
             const isAuthStatusCode = errorStatus === 401 || errorStatus === 403;
+            const isDefiniteAuthFailure = errorStatus !== undefined && ((_h = this.isAuthFailureError) === null || _h === void 0 ? void 0 : _h.call(this, error)) === true;
             // Issue #595: entegrasyon isRateLimitedAuthError'i tanimladiysa ve bu hatayi hiz
             // siniri kaynakli olarak isaretlediyse, sayaca dokunma — gercek kimlik hatasi
             // davranisi (asagidaki blok) sadece bu kanca false/undefined dondurdugunde calisir.
-            const suspectedRateLimit = isAuthStatusCode && ((_h = this.isRateLimitedAuthError) === null || _h === void 0 ? void 0 : _h.call(this, error)) === true;
-            if (this.config.authFailureTracking && isAuthStatusCode && !suspectedRateLimit) {
+            const suspectedRateLimit = isAuthStatusCode && ((_j = this.isRateLimitedAuthError) === null || _j === void 0 ? void 0 : _j.call(this, error)) === true;
+            if (this.config.authFailureTracking && (isAuthStatusCode || isDefiniteAuthFailure) && !suspectedRateLimit) {
                 const { userId, integrationId, integrationName, threshold, deactivationOperationThreshold } = this.config.authFailureTracking;
-                const errorMessage = (_j = error.message) === null || _j === void 0 ? void 0 : _j.substring(0, 500);
-                authFailureTracker_util_1.AuthFailureTracker.increment({ userId, integrationId, integrationName, threshold, deactivationOperationThreshold }, errorStatus, errorMessage, operationType).catch((err) => {
+                const errorMessage = (_k = error.message) === null || _k === void 0 ? void 0 : _k.substring(0, 500);
+                const trackerContext = { userId, integrationId, integrationName, threshold, deactivationOperationThreshold };
+                // Kesin sinyal yoksa 5. arguman HIC verilmez: 401/403 yolu eskisiyle birebir ayni cagri.
+                (isDefiniteAuthFailure
+                    ? authFailureTracker_util_1.AuthFailureTracker.increment(trackerContext, errorStatus, errorMessage, operationType, {
+                        definite: true
+                    })
+                    : authFailureTracker_util_1.AuthFailureTracker.increment(trackerContext, errorStatus, errorMessage, operationType)).catch((err) => {
                     logger_service_1.logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
                         error: err.message,
                         integrationName: this.integrationName
@@ -359,7 +367,7 @@ class BaseApiClient {
             logger_service_1.logger.error('API request failed', {
                 method: requestConfig.method,
                 url: requestConfig.url,
-                status: (_k = error.response) === null || _k === void 0 ? void 0 : _k.status,
+                status: (_l = error.response) === null || _l === void 0 ? void 0 : _l.status,
                 errorMessage: error.message,
                 duration,
                 integrationName: this.integrationName

@@ -15,7 +15,8 @@ export interface IntegrationAuthFailureExceededEvent {
         integrationId: string;
         integrationName: string;
         failureCount: number;
-        lastErrorStatus: 401 | 403;
+        /** 401/403; UC-1268 sonrasi kesin kimlik sinyali veren entegrasyonlarda baska kod olabilir (n11: 400) */
+        lastErrorStatus: number;
         lastErrorMessage?: string;
         timestamp: Date;
         /**

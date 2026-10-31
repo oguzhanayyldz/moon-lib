@@ -44,12 +44,13 @@ class AuthFailureTracker {
         return `integration:auth-failed-ops:${userId}:${integrationId}`;
     }
     /**
-     * 401/403 aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * 401/403 (ya da kesin kimlik sinyali) aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * `options.definite` true ise pasiflestirme icin tek operasyon turu yeter (UC-1268).
      * Operasyon kendi esigini asarsa fail-eden-operasyonlar SET'ine eklenir; SET boyutu
      * deactivationOperationThreshold'a ulasirsa (gercek credential sorunu) event publish edilir.
      * @returns Guncel operasyon counter degeri (Redis hatasi durumunda 0)
      */
-    static async increment(context, lastErrorStatus, lastErrorMessage, operationType) {
+    static async increment(context, lastErrorStatus, lastErrorMessage, operationType, options) {
         var _a;
         const op = operationType || operation_type_enum_1.OperationType.OTHER;
         const key = AuthFailureTracker.getKey(context.userId, context.integrationId, op);
@@ -91,7 +92,7 @@ class AuthFailureTracker {
             status: lastErrorStatus
         });
         if (count >= threshold) {
-            await AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage);
+            await AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage, (options === null || options === void 0 ? void 0 : options.definite) === true);
         }
         return count;
     }
@@ -100,10 +101,14 @@ class AuthFailureTracker {
      * Operasyonu fail-eden-operasyonlar SET'ine ekler ve SET boyutuna gore
      * entegrasyonu pasife cekip cekmeyecegine karar verir.
      */
-    static async evaluateDeactivation(context, operationType, failureCount, lastErrorStatus, lastErrorMessage) {
+    static async evaluateDeactivation(context, operationType, failureCount, lastErrorStatus, lastErrorMessage, definite = false) {
         var _a;
         const failedOpsKey = AuthFailureTracker.getFailedOpsKey(context.userId, context.integrationId);
-        const deactivationThreshold = (_a = context.deactivationOperationThreshold) !== null && _a !== void 0 ? _a : AuthFailureTracker.DEFAULT_DEACTIVATION_OP_THRESHOLD;
+        // UC-1268: kesin kimlik sinyali (BaseApiClient.isAuthFailureError) hesap geneli sorundur;
+        // yalniz tek operasyon turu cagiran kiracilar (ornegin sadece siparis ceken) da pasife cekilir.
+        const deactivationThreshold = definite
+            ? 1
+            : (_a = context.deactivationOperationThreshold) !== null && _a !== void 0 ? _a : AuthFailureTracker.DEFAULT_DEACTIVATION_OP_THRESHOLD;
         let distinctFailedOps = 0;
         let failedOperations = [];
         try {
