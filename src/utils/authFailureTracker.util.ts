@@ -64,16 +64,18 @@ export class AuthFailureTracker {
     }
 
     /**
-     * 401/403 aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * 401/403 (ya da kesin kimlik sinyali) aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * `options.definite` true ise pasiflestirme icin tek operasyon turu yeter (UC-1268).
      * Operasyon kendi esigini asarsa fail-eden-operasyonlar SET'ine eklenir; SET boyutu
      * deactivationOperationThreshold'a ulasirsa (gercek credential sorunu) event publish edilir.
      * @returns Guncel operasyon counter degeri (Redis hatasi durumunda 0)
      */
     static async increment(
         context: AuthFailureTrackerContext,
-        lastErrorStatus: 401 | 403,
+        lastErrorStatus: number,
         lastErrorMessage?: string,
-        operationType?: OperationType | string
+        operationType?: OperationType | string,
+        options?: { definite?: boolean }
     ): Promise<number> {
         const op = operationType || OperationType.OTHER;
         const key = AuthFailureTracker.getKey(context.userId, context.integrationId, op);
@@ -117,7 +119,14 @@ export class AuthFailureTracker {
         });
 
         if (count >= threshold) {
-            await AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage);
+            await AuthFailureTracker.evaluateDeactivation(
+                context,
+                op,
+                count,
+                lastErrorStatus,
+                lastErrorMessage,
+                options?.definite === true
+            );
         }
 
         return count;
@@ -132,12 +141,16 @@ export class AuthFailureTracker {
         context: AuthFailureTrackerContext,
         operationType: OperationType | string,
         failureCount: number,
-        lastErrorStatus: 401 | 403,
-        lastErrorMessage?: string
+        lastErrorStatus: number,
+        lastErrorMessage?: string,
+        definite = false
     ): Promise<void> {
         const failedOpsKey = AuthFailureTracker.getFailedOpsKey(context.userId, context.integrationId);
-        const deactivationThreshold =
-            context.deactivationOperationThreshold ?? AuthFailureTracker.DEFAULT_DEACTIVATION_OP_THRESHOLD;
+        // UC-1268: kesin kimlik sinyali (BaseApiClient.isAuthFailureError) hesap geneli sorundur;
+        // yalniz tek operasyon turu cagiran kiracilar (ornegin sadece siparis ceken) da pasife cekilir.
+        const deactivationThreshold = definite
+            ? 1
+            : context.deactivationOperationThreshold ?? AuthFailureTracker.DEFAULT_DEACTIVATION_OP_THRESHOLD;
 
         let distinctFailedOps = 0;
         let failedOperations: string[] = [];
@@ -273,7 +286,7 @@ export class AuthFailureTracker {
     private static async publishExceededEvent(
         context: AuthFailureTrackerContext,
         failureCount: number,
-        lastErrorStatus: 401 | 403,
+        lastErrorStatus: number,
         lastErrorMessage: string | undefined,
         failedOperations: string[]
     ): Promise<void> {

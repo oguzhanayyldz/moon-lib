@@ -59,8 +59,8 @@ export interface OrderProductCostAssignedEvent {
          * Kalem basina yayinci sayaci (opsiyonel, additive — UC-1218). `sequence` defteri olmayan
          * `reservation` modu yayincilari (`CostLayerService`) icin: ayni kaleme yayinlanan her
          * kumulatif olayda bir oncekinden buyuk bir deger (SAAT DEGIL — pod saat kaymasi ve ayni-ms
-         * cakismasi sayaci bozmaz). Tuketici alan YOKSA eski davranisla calisir. Su an yayinci/tuketici
-         * yok; yalniz sozlesme.
+         * cakismasi sayaci bozmaz). Tuketici alan YOKSA eski davranisla calisir. Yayinci ve tuketici UC-1218
+         * (PR #1626) ile eklendi.
          */
         costEventSeq?: number;
     };

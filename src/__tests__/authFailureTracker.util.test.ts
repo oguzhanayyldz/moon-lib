@@ -208,6 +208,30 @@ describe('AuthFailureTracker (operation-aware #566)', () => {
             expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalled(); // threshold=1 -> publish
         });
 
+        it('UC-1268: definite signal deactivates after a SINGLE operation exceeds threshold (publishes event with the non-401/403 status)', async () => {
+            for (let i = 0; i < 5; i++) {
+                await AuthFailureTracker.increment(baseContext, 400, 'authenticationFailed', OperationType.FETCH_ORDERS, {
+                    definite: true
+                });
+            }
+
+            expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalledTimes(1);
+            const published = (OptimisticLockingUtil.saveWithRetry as jest.Mock).mock.calls[0][0];
+            expect(published.payload).toEqual(
+                expect.objectContaining({ lastErrorStatus: 400, failureCount: 5, failedOperations: [OperationType.FETCH_ORDERS] })
+            );
+        });
+
+        it('UC-1268: without definite signal a single operation still does NOT deactivate (#566 preserved, also for 401/403)', async () => {
+            for (let i = 0; i < 5; i++) {
+                await AuthFailureTracker.increment(baseContext, 401, 'unauthorized', OperationType.FETCH_ORDERS, {
+                    definite: false
+                });
+            }
+
+            expect(OptimisticLockingUtil.saveWithRetry).not.toHaveBeenCalled();
+        });
+
         it('keeps integration active when failed-ops SET read fails (safe default)', async () => {
             // Counter esigi asacak ama SET guncellemesi patlayacak → publish YOK
             store[AuthFailureTracker.getKey(userId, integrationId, OperationType.FETCH_ORDERS)] = '4';

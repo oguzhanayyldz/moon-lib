@@ -46,12 +46,15 @@ export declare class AuthFailureTracker {
      */
     static getFailedOpsKey(userId: string, integrationId: string): string;
     /**
-     * 401/403 aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * 401/403 (ya da kesin kimlik sinyali) aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * `options.definite` true ise pasiflestirme icin tek operasyon turu yeter (UC-1268).
      * Operasyon kendi esigini asarsa fail-eden-operasyonlar SET'ine eklenir; SET boyutu
      * deactivationOperationThreshold'a ulasirsa (gercek credential sorunu) event publish edilir.
      * @returns Guncel operasyon counter degeri (Redis hatasi durumunda 0)
      */
-    static increment(context: AuthFailureTrackerContext, lastErrorStatus: 401 | 403, lastErrorMessage?: string, operationType?: OperationType | string): Promise<number>;
+    static increment(context: AuthFailureTrackerContext, lastErrorStatus: number, lastErrorMessage?: string, operationType?: OperationType | string, options?: {
+        definite?: boolean;
+    }): Promise<number>;
     /**
      * Bir operasyon kendi esigini astiginda cagrilir.
      * Operasyonu fail-eden-operasyonlar SET'ine ekler ve SET boyutuna gore

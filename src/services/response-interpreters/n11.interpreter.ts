@@ -22,6 +22,19 @@ export class N11ResponseInterpreter extends BaseResponseInterpreter {
             return null;
         }
 
+        // UC-1268: N11 hata gövdesi { code, errorCode, errorMessage } operasyon tipinden bağımsız başarısızdır;
+        // aksi halde sipariş listesi gibi yorumlayıcılar boş içeriği "0 paket getirildi / success" yazar.
+        if (typeof response?.errorCode === 'string' && response.errorCode !== '') {
+            return {
+                summary: `N11 hata yanıtı: ${response.errorCode}`,
+                success: false,
+                successCount: 0,
+                failureCount: 1,
+                details: { code: response.code, errorCode: response.errorCode, errorMessage: response.errorMessage },
+                parsedAt: new Date()
+            };
+        }
+
         try {
             switch (operationType) {
                 case OperationType.SEND_PRODUCTS:
