@@ -317,6 +317,13 @@ export class AuthFailureTracker {
             });
             await OptimisticLockingUtil.saveWithRetry(outboxEvent);
 
+            // UC-1302: Sayaclari BURADA, yazan surecin kendi Redis DB'sinde sifirla. Her entegrasyon servisi
+            // farkli bir Redis DB'si kullanir (canli: n11 /15, trendyol /9 ...); integration servisinin
+            // dinleyicisindeki reset() kendi DB'sine (/0) gider ve bu anahtarlara ulasamaz. Sifirlanmazsa
+            // kimlik degismeden yeniden aktif edilen entegrasyon ilk hatada (24 sa TTL boyunca) aninda
+            // tekrar pasife duser. Outbox yazimi basarisizsa sayaclar korunur: sonraki hata publish'i yeniden dener.
+            await AuthFailureTracker.reset(context.userId, context.integrationId);
+
             logger.error(`AuthFailureTracker: THRESHOLD EXCEEDED — IntegrationAuthFailureExceeded event queued`, {
                 userId: context.userId,
                 integrationId: context.integrationId,
