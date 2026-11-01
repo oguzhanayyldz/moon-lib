@@ -1,6 +1,7 @@
 import { MicroserviceSecurityService, MicroserviceSecurityConfig } from '../security/MicroserviceSecurityService';
 import { SecurityValidator } from '../security/SecurityValidator';
 import { BadRequestError } from '../common/errors/bad-request-error';
+import { logger } from '../services/logger.service';
 
 /**
  * UC-1229 (B5): detectNoSQLInjection ozyinelemeliydi; ~1954 seviyede RangeError (Maximum call stack) atiyor,
@@ -85,5 +86,40 @@ describe('UC-1229 — NoSQL tespiti derinlik siniri', () => {
         expect(validator.detectNoSQLInjection(nest(20))).toBe(false);
         expect(validator.detectNoSQLInjection(nest(50))).toBe(false);
         expect(runMiddleware({ name: 'ali', items: [{ sku: 'a' }] })).toBeUndefined();
+    });
+
+    // UC-1229 D1: derinlik reddi saldiri gibi gorunmemeli; gercek tespit eskisi gibi kalmali.
+    describe('D1 — red sebebi ayrimi (mesaj + log)', () => {
+        let warnSpy: jest.SpyInstance;
+        beforeEach(() => { warnSpy = jest.spyOn(logger, 'warn').mockImplementation((() => logger) as any); });
+        afterEach(() => warnSpy.mockRestore());
+        const warnMessages = () => warnSpy.mock.calls.map(c => String(c[0]));
+
+        it('derinlik reddi: istemci mesaji ve log "NoSQL injection" demez', () => {
+            const err = runMiddleware(nest(3000));
+            expect(err).toBeInstanceOf(BadRequestError);
+            expect(err.message).toContain('çok derin');
+            expect(err.message).not.toMatch(/injection/i);
+            const msgs = warnMessages();
+            expect(msgs.some(m => /derin/i.test(m))).toBe(true);
+            expect(msgs.some(m => /NoSQL injection tespit edildi/i.test(m))).toBe(false);
+        });
+
+        it('gercek operator: eski mesaj ve eski log korunur', () => {
+            const err = runMiddleware({ filter: { pass: { $gt: '' } } });
+            expect(err).toBeInstanceOf(BadRequestError);
+            expect(err.message).toBe('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+            expect(warnMessages()).toContain('NoSQL injection tespit edildi - istek reddedildi');
+            expect(warnMessages().some(m => /derin/i.test(m))).toBe(false);
+        });
+
+        it('inspectNoSQLInput sebebi ayirir; detectNoSQLInjection ikisinde de true', () => {
+            const v = new SecurityValidator(config as any);
+            expect(v.inspectNoSQLInput(nest(101))).toBe('too_deep');
+            expect(v.inspectNoSQLInput(nest(5, { $ne: null }))).toBe('injection');
+            expect(v.inspectNoSQLInput(nest(100))).toBe('clean');
+            expect(v.detectNoSQLInjection(nest(101))).toBe(true);
+            expect(v.detectNoSQLInjection(nest(5, { $ne: null }))).toBe(true);
+        });
     });
 });

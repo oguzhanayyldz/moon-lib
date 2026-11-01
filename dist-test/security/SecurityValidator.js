@@ -19,6 +19,14 @@ function sanitizeString(input) {
         .replace(/\//g, '&#x2F;');
 }
 /**
+ * detectNoSQLInjection'in izin verdigi en derin ic ice gecme seviyesi (UC-1229).
+ * Gerekce: MongoDB belge ic ice gecme siniri 100 seviyedir (BSON nesting limit); bunu asan govde zaten
+ * hicbir sorguya/belgeye donusemez. Gercek Moon gövdeleri tipik olarak <10 seviyedir. Body limiti
+ * (2-50 MB) tek basina yetmez: `[[[...` 2 bayt/seviye ile 50 MB'ta milyonlarca seviye tasir, oysa
+ * ozyineleme yigini ~1950'de tasar.
+ */
+exports.MAX_NOSQL_CHECK_DEPTH = 100;
+/**
  * Security validation service for input sanitization, XSS protection,
  * SQL injection detection, and file upload validation.
  *
@@ -36,14 +44,6 @@ function sanitizeString(input) {
  * app.use('/api', securityValidator.inputValidationMiddleware());
  * ```
  */
-/**
- * detectNoSQLInjection'in izin verdigi en derin ic ice gecme seviyesi (UC-1229).
- * Gerekce: MongoDB belge ic ice gecme siniri 100 seviyedir (BSON nesting limit); bunu asan govde zaten
- * hicbir sorguya/belgeye donusemez. Gercek Moon gövdeleri tipik olarak <10 seviyedir. Body limiti
- * (2-50 MB) tek basina yetmez: `[[[...` 2 bayt/seviye ile 50 MB'ta milyonlarca seviye tasir, oysa
- * ozyineleme yigini ~1950'de tasar.
- */
-exports.MAX_NOSQL_CHECK_DEPTH = 100;
 class SecurityValidator {
     constructor(config) {
         this.config = Object.assign({ enableXSSProtection: true, enableSQLInjectionProtection: true, enableFileUploadValidation: true, maxFileSize: 5 * 1024 * 1024, allowedFileTypes: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx'], maxInputLength: 10000, enableInputSanitization: true }, config);
@@ -94,11 +94,19 @@ class SecurityValidator {
         return sqlPatterns.some(pattern => pattern.test(input));
     }
     /**
-     * NoSQL Injection tespiti - recursive olarak özellikle MongoDB operatörlerini arar
+     * NoSQL Injection tespiti - recursive olarak özellikle MongoDB operatörlerini arar.
+     * Derinlik sınırı aşımı da (fail-closed) true döner; ayırt etmek için {@link inspectNoSQLInput}.
      */
     detectNoSQLInjection(input) {
+        return this.inspectNoSQLInput(input) !== 'clean';
+    }
+    /**
+     * detectNoSQLInjection ile aynı denetim; red sebebini ayırır (UC-1229 D1):
+     * 'injection' = gerçek MongoDB operatörü, 'too_deep' = derinlik sınırı ({@link MAX_NOSQL_CHECK_DEPTH}) aşıldı.
+     */
+    inspectNoSQLInput(input) {
         if (typeof input !== 'object' || input === null) {
-            return false;
+            return 'clean';
         }
         const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin', '$exists', '$mod', '$elemMatch', '$text', '$expr', '$or', '$and', '$not', '$nor'];
         // Recursive olarak objedeki tüm alanları kontrol et
@@ -132,12 +140,13 @@ class SecurityValidator {
         const result = checkObject(input);
         if (depthExceeded) {
             logger_service_1.logger.warn('NoSQL tespiti: girdi derinlik siniri asildi, istek reddedilecek', { maxDepth: exports.MAX_NOSQL_CHECK_DEPTH });
-            return true;
+            return 'too_deep';
         }
         if (result) {
             logger_service_1.logger.warn('NoSQL Injection tespit edildi, girdi sekli:', { input: (0, logSafety_util_1.maskSensitiveValues)(input) });
+            return 'injection';
         }
-        return result;
+        return 'clean';
     }
     /**
      * Dosya yükleme güvenlik kontrolü
