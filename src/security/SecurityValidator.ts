@@ -69,6 +69,15 @@ export interface FileUploadValidation {
  * ```
  */
 
+/**
+ * detectNoSQLInjection'in izin verdigi en derin ic ice gecme seviyesi (UC-1229).
+ * Gerekce: MongoDB belge ic ice gecme siniri 100 seviyedir (BSON nesting limit); bunu asan govde zaten
+ * hicbir sorguya/belgeye donusemez. Gercek Moon gövdeleri tipik olarak <10 seviyedir. Body limiti
+ * (2-50 MB) tek basina yetmez: `[[[...` 2 bayt/seviye ile 50 MB'ta milyonlarca seviye tasir, oysa
+ * ozyineleme yigini ~1950'de tasar.
+ */
+export const MAX_NOSQL_CHECK_DEPTH = 100;
+
 export class SecurityValidator {
     private config: Required<SecurityValidatorConfig>;
 
@@ -148,10 +157,16 @@ export class SecurityValidator {
         const dangerousKeys = ['$where', '$regex', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin', '$exists', '$mod', '$elemMatch', '$text', '$expr', '$or', '$and', '$not', '$nor'];
         
         // Recursive olarak objedeki tüm alanları kontrol et
-        const checkObject = (obj: any, path = ''): boolean => {
+        const checkObject = (obj: any, path = '', depth = 1): boolean => {
+            // UC-1229: Derinlik siniri. Ozyineleme yigini ~1950 seviyede tasiyor (RangeError -> 500);
+            // sinir asilinca firlatmak yerine reddet (middleware 400 doner).
+            if (depth > MAX_NOSQL_CHECK_DEPTH) {
+                depthExceeded = true;
+                return true;
+            }
             // Eğer array ise, her elemanını kontrol et
             if (Array.isArray(obj)) {
-                return obj.some((item, index) => typeof item === 'object' && item !== null && checkObject(item, `${path}[${index}]`));
+                return obj.some((item, index) => typeof item === 'object' && item !== null && checkObject(item, `${path}[${index}]`, depth + 1));
             }
             
             // Obje ise her key'i kontrol et
@@ -167,14 +182,19 @@ export class SecurityValidator {
                 
                 // 2. Alt nesneleri recursive olarak kontrol et
                 return Object.entries(obj).some(([key, value]) => 
-                    typeof value === 'object' && value !== null && checkObject(value, path ? `${path}.${key}` : key)
+                    typeof value === 'object' && value !== null && checkObject(value, path ? `${path}.${key}` : key, depth + 1)
                 );
             }
             
             return false;
         };
         
+        let depthExceeded = false;
         const result = checkObject(input);
+        if (depthExceeded) {
+            logger.warn('NoSQL tespiti: girdi derinlik siniri asildi, istek reddedilecek', { maxDepth: MAX_NOSQL_CHECK_DEPTH });
+            return true;
+        }
         if (result) {
             logger.warn('NoSQL Injection tespit edildi, girdi sekli:', { input: maskSensitiveValues(input) });
         }

@@ -46,6 +46,14 @@ export interface FileUploadValidation {
  * app.use('/api', securityValidator.inputValidationMiddleware());
  * ```
  */
+/**
+ * detectNoSQLInjection'in izin verdigi en derin ic ice gecme seviyesi (UC-1229).
+ * Gerekce: MongoDB belge ic ice gecme siniri 100 seviyedir (BSON nesting limit); bunu asan govde zaten
+ * hicbir sorguya/belgeye donusemez. Gercek Moon gövdeleri tipik olarak <10 seviyedir. Body limiti
+ * (2-50 MB) tek basina yetmez: `[[[...` 2 bayt/seviye ile 50 MB'ta milyonlarca seviye tasir, oysa
+ * ozyineleme yigini ~1950'de tasar.
+ */
+export declare const MAX_NOSQL_CHECK_DEPTH = 100;
 export declare class SecurityValidator {
     private config;
     constructor(config?: Partial<SecurityValidatorConfig>);
