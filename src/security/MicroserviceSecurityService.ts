@@ -1,5 +1,5 @@
 import { redisWrapper, logger } from '../index';
-import { SecurityValidator } from './SecurityValidator';
+import { SecurityValidator, MAX_NOSQL_CHECK_DEPTH } from './SecurityValidator';
 import { RateLimiter } from './RateLimiter';
 import { BruteForceProtection } from './BruteForceProtection';
 import { SecurityHeaders } from './SecurityHeaders';
@@ -228,6 +228,19 @@ export class MicroserviceSecurityService {
     return this.rateLimiter.middleware();
   }
 
+  private rejectIfNoSQLInput(value: any, source: 'body' | 'params' | 'query'): void {
+    const verdict = this.validator.inspectNoSQLInput(value);
+    if (verdict === 'too_deep') {
+      // UC-1229 D1: derin gövde saldırı değil, boyut/şekil sorunu; şekil loglanmaz (derin nesne maskelemeyi de zorlar)
+      logger.warn('İstek reddedildi - girdi çok derin iç içe (NoSQL denetim derinlik sınırı aşıldı)', { source, maxDepth: MAX_NOSQL_CHECK_DEPTH });
+      throw new BadRequestError(`İstek verisi çok derin iç içe geçmiş (en fazla ${MAX_NOSQL_CHECK_DEPTH} seviye)`);
+    }
+    if (verdict === 'injection') {
+      logger.warn('NoSQL injection tespit edildi - istek reddedildi', { source, shape: maskSensitiveValues(value) });
+      throw new BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
+    }
+  }
+
   /**
    * NoSQL Injection koruma middleware
    * Tüm request.body, request.params ve request.query değerlerini kontrol eder ve tehlikeli MongoDB operatörleri içeriyorsa hata fırlatır
@@ -243,30 +256,21 @@ export class MicroserviceSecurityService {
         // Request body'sini kontrol et
         if (req.body && this.validator) {
           // Önemli: Tehlikeli operatörler içeren istekleri reddet
-          if (this.validator.detectNoSQLInjection(req.body)) {
-            logger.warn('NoSQL injection tespit edildi - istek reddedildi', { source: 'body', shape: maskSensitiveValues(req.body) });
-            throw new BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
-          }
+          this.rejectIfNoSQLInput(req.body, 'body');
           req.body = this.validator.sanitizeInput(req.body);
         }
         
         // URL parametrelerini kontrol et
         if (req.params && this.validator) {
           // Önemli: Tehlikeli operatörler içeren istekleri reddet
-          if (this.validator.detectNoSQLInjection(req.params)) {
-            logger.warn('NoSQL injection tespit edildi - istek reddedildi', { source: 'params', shape: maskSensitiveValues(req.params) });
-            throw new BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
-          }
+          this.rejectIfNoSQLInput(req.params, 'params');
           req.params = this.validator.sanitizeInput(req.params);
         }
         
         // Query parametrelerini kontrol et
         if (req.query && this.validator) {
           // Önemli: Tehlikeli operatörler içeren istekleri reddet
-          if (this.validator.detectNoSQLInjection(req.query)) {
-            logger.warn('NoSQL injection tespit edildi - istek reddedildi', { source: 'query', shape: maskSensitiveValues(req.query) });
-            throw new BadRequestError('Güvenlik ihlali: Potansiyel NoSQL injection tespit edildi');
-          }
+          this.rejectIfNoSQLInput(req.query, 'query');
           req.query = this.validator.sanitizeInput(req.query);
         }
         
