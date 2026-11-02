@@ -232,6 +232,43 @@ describe('AuthFailureTracker (operation-aware #566)', () => {
             expect(OptimisticLockingUtil.saveWithRetry).not.toHaveBeenCalled();
         });
 
+        it('UC-1302: clears its OWN counters + failed-ops SET right after queueing the exceeded event (same Redis DB as increment)', async () => {
+            // Sayaclari yazan surec (entegrasyon servisi) kendi Redis DB'sinde calisir; integration servisinin
+            // dinleyicisindeki reset() BASKA bir DB'ye gider ve bu anahtarlara ulasamaz (canli: n11 /15, integration /0).
+            for (let i = 0; i < 5; i++) {
+                await AuthFailureTracker.increment(baseContext, 400, 'authenticationFailed', OperationType.FETCH_ORDERS, {
+                    definite: true
+                });
+            }
+            expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalledTimes(1);
+
+            expect(store[AuthFailureTracker.getKey(userId, integrationId, OperationType.FETCH_ORDERS)]).toBeUndefined();
+            expect(store[AuthFailureTracker.getFailedOpsKey(userId, integrationId)]).toBeUndefined();
+
+            // Kimlik degismeden yeniden aktif edilen entegrasyonun ilk hatasi ANINDA tekrar pasife cekmemeli
+            const count = await AuthFailureTracker.increment(baseContext, 400, 'authenticationFailed', OperationType.FETCH_ORDERS, {
+                definite: true
+            });
+            expect(count).toBe(1);
+            expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalledTimes(1);
+        });
+
+        it('UC-1302: keeps counters when queueing the exceeded event FAILS (next failure retries the publish)', async () => {
+            (OptimisticLockingUtil.saveWithRetry as jest.Mock).mockRejectedValueOnce(new Error('mongo down'));
+            for (let i = 0; i < 5; i++) {
+                await AuthFailureTracker.increment(baseContext, 400, 'authenticationFailed', OperationType.FETCH_ORDERS, {
+                    definite: true
+                });
+            }
+
+            expect(store[AuthFailureTracker.getKey(userId, integrationId, OperationType.FETCH_ORDERS)]).toBe('5');
+            const count = await AuthFailureTracker.increment(baseContext, 400, 'authenticationFailed', OperationType.FETCH_ORDERS, {
+                definite: true
+            });
+            expect(count).toBe(6);
+            expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalledTimes(2);
+        });
+
         it('keeps integration active when failed-ops SET read fails (safe default)', async () => {
             // Counter esigi asacak ama SET guncellemesi patlayacak → publish YOK
             store[AuthFailureTracker.getKey(userId, integrationId, OperationType.FETCH_ORDERS)] = '4';
