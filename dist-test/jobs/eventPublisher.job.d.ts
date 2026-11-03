@@ -18,6 +18,8 @@ export declare class EventPublisherJob {
     private static readonly PUBLISH_RETRY_BASE_DELAY;
     private static readonly PUBLISH_RETRY_MAX_DELAY;
     private static readonly MAX_JITTER;
+    private static readonly NATS_MAX_PAYLOAD_DEFAULT;
+    private static readonly NATS_ENVELOPE_MARGIN;
     private static readonly STUCK_PROCESSING_TIMEOUT;
     private static readonly STUCK_FALLBACK_MAX_AGE;
     private static readonly STUCK_METRIC_AGE;
@@ -130,6 +132,14 @@ export declare class EventPublisherJob {
      * kaydı eski bir okumayla yeniden claim eden ya da ikinci kez sayan başka bir pod olamaz.
      */
     private markPublishFailed;
+    /**
+     * UC-1358: yayınlanabilecek en büyük outbox yükü (JSON bayt). Öncelik: OUTBOX_MAX_PAYLOAD_BYTES env →
+     * bağlı NATS sunucusunun bildirdiği max_payload → 10 MB (k8s-single nats-config). Sunucu sınırından
+     * STAN zarfı (clientID, guid, subject, protobuf) için pay düşülür.
+     */
+    private getMaxPublishPayloadBytes;
+    /** Max payload'ı aşan kaydı denemeden kalıcı failed yapar (yeniden deneme yok, ALERT sayımına girer). */
+    private markPayloadTooLarge;
     /**
      * Başarısız denemeden sonraki bekleme: 30 sn, 60 sn, 120 sn, 240 sn (üst sınır 4 dk).
      * Beklemeler toplam 7,5 dk; publisher'ların kendi iç denemeleriyle (~10 sn × 5) kayıt ~8 dk'lık

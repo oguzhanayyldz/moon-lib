@@ -552,6 +552,7 @@ class EventPublisherJob {
     /** Olay bu çağrıda yayınlanıp published işaretlendiyse true. */
     processOneEvent(event) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
                 const claimedAt = new Date();
@@ -568,6 +569,15 @@ class EventPublisherJob {
                 // Event başka bir pod tarafından alınmış demektir, atla
                 if (updated.modifiedCount === 0) {
                     logger_service_1.logger.debug(`Event ${event.id} is already being processed by another publisher, skipping`);
+                    return false;
+                }
+                // UC-1358: NATS max_payload'ı aşan yük yayınlanmaz. Gönderilseydi sunucu bağlantıyı koparırdı
+                // ("Maximum Payload Exceeded"): servisin BÜTÜN NATS yayını/dinlemesi düşer ve kayıt her denemede
+                // bağlantıyı yeniden koparırdı. Bu yük hiçbir denemede gidemeyeceği için kayıt doğrudan kalıcı failed olur.
+                const payloadBytes = Buffer.byteLength(JSON.stringify((_a = event.payload) !== null && _a !== void 0 ? _a : null), 'utf8');
+                const maxPayloadBytes = this.getMaxPublishPayloadBytes();
+                if (payloadBytes > maxPayloadBytes) {
+                    yield this.markPayloadTooLarge({ _id: event.id, processingStartedAt: claimedAt }, event, payloadBytes, maxPayloadBytes);
                     return false;
                 }
                 // Deneme hakkını yalnız yayın hatası tüketir; Mongo durum güncellemesi hataları aşağıdaki catch'e düşer
@@ -612,6 +622,41 @@ class EventPublisherJob {
             });
             if (exhausted && result.modifiedCount > 0) {
                 logger_service_1.logger.error(`${result.modifiedCount} outbox event(s) permanently failed after ${attempts} publish attempts`, filter);
+            }
+        });
+    }
+    /**
+     * UC-1358: yayınlanabilecek en büyük outbox yükü (JSON bayt). Öncelik: OUTBOX_MAX_PAYLOAD_BYTES env →
+     * bağlı NATS sunucusunun bildirdiği max_payload → 10 MB (k8s-single nats-config). Sunucu sınırından
+     * STAN zarfı (clientID, guid, subject, protobuf) için pay düşülür.
+     */
+    getMaxPublishPayloadBytes() {
+        var _a, _b, _c;
+        const fromEnv = EventPublisherJob.readPositiveIntEnv('OUTBOX_MAX_PAYLOAD_BYTES', 0);
+        if (fromEnv > 0)
+            return fromEnv;
+        const serverMax = Number((_c = (_b = (_a = this.natsClient) === null || _a === void 0 ? void 0 : _a.nc) === null || _b === void 0 ? void 0 : _b.info) === null || _c === void 0 ? void 0 : _c.max_payload);
+        const limit = Number.isInteger(serverMax) && serverMax > 0 ? serverMax : EventPublisherJob.NATS_MAX_PAYLOAD_DEFAULT;
+        return Math.max(limit - EventPublisherJob.NATS_ENVELOPE_MARGIN, 1);
+    }
+    /** Max payload'ı aşan kaydı denemeden kalıcı failed yapar (yeniden deneme yok, ALERT sayımına girer). */
+    markPayloadTooLarge(filter, event, payloadBytes, maxPayloadBytes) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const message = `payload too large for NATS: ${payloadBytes} bytes > ${maxPayloadBytes} bytes`;
+            const result = yield this.outboxModel.updateOne(Object.assign(Object.assign({}, filter), { status: 'processing', retryCount: event.retryCount }), {
+                $set: {
+                    status: 'failed',
+                    lastAttempt: new Date(),
+                    retryCount: EventPublisherJob.MAX_PUBLISH_ATTEMPTS,
+                    error: message
+                }
+            });
+            if (result.modifiedCount > 0) {
+                // Yük içeriği loglanmaz (müşteri verisi/dosya içerebilir); yalnız kimlik ve boyut
+                logger_service_1.logger.error(`Outbox event ${event.id} permanently failed without publishing: ${message}`, {
+                    eventType: event.eventType,
+                    userId: event.userId
+                });
             }
         });
     }
@@ -1229,6 +1274,9 @@ EventPublisherJob.MAX_PUBLISH_ATTEMPTS = 5;
 EventPublisherJob.PUBLISH_RETRY_BASE_DELAY = 30000; // 30 saniye
 EventPublisherJob.PUBLISH_RETRY_MAX_DELAY = 240000; // 4 dakika
 EventPublisherJob.MAX_JITTER = 500; // 0-500ms random jitter
+// UC-1358: NATS max_payload (infra/k8s-single/nats-config.yaml: 10485760) ve STAN zarfı payı
+EventPublisherJob.NATS_MAX_PAYLOAD_DEFAULT = 10 * 1024 * 1024;
+EventPublisherJob.NATS_ENVELOPE_MARGIN = 16 * 1024;
 // processing'te kalan kayıt bu süreden sonra pending'e döner
 EventPublisherJob.STUCK_PROCESSING_TIMEOUT = 5 * 60000; // 5 dakika
 // UC-984: processingStartedAt'ı olmayan (ya da Date olmayan) processing kaydı updatedOn/creationDate'e göre
