@@ -144,6 +144,8 @@ describe('UC-1408 — integration:command credential mühürleme', () => {
             expect(warnings.length).toBe(1);
             expect(warnings[0]).toContain("'apiKey'");
             expect(warnings[0].includes(sealedApiKey)).toBe(false);
+            // asıl çözülmeye çalışılan (bozulmuş) değer de logda olmamalı
+            expect(warnings[0].includes(mixed.apiKey)).toBe(false);
         });
 
         it('faz 1 (bayrak kapalı): değerler düz kalır, yalnız user kimliğe iner', () => {
