@@ -9,6 +9,7 @@ exports.createOutboxModel = createOutboxModel;
 const mongoose_1 = __importDefault(require("mongoose"));
 const base_schema_1 = require("./base/base.schema");
 const logger_service_1 = require("../services/logger.service");
+const commandCredentials_util_1 = require("../utils/commandCredentials.util");
 const common_1 = require("../common");
 // Schema tanımı
 const outboxSchemaDefination = {
@@ -147,7 +148,22 @@ outboxSchema.pre('save', function (next) {
         doc.priority = getEventPriority(doc.eventType);
         // userId'yi payload'dan çıkar (her zaman yeniden hesapla)
         doc.userId = extractUserIdFromPayload(doc.payload);
+        // UC-1408: integration:command kaydında düz credential / tam User belgesi 180 gün durmasın
+        if (doc.eventType === common_1.Subjects.IntegrationCommand) {
+            doc.payload = (0, commandCredentials_util_1.sealIntegrationCommandData)(doc.payload);
+        }
         logger_service_1.logger.debug(`Outbox created: eventType=${doc.eventType}, priority=${doc.priority}, userId=${doc.userId}`);
+    }
+    next();
+});
+// UC-1408: insertMany save kancasını atlar; integration:command toplu yazılırsa da mühürle
+outboxSchema.pre('insertMany', function (next, docs) {
+    if (Array.isArray(docs)) {
+        for (const d of docs) {
+            if (d && d.eventType === common_1.Subjects.IntegrationCommand && d.payload) {
+                d.payload = (0, commandCredentials_util_1.sealIntegrationCommandData)(d.payload);
+            }
+        }
     }
     next();
 });

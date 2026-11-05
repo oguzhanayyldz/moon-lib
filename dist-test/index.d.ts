@@ -66,6 +66,7 @@ export * from './utils/redisFailoverManager';
 export * from './utils/redisEnvScope.util';
 export * from './utils/userContext.util';
 export * from './utils/encryption.util';
+export * from './utils/commandCredentials.util';
 export * from './utils/costSource.util';
 export * from './utils/authFailureTracker.util';
 export * from './utils/logSafety.util';

@@ -1,6 +1,7 @@
 import { IntegrationCacheService } from '../../services/integrationCache.service';
 import { redisWrapper } from '../../services/redisWrapper.service';
 import { logger } from '../../services/logger.service';
+import { unsealCommandCredentials } from '../../utils/commandCredentials.util';
 
 export abstract class BaseIntegration {
     protected credentials: any;
@@ -38,9 +39,11 @@ export abstract class BaseIntegration {
 
     async setup(user: string, platform: string, credentials?: any): Promise<BaseIntegration> {
         if (credentials) {
+            // UC-1408: komut yükündeki mühürlü (iv:authTag:ciphertext) değerler burada çözülür;
+            // düz değerler (eski şekilli outbox kayıtları) aynen geçer.
             this.credentials = {
                 ...this.getDefaultCredentials(),
-                ...credentials,
+                ...unsealCommandCredentials(credentials),
                 user,
                 platform
             };

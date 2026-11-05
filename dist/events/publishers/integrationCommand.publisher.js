@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.IntegrationCommandPublisher = void 0;
 const common_1 = require("../../common");
 const logger_service_1 = require("../../services/logger.service");
+const commandCredentials_util_1 = require("../../utils/commandCredentials.util");
 class IntegrationCommandPublisher extends common_1.Publisher {
     constructor() {
         super(...arguments);
@@ -22,11 +23,14 @@ class IntegrationCommandPublisher extends common_1.Publisher {
             publish: { get: () => super.publish }
         });
         return __awaiter(this, void 0, void 0, function* () {
+            // UC-1408: STAN deposuna (14 gün) düz credential / User PII yazılmasın.
+            // Outbox'tan gelen (zaten mühürlü) ya da eski düz kayıtların replay'i için idempotent.
+            const safeData = (0, commandCredentials_util_1.sealIntegrationCommandData)(data);
             const maxRetries = 5;
             const retryDelay = 1000; // 1 saniye
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
-                    yield _super.publish.call(this, data);
+                    yield _super.publish.call(this, safeData);
                     return;
                 }
                 catch (error) {
