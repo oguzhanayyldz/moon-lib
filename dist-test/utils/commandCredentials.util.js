@@ -7,6 +7,7 @@ exports.sealCommandCredentials = sealCommandCredentials;
 exports.unsealCommandCredentials = unsealCommandCredentials;
 exports.sealIntegrationCommandData = sealIntegrationCommandData;
 const encryption_util_1 = require("./encryption.util");
+const logger_service_1 = require("../services/logger.service");
 /**
  * UC-1408 (Y-1): `integration:command` yükündeki credential'ların aktarım koruması.
  *
@@ -83,9 +84,11 @@ function sealCommandCredentials(credentials) {
     return result;
 }
 /**
- * Mühürlü değerleri çözer (düz değerler aynen geçer). Çözülemeyen değerde HATA fırlatır:
- * şifreli metni platform API'sine kimlik diye göndermek yanlış-kimlik sayacını tetikler.
- * Hata mesajı yalnız anahtar adını içerir, değeri değil.
+ * Mühürlü değerleri çözer (düz değerler aynen geçer). Çözülemeyen değer (ör. eski anahtarla
+ * şifrelenmiş at-rest alan) setup'ı DÜŞÜRMEZ: anahtar adıyla `warn` loglanır ve yalnız o alan
+ * düşürülür; öteki alanlar çalışır. Şifreli metin kimlik diye platform API'sine GİTMEZ
+ * (yanlış-kimlik sayacı tetiklenmez); zorunlu alan düşerse platform doğrulaması hata verir.
+ * Log yalnız anahtar adını içerir, değeri değil.
  */
 function unsealCommandCredentials(credentials) {
     if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials))
@@ -99,7 +102,8 @@ function unsealCommandCredentials(credentials) {
                 result[key] = encryption_util_1.EncryptionUtil.decrypt(value);
             }
             catch (err) {
-                throw new Error(`Command credential '${key}' could not be decrypted: ${err instanceof Error ? err.message : 'unknown'}`);
+                delete result[key];
+                logger_service_1.logger.warn(`Command credential '${key}' could not be decrypted; field dropped`);
             }
         }
     }

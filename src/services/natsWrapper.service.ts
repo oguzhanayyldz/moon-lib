@@ -2,6 +2,7 @@ import nats, { Stan } from 'node-nats-streaming';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './logger.service';
 import { sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
+import { sealIntegrationCommandData } from '../utils/commandCredentials.util';
 
 export class NatsWrapper {
     private _client?: Stan;
@@ -129,8 +130,10 @@ export class NatsWrapper {
             });
 
             try {
+                // UC-1408 (B1): istek de STAN kanalına yazılır (14 gün); payload.credentials varsa mühürlenir.
+                // credentials yoksa sealIntegrationCommandData aynı nesneyi döner → öteki subject'ler etkilenmez.
                 client.publish(subject, JSON.stringify({
-                    ...data,
+                    ...sealIntegrationCommandData(data),
                     replyTo
                 }));
             } catch (err) {

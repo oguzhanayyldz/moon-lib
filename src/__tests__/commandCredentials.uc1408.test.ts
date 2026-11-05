@@ -129,13 +129,21 @@ describe('UC-1408 — integration:command credential mühürleme', () => {
             expect(unsealCommandCredentials(plain)).toBe(plain);
         });
 
-        it('çözülemeyen değerde yalnız anahtar adıyla hata fırlatır (değer mesaja girmez)', () => {
+        it('çözülemeyen değerde alan düşer, öteki alanlar çalışır; warn yalnız anahtar adını içerir', () => {
+            const { logger } = require('../services/logger.service');
+            (logger.warn as jest.Mock).mockClear();
             const sealed = sealCommandCredentials(oldShapeCredentials());
-            process.env.ENCRYPTION_KEY = 'b'.repeat(64);
-            let message = '';
-            try { unsealCommandCredentials(sealed); } catch (e) { message = (e as Error).message; }
-            expect(message).toContain("'apiKey'");
-            expect(message.includes(sealed.apiKey)).toBe(false);
+            const sealedApiKey = sealed.apiKey;
+            // yalnız apiKey bozuk (anahtar uyuşmazlığı simülasyonu): geri kalanı geçerli kalsın
+            const mixed = { ...sealed, apiKey: sealedApiKey.replace(/.$/, c => (c === '0' ? '1' : '0')) };
+            const opened = unsealCommandCredentials(mixed);
+            expect('apiKey' in opened).toBe(false);
+            expect(opened.apiSecret === FIXTURE_SECRETS.apiSecret).toBe(true);
+            expect(opened.storeName === FIXTURE_SECRETS.storeName).toBe(true);
+            const warnings = (logger.warn as jest.Mock).mock.calls.map(c => String(c[0]));
+            expect(warnings.length).toBe(1);
+            expect(warnings[0]).toContain("'apiKey'");
+            expect(warnings[0].includes(sealedApiKey)).toBe(false);
         });
 
         it('faz 1 (bayrak kapalı): değerler düz kalır, yalnız user kimliğe iner', () => {
@@ -155,6 +163,42 @@ describe('UC-1408 — integration:command credential mühürleme', () => {
         it('sealIntegrationCommandData credentials yoksa aynı nesneyi döner', () => {
             const data = { requestId: 'r', user: USER_ID, command: 'SYNC_ORDERS' };
             expect(sealIntegrationCommandData(data)).toBe(data);
+        });
+    });
+
+    describe('natsWrapper.request (B1) — istek-yanıt yolu', () => {
+        const makeWrapper = () => {
+            const published: Array<{ subject: string; body: string }> = [];
+            const nc = { publish: jest.fn(), subscribe: jest.fn(() => 1), unsubscribe: jest.fn() };
+            const client = { nc, publish: (subject: string, body: string) => { published.push({ subject, body }); } };
+            const { NatsWrapper } = require('../services/natsWrapper.service');
+            const wrapper = new NatsWrapper();
+            (wrapper as any)._client = client;
+            Object.defineProperty(wrapper, 'client', { get: () => client });
+            return { wrapper, published };
+        };
+
+        it('bayrak açık: STAN\'a yazılan istekte düz fixture değeri/PII = 0; replyTo korunur', () => {
+            const { wrapper, published } = makeWrapper();
+            const data = { requestId: 'r1', payload: { credentials: oldShapeCredentials(), orderId: 'o1' } };
+            const before = JSON.stringify(data);
+            wrapper.request('shipment:request', data, { timeout: 50 }).catch(() => undefined);
+            expect(published.length).toBe(1);
+            const body = JSON.parse(published[0].body);
+            expect(countPlain(body)).toBe(0);
+            expect(EncryptionUtil.isEncrypted(body.payload.credentials.apiKey)).toBe(true);
+            expect(body.payload.credentials.user).toBe(USER_ID);
+            expect(body.replyTo.startsWith('_INBOX.')).toBe(true);
+            expect(body.payload.orderId).toBe('o1');
+            expect(JSON.stringify(data)).toBe(before); // çağıranın nesnesi değişmez
+        });
+
+        it('credentials taşımayan istek değişmeden geçer', () => {
+            const { wrapper, published } = makeWrapper();
+            wrapper.request('orders:label', { orderId: 'o1', payload: { foo: 'bar' } }, { timeout: 50 }).catch(() => undefined);
+            const body = JSON.parse(published[0].body);
+            expect(body.orderId).toBe('o1');
+            expect(body.payload).toEqual({ foo: 'bar' });
         });
     });
 

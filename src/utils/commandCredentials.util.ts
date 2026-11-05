@@ -1,4 +1,5 @@
 import { EncryptionUtil } from './encryption.util';
+import { logger } from '../services/logger.service';
 
 /**
  * UC-1408 (Y-1): `integration:command` yükündeki credential'ların aktarım koruması.
@@ -78,9 +79,11 @@ export function sealCommandCredentials<T extends Record<string, any> | null | un
 }
 
 /**
- * Mühürlü değerleri çözer (düz değerler aynen geçer). Çözülemeyen değerde HATA fırlatır:
- * şifreli metni platform API'sine kimlik diye göndermek yanlış-kimlik sayacını tetikler.
- * Hata mesajı yalnız anahtar adını içerir, değeri değil.
+ * Mühürlü değerleri çözer (düz değerler aynen geçer). Çözülemeyen değer (ör. eski anahtarla
+ * şifrelenmiş at-rest alan) setup'ı DÜŞÜRMEZ: anahtar adıyla `warn` loglanır ve yalnız o alan
+ * düşürülür; öteki alanlar çalışır. Şifreli metin kimlik diye platform API'sine GİTMEZ
+ * (yanlış-kimlik sayacı tetiklenmez); zorunlu alan düşerse platform doğrulaması hata verir.
+ * Log yalnız anahtar adını içerir, değeri değil.
  */
 export function unsealCommandCredentials<T extends Record<string, any> | null | undefined>(credentials: T): T {
     if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return credentials;
@@ -93,9 +96,8 @@ export function unsealCommandCredentials<T extends Record<string, any> | null | 
             try {
                 result[key] = EncryptionUtil.decrypt(value);
             } catch (err) {
-                throw new Error(
-                    `Command credential '${key}' could not be decrypted: ${err instanceof Error ? err.message : 'unknown'}`
-                );
+                delete result[key];
+                logger.warn(`Command credential '${key}' could not be decrypted; field dropped`);
             }
         }
     }

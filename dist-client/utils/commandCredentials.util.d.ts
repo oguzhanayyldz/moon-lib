@@ -33,9 +33,11 @@ export declare function toCommandUserId(user: unknown): unknown;
  */
 export declare function sealCommandCredentials<T extends Record<string, any> | null | undefined>(credentials: T): T;
 /**
- * Mühürlü değerleri çözer (düz değerler aynen geçer). Çözülemeyen değerde HATA fırlatır:
- * şifreli metni platform API'sine kimlik diye göndermek yanlış-kimlik sayacını tetikler.
- * Hata mesajı yalnız anahtar adını içerir, değeri değil.
+ * Mühürlü değerleri çözer (düz değerler aynen geçer). Çözülemeyen değer (ör. eski anahtarla
+ * şifrelenmiş at-rest alan) setup'ı DÜŞÜRMEZ: anahtar adıyla `warn` loglanır ve yalnız o alan
+ * düşürülür; öteki alanlar çalışır. Şifreli metin kimlik diye platform API'sine GİTMEZ
+ * (yanlış-kimlik sayacı tetiklenmez); zorunlu alan düşerse platform doğrulaması hata verir.
+ * Log yalnız anahtar adını içerir, değeri değil.
  */
 export declare function unsealCommandCredentials<T extends Record<string, any> | null | undefined>(credentials: T): T;
 /**

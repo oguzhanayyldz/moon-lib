@@ -8,6 +8,7 @@ const node_nats_streaming_1 = __importDefault(require("node-nats-streaming"));
 const uuid_1 = require("uuid");
 const logger_service_1 = require("./logger.service");
 const logSafety_util_1 = require("../utils/logSafety.util");
+const commandCredentials_util_1 = require("../utils/commandCredentials.util");
 class NatsWrapper {
     constructor() {
         this._isConnected = false;
@@ -125,7 +126,9 @@ class NatsWrapper {
                 }
             });
             try {
-                client.publish(subject, JSON.stringify(Object.assign(Object.assign({}, data), { replyTo })));
+                // UC-1408 (B1): istek de STAN kanalına yazılır (14 gün); payload.credentials varsa mühürlenir.
+                // credentials yoksa sealIntegrationCommandData aynı nesneyi döner → öteki subject'ler etkilenmez.
+                client.publish(subject, JSON.stringify(Object.assign(Object.assign({}, (0, commandCredentials_util_1.sealIntegrationCommandData)(data)), { replyTo })));
             }
             catch (err) {
                 clearTimeout(timeoutId);
