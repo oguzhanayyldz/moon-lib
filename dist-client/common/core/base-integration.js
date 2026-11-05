@@ -13,6 +13,7 @@ exports.BaseIntegration = void 0;
 const integrationCache_service_1 = require("../../services/integrationCache.service");
 const redisWrapper_service_1 = require("../../services/redisWrapper.service");
 const logger_service_1 = require("../../services/logger.service");
+const commandCredentials_util_1 = require("../../utils/commandCredentials.util");
 class BaseIntegration {
     constructor() {
         this.credentials = this.getDefaultCredentials();
@@ -37,7 +38,9 @@ class BaseIntegration {
     setup(user, platform, credentials) {
         return __awaiter(this, void 0, void 0, function* () {
             if (credentials) {
-                this.credentials = Object.assign(Object.assign(Object.assign({}, this.getDefaultCredentials()), credentials), { user,
+                // UC-1408: komut yükündeki mühürlü (iv:authTag:ciphertext) değerler burada çözülür;
+                // düz değerler (eski şekilli outbox kayıtları) aynen geçer.
+                this.credentials = Object.assign(Object.assign(Object.assign({}, this.getDefaultCredentials()), (0, commandCredentials_util_1.unsealCommandCredentials)(credentials)), { user,
                     platform });
             }
             else {
