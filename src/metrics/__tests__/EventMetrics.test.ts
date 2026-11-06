@@ -54,6 +54,9 @@ describe('EventMetrics', () => {
       expect(metrics).toContain('le="0.01"');
       expect(metrics).toContain('le="0.05"');
       expect(metrics).toContain('le="10"');
+      expect(metrics).toContain('le="30"');
+      expect(metrics).toContain('le="60"');
+      expect(metrics).toContain('le="120"');
     });
   });
 

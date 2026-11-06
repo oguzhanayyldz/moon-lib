@@ -134,6 +134,14 @@ export abstract class BaseApiClient implements IApiClient {
   // (varsayilan), eski davranis korunur: her 401/403 sayilir.
   protected isRateLimitedAuthError?(error: AxiosError): boolean;
 
+  // UC-1268: bazi entegrasyonlar (ornegin n11) kimlik hatasini 401/403 yerine baska bir
+  // HTTP koduyla (n11: 400 + govdede errorCode) doner; yalniz status koduna bakan sayac
+  // bunu hic gormez. Bu opsiyonel kanca true dondururse hata, status kodu 401/403 olmasa
+  // da kimlik hatasi olarak sayilir ve KESIN sinyal sayilir: hesap geneli bir kimlik hatasi
+  // oldugundan tek operasyon turu bile entegrasyonu pasife cekmeye yeter (deactivationOperationThreshold=1).
+  // Tanimlanmazsa (varsayilan) davranis degismez: yalniz 401/403 sayilir, esik degismez.
+  protected isAuthFailureError?(error: AxiosError): boolean;
+
   // Public API methods
   async get<T>(url: string, config?: RequestConfig): Promise<T> {
     return this.makeRequest<T>({ ...config, method: 'GET', url });
@@ -451,24 +459,29 @@ export abstract class BaseApiClient implements IApiClient {
       // Update metrics
       this.updateMetrics(false, duration);
 
-      // Auth failure tracking (issue #521, #566) — SADECE 401/403 sayilir, 5xx/network/429 etkilemez.
+      // Auth failure tracking (issue #521, #566) — 401/403 (+ UC-1268: isAuthFailureError kancasinin
+      // kesin dedigi hatalar) sayilir, 5xx/network/429 etkilemez.
       // Sayim operasyon bazinda yapilir: tek bozuk operasyon tum entegrasyonu pasife cekmez.
       const errorStatus = (error as AxiosError).response?.status;
       const isAuthStatusCode = errorStatus === 401 || errorStatus === 403;
+      const isDefiniteAuthFailure =
+        errorStatus !== undefined && this.isAuthFailureError?.(error as AxiosError) === true;
       // Issue #595: entegrasyon isRateLimitedAuthError'i tanimladiysa ve bu hatayi hiz
       // siniri kaynakli olarak isaretlediyse, sayaca dokunma — gercek kimlik hatasi
       // davranisi (asagidaki blok) sadece bu kanca false/undefined dondurdugunde calisir.
       const suspectedRateLimit =
         isAuthStatusCode && this.isRateLimitedAuthError?.(error as AxiosError) === true;
-      if (this.config.authFailureTracking && isAuthStatusCode && !suspectedRateLimit) {
+      if (this.config.authFailureTracking && (isAuthStatusCode || isDefiniteAuthFailure) && !suspectedRateLimit) {
         const { userId, integrationId, integrationName, threshold, deactivationOperationThreshold } =
           this.config.authFailureTracking;
         const errorMessage = (error as Error).message?.substring(0, 500);
-        AuthFailureTracker.increment(
-          { userId, integrationId, integrationName, threshold, deactivationOperationThreshold },
-          errorStatus as 401 | 403,
-          errorMessage,
-          operationType
+        const trackerContext = { userId, integrationId, integrationName, threshold, deactivationOperationThreshold };
+        // Kesin sinyal yoksa 5. arguman HIC verilmez: 401/403 yolu eskisiyle birebir ayni cagri.
+        (isDefiniteAuthFailure
+          ? AuthFailureTracker.increment(trackerContext, errorStatus as number, errorMessage, operationType, {
+              definite: true
+            })
+          : AuthFailureTracker.increment(trackerContext, errorStatus as number, errorMessage, operationType)
         ).catch((err) => {
           logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
             error: err.message,

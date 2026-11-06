@@ -4,11 +4,15 @@ export interface RetryConfig {
     backoffFactor: number;
 }
 export declare class RetryManager {
-    private readonly redisClient;
     private readonly keyPrefix;
     private readonly defaultConfig;
     private readonly config;
     constructor(config?: Partial<RetryConfig>);
+    /**
+     * Her çağrıda redisWrapper'dan okunur (UC-835): Redis kopunca servisin 'end' işleyicisi yeni istemci kurar;
+     * kurucuda yakalanan istemci kapalı kalır ve deneme sayacı çağrıları fırlardı.
+     */
+    private get redisClient();
     /**
      * Bir olayın retry sayısını al
      */

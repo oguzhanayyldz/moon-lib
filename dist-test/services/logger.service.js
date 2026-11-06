@@ -32,6 +32,8 @@ const UNPACKED_ERROR_KEYS = ['config', 'request', 'response', 'isAxiosError', 's
  * winston copies the enumerable fields of an error passed as `logger.error(msg, err)` into the meta
  * (config, request, response, ... for an AxiosError) and appends `err.message` to the message. Those
  * copied fields are replaced by the `toSafeLogError` whitelist, and the appended message is masked.
+ * The caller's own message is masked by `maskLogMessageText`, and credential-named meta fields by
+ * `serializeLogMeta` (UC-832).
  */
 function formatLogLine(info) {
     var _a;
@@ -58,6 +60,9 @@ function formatLogLine(info) {
             meta = Object.assign(Object.assign({}, omitKeys(rest, new Set(UNPACKED_ERROR_KEYS))), safeFields);
             text = (0, logSafety_util_1.maskErrorText)(text);
         }
+        else {
+            text = (0, logSafety_util_1.maskLogMessageText)(text);
+        }
         const metaStr = Object.keys(meta).length > 0 ? ' ' + (0, logSafety_util_1.serializeLogMeta)(meta) : '';
         return `${prefix} ${text}${metaStr}`;
     }
@@ -73,11 +78,12 @@ function looksLikeUnpackedAxiosError(meta) {
     }
     return isObject(meta.config) && isObject(meta.request) && ('url' in meta.config || 'headers' in meta.config);
 }
+// The caller's own part of the message is masked here; the appended error message is already masked.
 function replaceAppendedMessage(text, rawMessage, safeMessage) {
     if (typeof rawMessage !== 'string' || !rawMessage || !text.endsWith(` ${rawMessage}`)) {
-        return text;
+        return (0, logSafety_util_1.maskLogMessageText)(text);
     }
-    return `${text.slice(0, text.length - rawMessage.length)}${safeMessage}`;
+    return `${(0, logSafety_util_1.maskLogMessageText)(text.slice(0, text.length - rawMessage.length))}${safeMessage}`;
 }
 function omitKeys(source, keys) {
     return Object.fromEntries(Object.entries(source).filter(([key]) => !keys.has(key)));

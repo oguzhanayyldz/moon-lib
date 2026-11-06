@@ -1,10 +1,29 @@
 import { RedisClientType } from 'redis';
+/**
+ * Açılışta Redis'e ulaşılamazsa connect()'in toplam kaç ms yeniden deneyeceği (UC-1043).
+ * REDIS_STARTUP_MAX_WAIT_MS yoksa ya da geçersizse -1 = süresiz (tavan startup probe'dadır);
+ * 0 = tek deneme (eski davranış).
+ */
+export declare function resolveRedisStartupMaxWaitMs(): number;
+/** n. başarısız açılış denemesinden sonraki bekleme: 1, 2, 4, 8, 16, 30, 30 ... sn. */
+export declare function getRedisStartupRetryDelay(attempt: number): number;
 declare class RedisWrapper {
     private static instances;
     private _client?;
     private _url?;
+    private hasConnected;
     get client(): RedisClientType;
+    /**
+     * Redis'e bağlanır. Açılışta (bu süreç henüz hiç bağlanmadıysa) Redis geç gelirse tavanlı üstel geri çekilmeyle
+     * yeniden dener (UC-1043): CI Redis'i ve servisleri birlikte yeniden başlattığında servis Redis'ten önce açılıp
+     * tek denemede vazgeçiyor, start()'ın catch'i hatayı yutunca HTTP sunucusu hiç açılmıyor ve pod startup probe
+     * dolana kadar (~5 dk) hizmet dışı kalıyordu. Bekleme süresince HTTP kapalı olduğundan pod hazır sayılmaz.
+     * Çalışma sırasındaki yeniden bağlanma (servislerin 'end' işleyicisi) tek deneme kalır: başarısızlıkta servis
+     * yeniden başlar; aksi halde eski istemciyi tutan bileşenler kapalı istemciyle kalırdı.
+     * Kod/yapılandırma hatası (geçersiz URL: TypeError) yeniden denenmez.
+     */
     connect(url: string, timeoutMs?: number): Promise<void>;
+    private connectOnce;
     deleteOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<boolean>;
     setOrder(userId: string, purchaseNumber: string, platformNumber: string, orderData: object): Promise<void>;
     getOrder(userId: string, purchaseNumber: string, platformNumber: string): Promise<{

@@ -361,3 +361,31 @@ describe('logger with raw axios request parts', () => {
         expect(metaOf(line).url).toBe('https://****@api.example.com/v1/items');
     });
 });
+
+describe('logger with a MongoDB duplicate-key (E11000) message (UC-882)', () => {
+    // Built at runtime: the fake value never appears in source as a literal e-mail.
+    const conflicting = ['uc882', 'probe'].join('-') + '@' + 'example.test';
+    const e11000 = `E11000 duplicate key error collection: db.users index: email_1 dup key: { email: "${conflicting}" }`;
+
+    it('masks the conflicting value in a string meta field, keeping collection and index', () => {
+        const line = logLine(() => logger.error('Kayıt hatası:', { errmsg: e11000, nested: { reason: e11000 } }));
+
+        expect(line).not.toContain(conflicting);
+        expect(line).toContain('index: email_1 dup key: { **** }');
+        expect(metaOf(line).nested.reason).toContain('db.users');
+    });
+
+    it('masks it in a raw MongoServerError-like error', () => {
+        const error = Object.assign(new Error(e11000), { code: 11000, keyValue: { email: conflicting } });
+        const line = logLine(() => logger.error('Error processing user:created:', error));
+
+        expect(line).not.toContain(conflicting);
+        expect(line).toContain('11000');
+    });
+
+    it('leaves a text without a duplicate-key marker unchanged', () => {
+        const line = logLine(() => logger.info('Kayıt', { note: 'dedup key: abc' }));
+
+        expect(metaOf(line).note).toBe('dedup key: abc');
+    });
+});

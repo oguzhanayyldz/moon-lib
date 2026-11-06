@@ -23,3 +23,4 @@ __exportStar(require("./not-authorized-error"), exports);
 __exportStar(require("./not-found-error"), exports);
 __exportStar(require("./request-validation-error"), exports);
 __exportStar(require("./cargo-errors"), exports);
+__exportStar(require("./service-unavailable-error"), exports);

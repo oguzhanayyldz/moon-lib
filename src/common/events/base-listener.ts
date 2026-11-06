@@ -1,5 +1,6 @@
 import { Message, Stan } from 'node-nats-streaming';
 import { Event } from './event.interface';
+import { logger } from '../../services/logger.service';
 
 export abstract class Listener<T extends Event> {
     abstract subject: T['subject'];
@@ -29,11 +30,24 @@ export abstract class Listener<T extends Event> {
         );
 
         subscription.on('message', (msg: Message) => {
-            // Message received
-            const parsedData = this.parseMessage(msg);
-            this.onMessage(parsedData, msg);
-            // msg.ack();
+            // Hata yakalanmazsa olay döngüsüne (ayrıştırma) ya da unhandledRejection'a (async onMessage) düşer:
+            // servisler çöker ya da kapanır (UC-835). Mesaj ack'lenmez, NATS yeniden teslim eder.
+            let result: unknown;
+            try {
+                const parsedData = this.parseMessage(msg);
+                result = this.onMessage(parsedData, msg);
+            } catch (error) {
+                this.logUnhandledError(msg, error);
+                return;
+            }
+            if (result instanceof Promise) {
+                result.catch(error => this.logUnhandledError(msg, error));
+            }
         })
+    }
+
+    private logUnhandledError(msg: Message, error: unknown) {
+        logger.error(`Unhandled error in ${this.constructor.name} for ${this.subject} (seq: ${msg.getSequence?.()}), message not acked, NATS will redeliver:`, error);
     }
 
     parseMessage(msg: Message) {

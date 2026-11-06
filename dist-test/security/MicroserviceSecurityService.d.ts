@@ -85,6 +85,7 @@ export declare class MicroserviceSecurityService {
      * Rate limiting için Express middleware'i alır
      */
     getRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
+    private rejectIfNoSQLInput;
     /**
      * NoSQL Injection koruma middleware
      * Tüm request.body, request.params ve request.query değerlerini kontrol eder ve tehlikeli MongoDB operatörleri içeriyorsa hata fırlatır

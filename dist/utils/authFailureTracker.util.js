@@ -53,12 +53,13 @@ class AuthFailureTracker {
         return `integration:auth-failed-ops:${userId}:${integrationId}`;
     }
     /**
-     * 401/403 aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * 401/403 (ya da kesin kimlik sinyali) aldiginda ILGILI OPERASYONUN counter'ini artir.
+     * `options.definite` true ise pasiflestirme icin tek operasyon turu yeter (UC-1268).
      * Operasyon kendi esigini asarsa fail-eden-operasyonlar SET'ine eklenir; SET boyutu
      * deactivationOperationThreshold'a ulasirsa (gercek credential sorunu) event publish edilir.
      * @returns Guncel operasyon counter degeri (Redis hatasi durumunda 0)
      */
-    static increment(context, lastErrorStatus, lastErrorMessage, operationType) {
+    static increment(context, lastErrorStatus, lastErrorMessage, operationType, options) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             const op = operationType || operation_type_enum_1.OperationType.OTHER;
@@ -101,7 +102,7 @@ class AuthFailureTracker {
                 status: lastErrorStatus
             });
             if (count >= threshold) {
-                yield AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage);
+                yield AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage, (options === null || options === void 0 ? void 0 : options.definite) === true);
             }
             return count;
         });
@@ -111,11 +112,15 @@ class AuthFailureTracker {
      * Operasyonu fail-eden-operasyonlar SET'ine ekler ve SET boyutuna gore
      * entegrasyonu pasife cekip cekmeyecegine karar verir.
      */
-    static evaluateDeactivation(context, operationType, failureCount, lastErrorStatus, lastErrorMessage) {
-        return __awaiter(this, void 0, void 0, function* () {
+    static evaluateDeactivation(context_1, operationType_1, failureCount_1, lastErrorStatus_1, lastErrorMessage_1) {
+        return __awaiter(this, arguments, void 0, function* (context, operationType, failureCount, lastErrorStatus, lastErrorMessage, definite = false) {
             var _a;
             const failedOpsKey = AuthFailureTracker.getFailedOpsKey(context.userId, context.integrationId);
-            const deactivationThreshold = (_a = context.deactivationOperationThreshold) !== null && _a !== void 0 ? _a : AuthFailureTracker.DEFAULT_DEACTIVATION_OP_THRESHOLD;
+            // UC-1268: kesin kimlik sinyali (BaseApiClient.isAuthFailureError) hesap geneli sorundur;
+            // yalniz tek operasyon turu cagiran kiracilar (ornegin sadece siparis ceken) da pasife cekilir.
+            const deactivationThreshold = definite
+                ? 1
+                : (_a = context.deactivationOperationThreshold) !== null && _a !== void 0 ? _a : AuthFailureTracker.DEFAULT_DEACTIVATION_OP_THRESHOLD;
             let distinctFailedOps = 0;
             let failedOperations = [];
             try {
@@ -173,7 +178,10 @@ class AuthFailureTracker {
                     }
                     return;
                 }
-                // Tam reset: SET uyelerinin tum sayaclarini ve SET'in kendisini temizle.
+                // Tam reset: TUM operasyon sayaclarini ve SET'in kendisini temizle.
+                // UC-1310: SET yalniz esigini ASMIS operasyonlari tutar; esik altindaki sayaclar (orn. 3/5) SET'te
+                // yoktur. Yalniz SET uyelerini silmek onlari birakiyordu ve yeniden aktif edilen entegrasyon
+                // 24 sa icinde 2 hatayla tekrar pasife dusuyordu. Bu yuzden bilinen tum OperationType degerleri de silinir.
                 let members = [];
                 try {
                     members = yield redisWrapper_service_1.redisWrapper.client.sMembers(failedOpsKey);
@@ -181,7 +189,8 @@ class AuthFailureTracker {
                 catch (_a) {
                     members = [];
                 }
-                const keysToDelete = members.map((op) => AuthFailureTracker.getKey(userId, integrationId, op));
+                const ops = new Set([...Object.values(operation_type_enum_1.OperationType).map(String), ...members]);
+                const keysToDelete = Array.from(ops).map((op) => AuthFailureTracker.getKey(userId, integrationId, op));
                 // Legacy (operasyon-oncesi #521) key'i de temizle — deploy gecisi guvenligi
                 keysToDelete.push(`integration:auth-failures:${userId}:${integrationId}`);
                 keysToDelete.push(failedOpsKey);
@@ -198,6 +207,31 @@ class AuthFailureTracker {
                     operationType
                 });
             }
+        });
+    }
+    /**
+     * UC-1310: UserIntegrationSettings olayindaki yeniden aktif edilen kayitlarin sayaclarini, CAGIRAN
+     * servisin kendi Redis DB'sinde sifirlar. Her entegrasyon servisi farkli bir Redis DB'si kullanir;
+     * integration servisindeki toggleActive/save reset'i kendi DB'sine gider ve buraya ulasamaz.
+     *
+     * Yalniz `reactivated === true && active === true` olan ve entegrasyonu belli (BASE kayit degil) ogeler
+     * sifirlanir. Diger UserIntegrationSettings yayinlari (token yenileme, ayar kaydi, pasiflestirme)
+     * sayaclara dokunmaz — yoksa bozuk kimlik hic esige ulasamazdi.
+     * Olay tum entegrasyon servislerine gider; baska servise ait integrationId icin DEL yok-anahtar no-op'tur.
+     * Hata firlatmaz (reset() Redis hatasini yutar, loglar).
+     * @returns Sifirlama denenen oge sayisi
+     */
+    static resetOnReactivation(list) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let resetCount = 0;
+            for (const item of list || []) {
+                if ((item === null || item === void 0 ? void 0 : item.reactivated) !== true || item.active !== true || !item.integration || !item.user) {
+                    continue;
+                }
+                yield AuthFailureTracker.reset(item.user, item.integration);
+                resetCount++;
+            }
+            return resetCount;
         });
     }
     /**
@@ -259,6 +293,12 @@ class AuthFailureTracker {
                     status: 'pending'
                 });
                 yield optimisticLocking_util_1.OptimisticLockingUtil.saveWithRetry(outboxEvent);
+                // UC-1302: Sayaclari BURADA, yazan surecin kendi Redis DB'sinde sifirla. Her entegrasyon servisi
+                // farkli bir Redis DB'si kullanir (canli: n11 /15, trendyol /9 ...); integration servisinin
+                // dinleyicisindeki reset() kendi DB'sine (/0) gider ve bu anahtarlara ulasamaz. Sifirlanmazsa
+                // kimlik degismeden yeniden aktif edilen entegrasyon ilk hatada (24 sa TTL boyunca) aninda
+                // tekrar pasife duser. Outbox yazimi basarisizsa sayaclar korunur: sonraki hata publish'i yeniden dener.
+                yield AuthFailureTracker.reset(context.userId, context.integrationId);
                 logger_service_1.logger.error(`AuthFailureTracker: THRESHOLD EXCEEDED — IntegrationAuthFailureExceeded event queued`, {
                     userId: context.userId,
                     integrationId: context.integrationId,

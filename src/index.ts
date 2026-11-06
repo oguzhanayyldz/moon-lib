@@ -6,6 +6,7 @@ import { createIntegrationCategoryModel } from './models/integrationCategory.sch
 import { createIntegrationBrandModel } from './models/integrationBrand.schema';
 import { createIntegrationCategoryAttributesModel } from './models/integrationCategoryAttributes.schema';
 import { createIntegrationRequestLogModel, ensureIntegrationRequestLogTtlIndex } from './models/integrationRequestLog.schema';
+import { ensureRetentionTtlIndexes } from './models/retentionTtlIndex';
 import { logger as moonLogger } from './services/logger.service';
 
 // Models
@@ -16,7 +17,9 @@ export * from './models/integrationCategory.schema';
 export * from './models/integrationBrand.schema';
 export * from './models/integrationCategoryAttributes.schema';
 export * from './models/integrationRequestLog.schema';
+export * from './models/retentionTtlIndex';
 export * from './models/excelJob.schema';
+export * from './models/sessionRevocation.schema';
 
 // Services
 export * from './services/natsWrapper.service';
@@ -85,6 +88,7 @@ export * from './middleware/httpMetrics';
 // Utils
 export * from './utils/optimisticLocking.util';
 export * from './utils/versionEventOutbox.util';
+export * from './utils/entityDeletedOutbox.util';
 export * from './utils/versionEventLease.util';
 export * from './utils/typeGuards.util';
 export * from './utils/performanceMonitor.util';
@@ -94,6 +98,7 @@ export * from './utils/redisFailoverManager';
 export * from './utils/redisEnvScope.util';
 export * from './utils/userContext.util';
 export * from './utils/encryption.util';
+export * from './utils/commandCredentials.util';
 export * from './utils/costSource.util';
 export * from './utils/authFailureTracker.util';
 export * from './utils/logSafety.util';
@@ -132,8 +137,12 @@ export * from './events/publishers/orderUpdated.publisher';
 export * from './events/publishers/orderProductUpdated.publisher';
 export * from './events/publishers/orderStatusUpdated.publisher';
 export * from './utils/duplicateKeyError.util';
+export * from './utils/eventErrorClassification.util';
+export * from './utils/itemErrorCollector.util';
+export * from './utils/lockHeartbeat.util';
 export * from './events/retryableListener';
 export * from './events/listeners/BaseModernEntityDeletedListener';
+export * from './events/listeners/BaseUserSessionsRevokedListener';
 export * from './events/publishers/deleteProductImagesCompletedPublisher.publisher';
 export * from './events/publishers/deleteProductImagesPublisher.publisher';
 export * from './events/publishers/importImagesFromUrlsCompletedPublisher.publisher';
@@ -202,6 +211,8 @@ export const initializeModels = (connection: mongoose.Connection): void => {
     createOutboxModel(connection);
     createDeadLetterModel(connection);
     createExcelJobModel(connection);
+    // UC-1056: OUTBOX_RETENTION_DAYS / DEADLETTER_RETENTION_DAYS tanımlıysa saklama TTL'i
+    ensureRetentionTtlIndexes(connection, moonLogger);
 };
 
 export const initializeModelsForIntegration = (connection: mongoose.Connection): void => {
@@ -212,6 +223,8 @@ export const initializeModelsForIntegration = (connection: mongoose.Connection):
     createIntegrationBrandModel(connection);
     createIntegrationCategoryAttributesModel(connection);
     createIntegrationRequestLogModel(connection);
+    // UC-1056: OUTBOX_RETENTION_DAYS / DEADLETTER_RETENTION_DAYS tanımlıysa saklama TTL'i
+    ensureRetentionTtlIndexes(connection, moonLogger);
     // UC-962: istek loglarına 7 günlük TTL — başlangıcı bekletmez, hata servisi durdurmaz
     ensureIntegrationRequestLogTtlIndex(connection)
         .then(result => moonLogger.info(`Integration request log TTL index: ${result}`))

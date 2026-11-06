@@ -117,10 +117,6 @@ export declare abstract class BaseModernEntityDeletedListener extends RetryableL
      */
     protected performServiceSpecificAuthorization(data: EntityDeletedEvent['data'], userId: string, span?: any): Promise<void>;
     /**
-     * Rate limiting cache (in-memory implementation)
-     */
-    private rateLimitCache?;
-    /**
      * Performance metrics cache
      */
     private performanceMetrics;

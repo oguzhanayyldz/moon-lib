@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserPayload, hasPermission } from './current-user';
+import { logger } from '../../services/logger.service';
 
 /**
  * Basit ve Merkezi Permission Middleware Sistemi
@@ -32,7 +33,7 @@ export const requirePermission = (resource: string, action: string, options?: {
         if (!hasAccess) {
             // Audit log için
             if (logAccess) {
-                console.warn(`Permission denied: User ${currentUser.id} (role: ${currentUser.role}) attempted ${action} on ${resource}`);
+                logger.warn(`Permission denied: User ${currentUser.id} (role: ${currentUser.role}) attempted ${action} on ${resource}`);
             }
             
             return res.status(403).json({
@@ -45,7 +46,7 @@ export const requirePermission = (resource: string, action: string, options?: {
 
         // Success log (opsiyonel)
         if (logAccess) {
-            console.log(`Permission granted: User ${currentUser.id} performing ${action} on ${resource}`);
+            logger.debug(`Permission granted: User ${currentUser.id} performing ${action} on ${resource}`);
         }
 
         next();

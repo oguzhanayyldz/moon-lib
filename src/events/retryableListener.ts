@@ -9,6 +9,8 @@ import { redisWrapper } from '../services/redisWrapper.service';
 import { logger } from '../services/logger.service';
 import { EventMetrics } from '../metrics/EventMetrics';
 import { isDuplicateKeyError } from '../utils/duplicateKeyError.util';
+import { isDeterministicEventError } from '../utils/eventErrorClassification.util';
+import { startLockHeartbeat } from '../utils/lockHeartbeat.util';
 import { buildListenerKey, deadLetterReplayRegistry, DeadLetterReplayResult } from './deadLetterReplayRegistry';
 
 // Mevcut RetryOptions'a yeni özellikler ekle
@@ -21,7 +23,99 @@ interface RetryOptions {
     enableLock?: boolean;         // Distributed lock'u etkinleştirme
     ackWaitSec?: number;          // NATS ack timeout süresi (saniye)
     deadLetterReplay?: boolean;   // DLQ kayıtları bu listener'a oynatılsın mı (issue #648 DLQ-H)
+    /**
+     * E11000'den sonra processEvent'in süreç içinde kaç kez yeniden koşulacağı (UC-1020). 0 = eski davranış: ilk E11000'de ack.
+     * E11000, çakışan yazımın kaydı ZATEN yazdığını söyler: yarışta (iki olay aynı benzersiz kaydı findOne→save ile oluşturuyor)
+     * yeniden koşum o kaydı bulur ve başarılı olur; gerçek çiftte E11000 tekrarlanır ve mesaj eskisi gibi ack'lenir.
+     * Verilmezse RETRYABLE_DUPLICATE_KEY_RETRIES ortam değişkeni (0–5), o da yoksa 0.
+     */
+    duplicateKeyRetries?: number;
+    /**
+     * Olay kilidinin işlem sürdükçe kaç ms'de bir yenileneceği (UC-1020). 0 = yenileme yok (eski davranış).
+     * lockTimeoutSec'ten kısa olmalı; uzun işlerde kilidin işin ortasında düşüp yeniden teslimin işi kopyalamasını önler.
+     * Verilmezse RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa lockTimeoutSec/3 (UC-430/UC-821: ackWait'i aşan iş,
+     * kilit düştüğü için yeniden teslimde ikinci kez koşuyordu).
+     */
+    lockRenewIntervalMs?: number;
+    /**
+     * Kilit yenilemesinin üst sınırı, ms (UC-1183). Aşılınca moon-lib heartbeat'i durur (logger.warn + retryable_listener_stuck_total
+     * {reason="max_lock_hold"}); alt sınıf kendi heartbeat'ini sarmıyorsa kilit TTL'inde düşer, sonraki yeniden teslim işi devralır.
+     * 0 = sınır yok (varsayılan). Verilmezse RETRYABLE_MAX_LOCK_HOLD_MS, o da yoksa 0.
+     */
+    maxLockHoldMs?: number;
+    /**
+     * Kilit sahibi hâlâ işlerken aynı mesajın kaç yeniden teslimden sonra takılı sayılacağı (UC-1183): warn + metrik
+     * ({reason="redelivery"}, mesaj (eventId + sıra) başına bir kez). 0 = kapalı. Verilmezse RETRYABLE_STUCK_REDELIVERY_THRESHOLD, o da yoksa 5.
+     */
+    stuckRedeliveryThreshold?: number;
+    /**
+     * Kalıcı hatada (isPermanentError) NATS yeniden denemesini atla: ilk denemede 'failed' DLQ kaydı + ack (UC-1043).
+     * false = eski davranış: maxRetries kez yeniden teslim, sonra 'queued' DLQ; kalıcı hata yalnız
+     * event_permanent_error_total{outcome="shadow"} olarak sayılır (gölge mod).
+     * Verilmezse RETRYABLE_PERMANENT_FAIL_FAST ('true' ya da '1'), o da yoksa false.
+     */
+    failFastOnPermanentError?: boolean;
 }
+
+const MAX_DUPLICATE_KEY_RETRIES = 5;
+
+/**
+ * RETRYABLE_DUPLICATE_KEY_RETRIES'ı okur; geçersiz ya da yoksa 0, üst sınır MAX_DUPLICATE_KEY_RETRIES.
+ */
+export function resolveDuplicateKeyRetries(explicit?: number): number {
+    const raw = explicit ?? Number(process.env.RETRYABLE_DUPLICATE_KEY_RETRIES ?? 0);
+    if (!Number.isInteger(raw) || raw < 0) return 0;
+    return Math.min(raw, MAX_DUPLICATE_KEY_RETRIES);
+}
+
+/**
+ * RETRYABLE_PERMANENT_FAIL_FAST'ı okur: yalnız 'true' ya da '1' açar; başka her değer kapalı.
+ */
+export function resolveFailFastOnPermanentError(explicit?: boolean): boolean {
+    if (typeof explicit === 'boolean') return explicit;
+    const raw = (process.env.RETRYABLE_PERMANENT_FAIL_FAST ?? '').trim().toLowerCase();
+    return raw === 'true' || raw === '1';
+}
+
+/**
+ * Kilit yenileme aralığını çözer (UC-430/UC-821): açık değer, yoksa RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa
+ * lockTimeoutSec/3. 0 = yenileme yok (açık değerle ya da ortam değişkeniyle kapatılır). Geçersiz değer varsayılana düşer.
+ */
+export function resolveLockRenewIntervalMs(explicit: number | undefined, lockTimeoutSec: number): number {
+    const fallback = Math.max(1, Math.floor((lockTimeoutSec * 1000) / 3));
+    const env = (process.env.RETRYABLE_LOCK_RENEW_INTERVAL_MS ?? '').trim();
+    const raw = explicit ?? (env === '' ? undefined : Number(env));
+    if (raw === undefined || !Number.isInteger(raw) || raw < 0) return fallback;
+    return raw;
+}
+
+// Varsayılan kapalı: parasut sendToErp ve büyük katalog senkronları meşru olarak >15 dk sürebilir; sınır dinleyici bazında açılır.
+const DEFAULT_MAX_LOCK_HOLD_MS = 0;
+const DEFAULT_STUCK_REDELIVERY_THRESHOLD = 5;
+const STUCK_REDELIVERY_KEY_PREFIX = 'event:same-message-redelivery:';
+const STUCK_REDELIVERY_TTL_SEC = 3600;
+
+/** Negatif olmayan tam sayı seçeneği çözer: açık değer, ortam değişkeni, varsayılan; geçersiz değer varsayılana düşer. */
+function resolveNonNegativeInt(explicit: number | undefined, envName: string, fallback: number): number {
+    const env = (process.env[envName] ?? '').trim();
+    const raw = explicit ?? (env === '' ? undefined : Number(env));
+    if (raw === undefined || !Number.isInteger(raw) || raw < 0) return fallback;
+    return raw;
+}
+
+/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 0 (sınır yok). */
+export function resolveMaxLockHoldMs(explicit?: number): number {
+    return resolveNonNegativeInt(explicit, 'RETRYABLE_MAX_LOCK_HOLD_MS', DEFAULT_MAX_LOCK_HOLD_MS);
+}
+
+/** stuckRedeliveryThreshold'u çözer (UC-1183): açık değer, RETRYABLE_STUCK_REDELIVERY_THRESHOLD, 5. 0 = kapalı. */
+export function resolveStuckRedeliveryThreshold(explicit?: number): number {
+    return resolveNonNegativeInt(explicit, 'RETRYABLE_STUCK_REDELIVERY_THRESHOLD', DEFAULT_STUCK_REDELIVERY_THRESHOLD);
+}
+
+/** Gölge modda kalıcı sayılan olayın işareti: sonraki teslimde başarı = yanlış pozitif (UC-1043). */
+const PERMANENT_SHADOW_KEY_PREFIX = 'event:permanent-shadow:';
+const PERMANENT_SHADOW_TTL_SEC = 86400;
 
 /**
  * Retry özellikli temel listener sınıfı
@@ -40,15 +134,33 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         lockTimeoutSec: 30,       // Lock için varsayılan timeout süresi (saniye)
         enableLock: true,         // Varsayılan olarak lock etkin
         ackWaitSec: 60,           // NATS ack timeout - lock TTL'inden büyük olmalı
-        deadLetterReplay: true    // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
+        deadLetterReplay: true,   // false ise DLQ kayıtları oynatılmaz, kayıt olarak bekler
+        duplicateKeyRetries: 0,   // constructor'da ortam değişkeniyle çözülür
+        lockRenewIntervalMs: 0,   // constructor'da lockTimeoutSec'ten çözülür
+        maxLockHoldMs: 0,         // constructor'da ortam değişkeniyle çözülür
+        stuckRedeliveryThreshold: 0, // constructor'da ortam değişkeniyle çözülür
+        failFastOnPermanentError: false // constructor'da ortam değişkeniyle çözülür
     };
 
     constructor (client: Stan, options: RetryOptions = {}, connection: mongoose.Connection = mongoose.connection) {
         super(client);
         this.options = {
             ...RetryableListener.DEFAULT_OPTIONS,
-            ...options
+            ...options,
+            duplicateKeyRetries: resolveDuplicateKeyRetries(options.duplicateKeyRetries),
+            maxLockHoldMs: resolveMaxLockHoldMs(options.maxLockHoldMs),
+            stuckRedeliveryThreshold: resolveStuckRedeliveryThreshold(options.stuckRedeliveryThreshold),
+            failFastOnPermanentError: resolveFailFastOnPermanentError(options.failFastOnPermanentError)
         };
+        this.options.lockRenewIntervalMs = resolveLockRenewIntervalMs(options.lockRenewIntervalMs, this.options.lockTimeoutSec);
+        if (this.options.enableLock && this.options.lockTimeoutSec >= this.options.ackWaitSec) {
+            // Kilit ackWait'ten uzun tutulabilir (sync/shipment bilinçli: yeniden teslim 'aynı içerik işleniyor' diye tanınır).
+            // Yenileme açıkken canlı sahibin kilidi zaten düşmez; bedel yalnız çöken sahipte: kilit ilk yeniden teslimden sonra düşer.
+            logger.info(`lockTimeoutSec (${this.options.lockTimeoutSec}s) is not shorter than ackWaitSec (${this.options.ackWaitSec}s) in ${this.constructor.name}; if the owner crashes, takeover waits for the lock to expire (one or more extra redeliveries)`);
+        }
+        if (this.options.lockRenewIntervalMs > 0 && this.options.lockRenewIntervalMs >= this.options.lockTimeoutSec * 1000) {
+            logger.warn(`lockRenewIntervalMs (${this.options.lockRenewIntervalMs}) is not shorter than lockTimeoutSec (${this.options.lockTimeoutSec}s); the lock can expire before it is renewed`);
+        }
         // ackWait'i override et (base class'ta 5s, burada options'dan alıyoruz)
         this.ackWait = this.options.ackWaitSec * 1000;
         this.retryManager = new RetryManager({ maxRetries: this.options.maxRetries });
@@ -98,14 +210,44 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
 
         logger.debug(`Lock acquired for ${this.subject}:${eventId}`);
 
+        // Kendi kilit değerimizi bildiğimiz için yenileme tam eşleşmeyle yapılır (sonek yedeği gerekmez)
+        const stopHeartbeat = this.options.lockRenewIntervalMs > 0
+            ? startLockHeartbeat(lockKey, lockValue, '', this.options.lockTimeoutSec, this.options.lockRenewIntervalMs,
+                this.options.maxLockHoldMs, () => this.recordStuck('max_lock_hold'))
+            : undefined;
+
         try {
             const result = await callback();
             logger.debug(`Process completed with lock for ${this.subject}:${eventId}`);
             return result;
         } finally {
+            stopHeartbeat?.();
             // İşlem tamamlandığında kilidi serbest bırak
             await this.releaseLock(lockKey, lockValue);
             logger.debug(`Lock released for ${this.subject}:${eventId}`);
+        }
+    }
+
+    private recordStuck(reason: 'max_lock_hold' | 'redelivery'): void {
+        EventMetrics.retryableListenerStuckTotal.inc({ listener: this.constructor.name, reason });
+    }
+
+    /**
+     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (mesaj başına bir kez) metrik,
+     * eşikten itibaren her teslimde warn. Sayaç hatası teslim akışını bozmaz.
+     */
+    private async noteSameMessageRedelivery(eventType: string, eventId: string, sequence: number): Promise<void> {
+        const threshold = this.options.stuckRedeliveryThreshold;
+        if (threshold <= 0) return;
+        try {
+            // Sıra anahtarda: aynı eventId'li farklı mesajların yeniden teslimleri toplanmaz. INCR+EXPIRE tek MULTI'de (TTL'siz anahtar kalmaz).
+            const key = envScopedKey(`${STUCK_REDELIVERY_KEY_PREFIX}${eventType}:${eventId}:${sequence}`);
+            const [count] = await redisWrapper.client.multi().incr(key).expire(key, STUCK_REDELIVERY_TTL_SEC).exec() as [number, unknown];
+            if (count < threshold) return;
+            if (count === threshold) this.recordStuck('redelivery');
+            logger.warn(`Event looks stuck: lock holder still processing after ${count} redeliveries of the same message in ${this.constructor.name}: ${eventType}:${eventId}`);
+        } catch (err) {
+            logger.warn(`Failed to count same-message redelivery: ${eventType}:${eventId}`, err);
         }
     }
 
@@ -187,12 +329,13 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                 const sequence = this.getDeliverySequence(msg);
                 try {
                     await this.processWithLock(eventId, async () => {
-                        await this.processEvent(data);
+                        await this.processEventWithDuplicateKeyRetries(data, eventId);
                         return;
                     }, fingerprint, sequence);
 
                     // Başarılı işlemede retry sayacını sıfırla
                     await this.retryManager.resetRetryCount(eventType, eventId);
+                    await this.recordPermanentShadowRecovery(eventId, msg);
                     span.setTag('success', true);
                     span.setTag('lock.success', true);
 
@@ -253,7 +396,15 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                             if (sequence !== undefined && holder?.endsWith(RetryableListener.lockValueSuffix(fingerprint, sequence))) {
                                 logger.info(`Lock holder is processing this same message (seq: ${sequence}, ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
                                 span.setTag('lock.same_message', true);
+                                await this.noteSameMessageRedelivery(eventType, eventId, sequence);
                                 return; // msg.ack() YOK - sahip bitirince ack'ler; sahip düşerse yeniden teslim devralır
+                            }
+                            // Sıra numarası yoksa yeniden teslim, kilit sahibinin işlediği mesajın kendisi olabilir: ack'lenirse
+                            // sahip sonra hata verdiğinde mesaj bir daha gelmez (UC-821 F-02).
+                            if (sequence === undefined && msg.isRedelivered?.()) {
+                                logger.info(`Redelivered message without sequence while the same payload is locked (ttl: ${ttl}s), NATS will redeliver: ${eventType}:${eventId}`);
+                                span.setTag('lock.same_payload_redelivered', true);
+                                return; // msg.ack() YOK
                             }
                             if (holder?.endsWith(`#${fingerprint}`)) {
                                 logger.info(`Another instance actively processing the same payload (ttl: ${ttl}s): ${eventType}:${eventId}`);
@@ -279,10 +430,11 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             }
 
             // Lock etkin değilse normal işleme devam et
-            await this.processEvent(data);
+            await this.processEventWithDuplicateKeyRetries(data, eventId);
 
             // Başarılı işlemede retry sayacını sıfırla
             await this.retryManager.resetRetryCount(eventType, eventId);
+            await this.recordPermanentShadowRecovery(eventId, msg);
             span.setTag('success', true);
 
             // Record success metrics
@@ -327,17 +479,46 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             const isDuplicate = isDuplicateKeyError(error);
 
             if (isDuplicate) {
-                // Unique constraint hatası - retry yapmayacağız
-                logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId}`);
+                // Unique constraint hatası - NATS yeniden denemesi yapmayacağız. duplicateKeyRetries > 0 ise süreç içi
+                // yeniden koşumlar da E11000 verdi: kayıt gerçekten mevcut (gerçek çift), ack doğru.
+                logger.info(`Retry atlanıyor - Duplicate key hatası: ${eventType}:${eventId} (süreç içi yeniden koşum: ${this.options.duplicateKeyRetries})`);
                 span.setTag('error.retry_skipped', true);
                 span.setTag('error.duplicate_key', true);
+                EventMetrics.eventDuplicateKeyTotal.inc({
+                    service: serviceName,
+                    event_type: eventType,
+                    queue_group: this.queueGroupName,
+                    outcome: 'acked'
+                });
 
                 // Mesajı onaylayıp geçiyoruz
                 msg.ack();
             } else {
+                const permanent = this.isPermanentError(error);
+                if (permanent) {
+                    span.setTag('error.permanent', true);
+                }
+
                 // Diğer hatalar için normal retry işlemi - mevcut kodunuzdaki gibi
                 const retryCount = await this.retryManager.incrementRetryCount(eventType, eventId);
                 span.setTag('retry.count', retryCount);
+
+                if (permanent && this.options.failFastOnPermanentError) {
+                    // UC-1043: aynı veriyle yeniden teslim sonucu değiştirmez; bütçeyi harcamadan oynatılmayan kayıt + ack
+                    logger.error(`Permanent error, skipping redelivery: ${eventType}:${eventId} (${(error as Error)?.name})`);
+                    span.setTag('error.retry_skipped', true);
+                    EventMetrics.eventPermanentErrorTotal.inc({
+                        service: serviceName,
+                        event_type: eventType,
+                        queue_group: this.queueGroupName,
+                        outcome: 'failed_fast'
+                    });
+                    await this.deadLetterAndAck(data, msg, span, errorMessage, retryCount, true);
+                    return;
+                }
+                if (permanent) {
+                    await this.markPermanentShadow(eventId);
+                }
 
                 // Hala denenmeli mi kontrol et
                 if (await this.retryManager.shouldRetry(eventType, eventId)) {
@@ -355,49 +536,140 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
                     // msg.ack() çağırmadan çık. Bu, NATS'in mesajı yeniden göndermesini sağlar.
                 } else {
                     logger.info(`Max retries (${this.options.maxRetries}) reached for ${eventType}:${eventId}`);
-
-                    if (this.options.enableDeadLetter) {
-                        try {
-                            await this.moveToDeadLetterQueue(data, errorMessage, retryCount);
-                            span.setTag('dead_letter.saved', true);
-
-                            // Record DLQ metrics
-                            EventMetrics.eventDlqTotal.inc({
-                                service: serviceName,
-                                event_type: eventType,
-                                failure_reason: errorMessage.substring(0, 100) // Limit length
-                            });
-                        } catch (dlqError) {
-                            if ((dlqError as Error)?.name === 'ValidationError') {
-                                // Kayıt her teslimde aynı veriden kurulur; şema doğrulaması yeniden teslimle düzelmez.
-                                // Ack'lenmezse mesaj her ackWait'te süresiz yeniden teslim edilir, bu yüzden hata loglanıp ack'lenir.
-                                logger.error(`Dead letter record failed schema validation and can never be saved, acking without a DLQ record: ${eventType}:${eventId}`, dlqError);
-                                span.setTag('dead_letter.invalid', true);
-                                EventMetrics.eventDlqWriteErrorTotal.inc({
-                                    service: serviceName,
-                                    event_type: eventType,
-                                    reason: 'invalid'
-                                });
-                                msg.ack();
-                                return;
-                            }
-                            logger.error('Failed to save to dead letter queue, NATS will redeliver:', dlqError);
-                            span.setTag('dead_letter.error', (dlqError as Error).message);
-                            EventMetrics.eventDlqWriteErrorTotal.inc({
-                                service: serviceName,
-                                event_type: eventType,
-                                reason: 'unavailable'
-                            });
-                            // msg.ack() YOK - DLQ kaydı yokken ack'lemek mesajı kalıcı kaybeder (issue #648 K-3)
-                            return;
-                        }
-                    }
-
-                    msg.ack();
+                    await this.deadLetterAndAck(data, msg, span, errorMessage, retryCount, false);
                 }
             }
         } finally {
             span.finish();
+        }
+    }
+
+    /**
+     * DLQ kaydını yazar (enableDeadLetter açıksa) ve mesajı ack'ler. `permanent` ise kayıt oynatılmayan 'failed' yazılır.
+     * Kayıt yazılamazsa ack'lenmez, NATS yeniden teslim eder; kalıcı olan şema doğrulaması hatası loglanıp ack'lenir.
+     */
+    private async deadLetterAndAck(data: T['data'], msg: Message, span: any, errorMessage: string, retryCount: number, permanent: boolean): Promise<void> {
+        const eventType = this.subject;
+        const eventId = this.getEventId(data);
+        const serviceName = process.env.SERVICE_NAME || 'unknown';
+
+        if (this.options.enableDeadLetter) {
+            try {
+                await this.moveToDeadLetterQueue(data, errorMessage, retryCount, permanent);
+                span.setTag('dead_letter.saved', true);
+
+                // Record DLQ metrics
+                EventMetrics.eventDlqTotal.inc({
+                    service: serviceName,
+                    event_type: eventType,
+                    failure_reason: errorMessage.substring(0, 100) // Limit length
+                });
+            } catch (dlqError) {
+                if ((dlqError as Error)?.name === 'ValidationError') {
+                    // Kayıt her teslimde aynı veriden kurulur; şema doğrulaması yeniden teslimle düzelmez.
+                    // Ack'lenmezse mesaj her ackWait'te süresiz yeniden teslim edilir, bu yüzden hata loglanıp ack'lenir.
+                    logger.error(`Dead letter record failed schema validation and can never be saved, acking without a DLQ record: ${eventType}:${eventId}`, dlqError);
+                    span.setTag('dead_letter.invalid', true);
+                    EventMetrics.eventDlqWriteErrorTotal.inc({
+                        service: serviceName,
+                        event_type: eventType,
+                        reason: 'invalid'
+                    });
+                    msg.ack();
+                    return;
+                }
+                logger.error('Failed to save to dead letter queue, NATS will redeliver:', dlqError);
+                span.setTag('dead_letter.error', (dlqError as Error).message);
+                EventMetrics.eventDlqWriteErrorTotal.inc({
+                    service: serviceName,
+                    event_type: eventType,
+                    reason: 'unavailable'
+                });
+                // msg.ack() YOK - DLQ kaydı yokken ack'lemek mesajı kalıcı kaybeder (issue #648 K-3)
+                return;
+            }
+        }
+
+        msg.ack();
+    }
+
+    /**
+     * Hata aynı veriyle yeniden denemede de değişmez mi (UC-1043)? Servis düzeyi sınıflamayla aynı ad listesi
+     * (isDeterministicEventError; shipment UC-1023, orders UC-1013, invoice UC-1025). Alt sınıf genişletebilir.
+     * isTransientError KULLANILMAZ: bilinmeyen hatayı ve 'not found' metnini kalıcı sayar; oysa sıra dışı gelen
+     * olaylar (ör. güncelleme, oluşturmadan önce) "bulunamadı" fırlatır ve yeniden teslimle düzelir.
+     */
+    protected isPermanentError(error: unknown): boolean {
+        return isDeterministicEventError(error);
+    }
+
+    /** Gölge mod: kalıcı sayılan olayı sayar ve işaretler; sonraki teslimde başarı yanlış pozitif sayılır. Redis hatası yutulur. */
+    private async markPermanentShadow(eventId: string): Promise<void> {
+        try {
+            EventMetrics.eventPermanentErrorTotal.inc({
+                service: process.env.SERVICE_NAME || 'unknown',
+                event_type: this.subject,
+                queue_group: this.queueGroupName,
+                outcome: 'shadow'
+            });
+            await redisWrapper.client.set(envScopedKey(`${PERMANENT_SHADOW_KEY_PREFIX}${this.subject}:${eventId}`), '1', { EX: PERMANENT_SHADOW_TTL_SEC });
+        } catch (error) {
+            logger.warn(`Failed to mark permanent error shadow: ${this.subject}:${eventId}`, error);
+        }
+    }
+
+    /**
+     * Yeniden teslimde (ya da DLQ oynatmasında, `msg` yok) başarı: olay önceden kalıcı sayıldıysa 'recovered' sayılır —
+     * fail-fast açık olsaydı bu olay kaybolurdu. Faz 2'de (açma kararı) bu sayacın sıfır kalması aranır. Redis hatası yutulur.
+     */
+    private async recordPermanentShadowRecovery(eventId: string, msg?: Message): Promise<void> {
+        if (msg && (typeof msg.isRedelivered !== 'function' || !msg.isRedelivered())) {
+            return;
+        }
+        try {
+            const removed = await redisWrapper.client.del(envScopedKey(`${PERMANENT_SHADOW_KEY_PREFIX}${this.subject}:${eventId}`));
+            if (removed > 0) {
+                logger.warn(`Event classified as permanent succeeded on redelivery (fail-fast would have dropped it): ${this.subject}:${eventId}`);
+                EventMetrics.eventPermanentErrorTotal.inc({
+                    service: process.env.SERVICE_NAME || 'unknown',
+                    event_type: this.subject,
+                    queue_group: this.queueGroupName,
+                    outcome: 'recovered'
+                });
+            }
+        } catch (error) {
+            logger.warn(`Failed to check permanent error shadow: ${this.subject}:${eventId}`, error);
+        }
+    }
+
+    /**
+     * processEvent'i koşar; E11000'de en fazla duplicateKeyRetries kez süreç içinde yeniden koşar (UC-1020).
+     * Yarış: çakışan yazım kaydı oluşturmuştur, yeniden koşumda handler'ın findOne'ı onu bulur → başarı ('resolved').
+     * Gerçek çift: E11000 her koşumda tekrarlar → son hata fırlatılır, çağıran eskisi gibi ack'ler.
+     * E11000 dışındaki hatalar hiç yeniden koşulmadan fırlatılır (NATS yeniden denemesi ve DLQ yolu değişmez).
+     */
+    private async processEventWithDuplicateKeyRetries(data: T['data'], eventId: string): Promise<void> {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                await this.processEvent(data);
+                if (attempt > 0) {
+                    logger.info(`Duplicate key race resolved on in-process rerun ${attempt}/${this.options.duplicateKeyRetries}: ${this.subject}:${eventId}`);
+                    EventMetrics.eventDuplicateKeyTotal.inc({
+                        service: process.env.SERVICE_NAME || 'unknown',
+                        event_type: this.subject,
+                        queue_group: this.queueGroupName,
+                        outcome: 'resolved'
+                    });
+                }
+                return;
+            } catch (error) {
+                if (attempt >= this.options.duplicateKeyRetries || !isDuplicateKeyError(error)) {
+                    throw error;
+                }
+                logger.warn(`Duplicate key error, rerunning in process ${attempt + 1}/${this.options.duplicateKeyRetries}: ${this.subject}:${eventId}`);
+                // Kısa jitter: çakışan yazımın kalan adımlarına (aynı partideki sonraki kayıtlar) zaman tanır
+                await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 100));
+            }
         }
     }
 
@@ -453,7 +725,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         let started = false;
         const run = async () => {
             started = true;
-            await this.processEvent(data);
+            await this.processEventWithDuplicateKeyRetries(data, eventId);
         };
 
         try {
@@ -481,6 +753,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
             // Olay işlendi; sayaç sıfırlanamazsa Redis TTL'i dolunca silinir
             logger.warn(`Failed to reset retry count after dead letter replay: ${eventType}:${eventId}`, resetError);
         }
+        await this.recordPermanentShadowRecovery(eventId);
         logger.info(`Dead letter replay processed: ${eventType}:${eventId}`);
         return 'processed';
     }
@@ -494,7 +767,7 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
      * Oynatılacak kayıt `queued` yazılır ve kaydı yazan listener'ın anahtarını taşır (issue #648 DLQ-H): başarısız bir
      * oynatma yeni kayıt yazmaz, DeadLetterProcessorJob aynı kaydın `retryCount`'unu artırır.
      */
-    private async moveToDeadLetterQueue(data: T['data'], errorMessage: string, retryCount: number): Promise<void> {
+    private async moveToDeadLetterQueue(data: T['data'], errorMessage: string, retryCount: number, permanent = false): Promise<void> {
         // Mikroservis özelinde bağlantı durumunu kontrol et
         if (this.connection.readyState !== 1) {
             throw new Error(`MongoDB bağlantısı hazır değil, DeadLetter kaydedilemedi - readyState: ${this.connection.readyState}`);
@@ -503,7 +776,8 @@ export abstract class RetryableListener<T extends Event> extends Listener<T> {
         const deadLetterModel = createDeadLetterModel(this.connection);
         const eventId = this.getEventId(data);
         const attemptBudget = this.options.maxRetries + this.options.deadLetterMaxRetries;
-        const replayable = retryCount < attemptBudget;
+        // Kalıcı hata (UC-1043) oynatılmaz: oynatma da aynı hatayı verir
+        const replayable = !permanent && retryCount < attemptBudget;
 
         await deadLetterModel.build({
             subject: this.subject,

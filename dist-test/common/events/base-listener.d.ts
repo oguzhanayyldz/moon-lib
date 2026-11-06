@@ -9,6 +9,7 @@ export declare abstract class Listener<T extends Event> {
     constructor(client: Stan);
     subscriptionOptions(): import("node-nats-streaming").SubscriptionOptions;
     listen(): void;
+    private logUnhandledError;
     parseMessage(msg: Message): any;
 }
 //# sourceMappingURL=base-listener.d.ts.map

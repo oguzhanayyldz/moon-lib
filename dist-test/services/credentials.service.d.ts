@@ -39,6 +39,19 @@ export interface ParsedStockUpdateSettings {
     enabled: boolean;
     sources: any[];
 }
+/**
+ * Stok/fiyat GÖNDERİM (push) ayarı — BASE `stock_push_settings` / `price_push_settings`.
+ * Varsayılan AÇIK: anahtar yok, JSON bozuk ya da entegrasyon listede yoksa `enabled: true`
+ * (çekme ayarlarının "yoksa false" kuralının bilinçli TERSİ — geriye dönük uyum).
+ */
+export interface ParsedStockPushSettings {
+    enabled: boolean;
+    sources: any[];
+}
+export interface ParsedPricePushSettings {
+    enabled: boolean;
+    sources: any[];
+}
 export interface ParsedInvoiceSettings {
     enabled: boolean;
     sources: any[];
@@ -67,6 +80,8 @@ export interface ParsedCredentials {
     order_update_settings?: ParsedOrderUpdateSettings;
     shipment_settings?: ParsedShipmentSettings;
     invoice_settings?: ParsedInvoiceSettings;
+    stockPushEnabled?: boolean;
+    pricePushEnabled?: boolean;
     shipmentEnabled?: boolean;
     useIntegrationCargoLabel?: boolean;
     customCargoIntegrationId?: string | null;
@@ -119,6 +134,30 @@ export declare class CredentialsService {
      * UI migration sırasında her iki field da kullanımda olabilir.
      */
     private static matchesIntegration;
+    /**
+     * Gönderim (push) ayarı parse — çekme parse'ının TERSİ varsayılanla: eşleşen kaynak yoksa,
+     * anahtar yoksa ya da JSON bozuksa `enabled: true`. Yalnız eşleşen kaynakta `enabled === false`
+     * ise kapalı. Eşleşme çekme ile aynı: integrationId öncelikli, yoksa ad.
+     */
+    private static parsePushSettings;
+    static parseStockPushSettings(raw: string | any, integrationName: string, integrationId?: string): ParsedStockPushSettings;
+    static parsePricePushSettings(raw: string | any, integrationName: string, integrationId?: string): ParsedPricePushSettings;
+    /** Stok gönderimi açık mı? `stockPushEnabled` alanı yoksa (eski payload) true. */
+    static isStockPushEnabled(credentials: {
+        stockPushEnabled?: boolean;
+    } | null | undefined): boolean;
+    /** Fiyat gönderimi açık mı? `pricePushEnabled` alanı yoksa (eski payload) true. */
+    static isPricePushEnabled(credentials: {
+        pricePushEnabled?: boolean;
+    } | null | undefined): boolean;
+    /**
+     * BASE credentials'tan (ham Map/Object) bir entegrasyon için gönderim kapılarını çözer.
+     * Router ve catalog, mergeAndParse çalıştırmadan karar verebilsin diye.
+     */
+    static resolvePushSettings(baseCredentials: Map<string, string> | Record<string, any> | null | undefined, integrationId: string | undefined, integrationName: string): {
+        stockPushEnabled: boolean;
+        pricePushEnabled: boolean;
+    };
     /**
      * Price update settings parse ve filter
      *

@@ -11,7 +11,56 @@ interface RetryOptions {
     enableLock?: boolean;
     ackWaitSec?: number;
     deadLetterReplay?: boolean;
+    /**
+     * E11000'den sonra processEvent'in süreç içinde kaç kez yeniden koşulacağı (UC-1020). 0 = eski davranış: ilk E11000'de ack.
+     * E11000, çakışan yazımın kaydı ZATEN yazdığını söyler: yarışta (iki olay aynı benzersiz kaydı findOne→save ile oluşturuyor)
+     * yeniden koşum o kaydı bulur ve başarılı olur; gerçek çiftte E11000 tekrarlanır ve mesaj eskisi gibi ack'lenir.
+     * Verilmezse RETRYABLE_DUPLICATE_KEY_RETRIES ortam değişkeni (0–5), o da yoksa 0.
+     */
+    duplicateKeyRetries?: number;
+    /**
+     * Olay kilidinin işlem sürdükçe kaç ms'de bir yenileneceği (UC-1020). 0 = yenileme yok (eski davranış).
+     * lockTimeoutSec'ten kısa olmalı; uzun işlerde kilidin işin ortasında düşüp yeniden teslimin işi kopyalamasını önler.
+     * Verilmezse RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa lockTimeoutSec/3 (UC-430/UC-821: ackWait'i aşan iş,
+     * kilit düştüğü için yeniden teslimde ikinci kez koşuyordu).
+     */
+    lockRenewIntervalMs?: number;
+    /**
+     * Kilit yenilemesinin üst sınırı, ms (UC-1183). Aşılınca moon-lib heartbeat'i durur (logger.warn + retryable_listener_stuck_total
+     * {reason="max_lock_hold"}); alt sınıf kendi heartbeat'ini sarmıyorsa kilit TTL'inde düşer, sonraki yeniden teslim işi devralır.
+     * 0 = sınır yok (varsayılan). Verilmezse RETRYABLE_MAX_LOCK_HOLD_MS, o da yoksa 0.
+     */
+    maxLockHoldMs?: number;
+    /**
+     * Kilit sahibi hâlâ işlerken aynı mesajın kaç yeniden teslimden sonra takılı sayılacağı (UC-1183): warn + metrik
+     * ({reason="redelivery"}, mesaj (eventId + sıra) başına bir kez). 0 = kapalı. Verilmezse RETRYABLE_STUCK_REDELIVERY_THRESHOLD, o da yoksa 5.
+     */
+    stuckRedeliveryThreshold?: number;
+    /**
+     * Kalıcı hatada (isPermanentError) NATS yeniden denemesini atla: ilk denemede 'failed' DLQ kaydı + ack (UC-1043).
+     * false = eski davranış: maxRetries kez yeniden teslim, sonra 'queued' DLQ; kalıcı hata yalnız
+     * event_permanent_error_total{outcome="shadow"} olarak sayılır (gölge mod).
+     * Verilmezse RETRYABLE_PERMANENT_FAIL_FAST ('true' ya da '1'), o da yoksa false.
+     */
+    failFastOnPermanentError?: boolean;
 }
+/**
+ * RETRYABLE_DUPLICATE_KEY_RETRIES'ı okur; geçersiz ya da yoksa 0, üst sınır MAX_DUPLICATE_KEY_RETRIES.
+ */
+export declare function resolveDuplicateKeyRetries(explicit?: number): number;
+/**
+ * RETRYABLE_PERMANENT_FAIL_FAST'ı okur: yalnız 'true' ya da '1' açar; başka her değer kapalı.
+ */
+export declare function resolveFailFastOnPermanentError(explicit?: boolean): boolean;
+/**
+ * Kilit yenileme aralığını çözer (UC-430/UC-821): açık değer, yoksa RETRYABLE_LOCK_RENEW_INTERVAL_MS, o da yoksa
+ * lockTimeoutSec/3. 0 = yenileme yok (açık değerle ya da ortam değişkeniyle kapatılır). Geçersiz değer varsayılana düşer.
+ */
+export declare function resolveLockRenewIntervalMs(explicit: number | undefined, lockTimeoutSec: number): number;
+/** maxLockHoldMs'i çözer (UC-1183): açık değer, RETRYABLE_MAX_LOCK_HOLD_MS, 0 (sınır yok). */
+export declare function resolveMaxLockHoldMs(explicit?: number): number;
+/** stuckRedeliveryThreshold'u çözer (UC-1183): açık değer, RETRYABLE_STUCK_REDELIVERY_THRESHOLD, 5. 0 = kapalı. */
+export declare function resolveStuckRedeliveryThreshold(explicit?: number): number;
 /**
  * Retry özellikli temel listener sınıfı
  */
@@ -30,6 +79,12 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      * Distributed lock ile işlem yapmak için yardımcı metod
      */
     protected processWithLock<R>(eventId: string, callback: () => Promise<R>, payloadFingerprint?: string, deliverySequence?: number): Promise<R>;
+    private recordStuck;
+    /**
+     * Kilit sahibi hâlâ işlerken gelen aynı-mesaj yeniden teslimlerini sayar (UC-1183). Eşikte (mesaj başına bir kez) metrik,
+     * eşikten itibaren her teslimde warn. Sayaç hatası teslim akışını bozmaz.
+     */
+    private noteSameMessageRedelivery;
     /**
      * Kilit değerinin sahip adından sonraki kısmı: `@<sıra>#<parmak izi>`, sıra yoksa `#<parmak izi>`, parmak izi yoksa boş.
      * Kilidi uzatan alt sınıflar (heartbeat) beklenen değeri bununla kurar.
@@ -51,6 +106,32 @@ export declare abstract class RetryableListener<T extends Event> extends Listene
      * Retry mantığı ile geliştirilmiş mesaj işleme
      */
     onMessage(data: T['data'], msg: Message): Promise<void>;
+    /**
+     * DLQ kaydını yazar (enableDeadLetter açıksa) ve mesajı ack'ler. `permanent` ise kayıt oynatılmayan 'failed' yazılır.
+     * Kayıt yazılamazsa ack'lenmez, NATS yeniden teslim eder; kalıcı olan şema doğrulaması hatası loglanıp ack'lenir.
+     */
+    private deadLetterAndAck;
+    /**
+     * Hata aynı veriyle yeniden denemede de değişmez mi (UC-1043)? Servis düzeyi sınıflamayla aynı ad listesi
+     * (isDeterministicEventError; shipment UC-1023, orders UC-1013, invoice UC-1025). Alt sınıf genişletebilir.
+     * isTransientError KULLANILMAZ: bilinmeyen hatayı ve 'not found' metnini kalıcı sayar; oysa sıra dışı gelen
+     * olaylar (ör. güncelleme, oluşturmadan önce) "bulunamadı" fırlatır ve yeniden teslimle düzelir.
+     */
+    protected isPermanentError(error: unknown): boolean;
+    /** Gölge mod: kalıcı sayılan olayı sayar ve işaretler; sonraki teslimde başarı yanlış pozitif sayılır. Redis hatası yutulur. */
+    private markPermanentShadow;
+    /**
+     * Yeniden teslimde (ya da DLQ oynatmasında, `msg` yok) başarı: olay önceden kalıcı sayıldıysa 'recovered' sayılır —
+     * fail-fast açık olsaydı bu olay kaybolurdu. Faz 2'de (açma kararı) bu sayacın sıfır kalması aranır. Redis hatası yutulur.
+     */
+    private recordPermanentShadowRecovery;
+    /**
+     * processEvent'i koşar; E11000'de en fazla duplicateKeyRetries kez süreç içinde yeniden koşar (UC-1020).
+     * Yarış: çakışan yazım kaydı oluşturmuştur, yeniden koşumda handler'ın findOne'ı onu bulur → başarı ('resolved').
+     * Gerçek çift: E11000 her koşumda tekrarlar → son hata fırlatılır, çağıran eskisi gibi ack'ler.
+     * E11000 dışındaki hatalar hiç yeniden koşulmadan fırlatılır (NATS yeniden denemesi ve DLQ yolu değişmez).
+     */
+    private processEventWithDuplicateKeyRetries;
     /**
      * Anlık tekrar denemelerle işlemi gerçekleştir
      */

@@ -16,7 +16,8 @@ export class EntityVersionBulkUpdatedPublisher extends Publisher<EntityVersionBu
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 await super.publish(data);
-                logger.info(
+                // UC-1117: parti başına satır debug'da; tur özeti EventPublisherJob'da info
+                logger.debug(
                     `✅ EntityVersionBulkUpdated published: ${data.batchSize} updates in batch ${data.batchId}`
                 );
                 return;

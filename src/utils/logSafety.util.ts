@@ -18,7 +18,11 @@ const SAFE_QUERY_KEYS = new Set([
     'sockettimeoutms', 'ssl', 'tls', 'w'
 ]);
 // Start of an address in free text: a scheme (`redis://`) or the start of a word containing `@` (userinfo without scheme).
-const URI_START_IN_TEXT = /[A-Za-z][A-Za-z0-9+.-]*:\/\/|[^\s@]*@/;
+// Both alternatives are anchored at a word start (lookbehind): unanchored, `search()` rescanned the rest of a
+// long whitespace-free text from every position, which is quadratic (32 KB took over a second).
+// The scheme may follow a prefix of digits/`+.-` (`6379.redis://h?password=x`): the prefix class must NOT contain
+// letters, otherwise `[A-Za-z0-9+.-]*[A-Za-z]` is two-star and quadratic again.
+const URI_START_IN_TEXT = /(?<![A-Za-z0-9+.-])[0-9+.-]*[A-Za-z][A-Za-z0-9+.-]*:\/\/|(?<![^\s@])[^\s@]*@/;
 const WHITESPACE_PATTERN = /\s/;
 const SAFE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const SAFE_ERROR_CODE_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -77,21 +81,32 @@ export function maskConnectionUriSecret(value: string | undefined): string | und
  * Known limit: in userinfo without a scheme, the part of a password before a whitespace is not treated as an address.
  */
 export function maskConnectionUrisInText(text: string | undefined): string | undefined {
-    if (!text) {
+    // Cheap pre-check: an address needs `://` or `@`, so most log lines skip the scan entirely.
+    if (!text || (!text.includes('://') && !text.includes('@'))) {
         return text;
     }
+    // Indices into `text` instead of re-slicing: `rest.lastIndexOf('@')` per match rescanned the whole remainder
+    // (quadratic on many `@`-less addresses). The last `@` is found once; one before `pos` can never win `Math.max`.
+    const startPattern = new RegExp(URI_START_IN_TEXT.source, 'g');
+    const lastAt = text.lastIndexOf('@');
     let result = '';
-    let rest = text;
-    let start = rest.search(URI_START_IN_TEXT);
-    while (start !== -1) {
-        const anchor = Math.max(start, rest.lastIndexOf('@'));
-        const whitespaceIndex = rest.slice(anchor).search(WHITESPACE_PATTERN);
-        const end = whitespaceIndex === -1 ? rest.length : anchor + whitespaceIndex;
-        result += rest.slice(0, start) + maskUriList(rest.slice(start, end));
-        rest = rest.slice(end);
-        start = rest.search(URI_START_IN_TEXT);
+    let pos = 0;
+    for (;;) {
+        startPattern.lastIndex = pos;
+        const match = startPattern.exec(text);
+        if (!match) {
+            break;
+        }
+        const start = match.index;
+        const anchor = Math.max(start, lastAt);
+        let end = anchor;
+        while (end < text.length && !WHITESPACE_PATTERN.test(text[end])) {
+            end++;
+        }
+        result += text.slice(pos, start) + maskUriList(text.slice(start, end));
+        pos = end;
     }
-    return result + rest;
+    return result + text.slice(pos);
 }
 
 /**
@@ -438,11 +453,24 @@ export function redactSensitiveText(text: string): string {
         .replace(BARE_BEARER_PATTERN, `$1 ${REDACTED_FIELD_MASK}`);
 }
 
+// Field names repeat on every log line, so normalized names are cached (bounded: names can be data-derived keys).
+const NORMALIZED_FIELD_NAME_CACHE = new Map<string, string>();
+const NORMALIZED_FIELD_NAME_CACHE_LIMIT = 2000;
+
 function normalizeFieldName(name: string): string {
-    return name
+    const cached = NORMALIZED_FIELD_NAME_CACHE.get(name);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const normalized = name
         .replace(/[çÇğĞıİöÖşŞüÜ]/g, (letter) => TURKISH_TO_ASCII[letter])
         .toLowerCase()
         .replace(NON_ALPHANUMERIC_PATTERN, '');
+    if (NORMALIZED_FIELD_NAME_CACHE.size >= NORMALIZED_FIELD_NAME_CACHE_LIMIT) {
+        NORMALIZED_FIELD_NAME_CACHE.clear();
+    }
+    NORMALIZED_FIELD_NAME_CACHE.set(name, normalized);
+    return normalized;
 }
 
 /** Marker written in place of a personal-data value (UC-979), kept apart from the credential marker. */
@@ -643,6 +671,13 @@ const URL_USERINFO_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/]*@/;
 // `Bearer <token>` / `Basic <base64>` in free text (a header echoed into an error message). Fail-closed:
 // the word after a plain-English "basic" is masked too, because a base64 value cannot be told apart from it.
 const AUTH_SCHEME_TOKEN_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
+// Log meta names that `isSensitiveFieldName` flags but that hold a Redis/lock/cache key, measured on the
+// services' logger calls (UC-832): `{ key }`, `{ cacheKey }`, `{ lockKey }` are the most common hits.
+const LOG_META_NON_SENSITIVE_NAMES = new Set(['key', 'cachekey', 'lockkey', 'rediskey', 'dedupkey', 'dedupekey', 'idempotencykey']);
+// `<name>Keys` holds `Object.keys(…)` output — field names, not values (`credentialsKeys`, `responseKeys`),
+// unless the name is key material in plural form (`apiKeys`, `secretKeys`).
+const FIELD_NAME_LIST_SUFFIX = 'keys';
+const KEY_MATERIAL_PREFIXES = ['api', 'access', 'private', 'secret', 'client', 'encryption', 'signing', 'license', 'master', 'auth'];
 
 /** Error fields that may be written to logs. Headers, bodies and the request config are never carried over. */
 export interface SafeLogError {
@@ -723,6 +758,8 @@ export function toSafeLogError(error: unknown, depth = 0): SafeLogError {
  * - Errors are caught on the RAW value (`this[key]`), before `toJSON` output replaces them: the value
  *   the replacer receives for an `AxiosError` is already `toJSON()`'s copy of the request config.
  *   They are written as `toSafeLogError` output.
+ * - The value of a credential-named field (`apiKey`, `headers.Authorization`, `credentials`) becomes
+ *   `REDACTED_FIELD_MASK`; see `isSensitiveLogMetaField` for what is kept.
  * - Cycles become `"[Circular]"`. Detection uses the stack of ancestors of the current value, not a
  *   `WeakSet` of every visited value: the same object referenced twice without a cycle is written twice.
  * - `bigint` is written as a string, a `Buffer` as its length only.
@@ -736,6 +773,9 @@ export function serializeLogMeta(meta: unknown, maxLength: number = MAX_LOG_META
         json = JSON.stringify(meta, function (this: Record<string, unknown>, key: string, value: unknown) {
             const raw = this[key];
             let result = value;
+            if (key && isSensitiveLogMetaField(key, raw)) {
+                return REDACTED_FIELD_MASK;
+            }
             if (isLoggableError(raw)) {
                 result = toSafeLogError(raw);
             } else if (looksLikeHttpResponse(raw)) {
@@ -749,6 +789,9 @@ export function serializeLogMeta(meta: unknown, maxLength: number = MAX_LOG_META
                 return value.toString();
             } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(raw)) {
                 return `[Buffer ${raw.length} bytes]`;
+            }
+            if (typeof result === 'string') {
+                result = maskDuplicateKeyValue(result);
             }
             if (typeof result === 'object' && result !== null) {
                 while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
@@ -768,6 +811,54 @@ export function serializeLogMeta(meta: unknown, maxLength: number = MAX_LOG_META
         return '';
     }
     return json.length > maxLength ? `${json.slice(0, maxLength)}…[truncated ${json.length - maxLength} chars]` : json;
+}
+
+/**
+ * Whether a log meta field's value is masked: its name is credential-like (`isSensitiveFieldName`) and
+ * its value can hold a secret. Kept readable, as measured on the services' logger calls (UC-832):
+ * - booleans, numbers, `null`/`undefined` — flags and counts (`hasRefreshToken`, `revokedTokens: 3`)
+ * - errors — they are reduced by `toSafeLogError` instead (`tokenRefreshError`)
+ * - Redis/lock/cache keys (`key`, `cacheKey`, `lockKey`) and field-name lists (`credentialsKeys`)
+ */
+export function isSensitiveLogMetaField(name: string, value: unknown): boolean {
+    if (value === null || value === undefined || typeof value === 'boolean' || typeof value === 'number') {
+        return false;
+    }
+    if (isLoggableError(value) || !isSensitiveFieldName(name)) {
+        return false;
+    }
+    const normalized = normalizeFieldName(name);
+    if (LOG_META_NON_SENSITIVE_NAMES.has(normalized)) {
+        return false;
+    }
+    if (normalized.endsWith(FIELD_NAME_LIST_SUFFIX)) {
+        const prefix = normalized.slice(0, -FIELD_NAME_LIST_SUFFIX.length);
+        return prefix === '' || KEY_MATERIAL_PREFIXES.some((material) => prefix.endsWith(material));
+    }
+    return true;
+}
+
+/**
+ * Masks secrets in a log message: connection addresses (userinfo and query values), JWTs and `Bearer`
+ * tokens. Unlike `maskErrorText`, the name-based pair rules of `redactSensitiveText`
+ * are not applied: on the services' 11,316 logger messages (UC-832) they changed 46, all diagnostic ids
+ * (`LockKey: …`, `syncSessionId: …`, `dedup key: …`, "basic info") and no credential.
+ */
+export function maskLogMessageText(text: string): string {
+    return maskUriTextOrEmpty(text)
+        .replace(JWT_PATTERN, REDACTED_FIELD_MASK)
+        .replace(BARE_BEARER_PATTERN, `$1 ${REDACTED_FIELD_MASK}`);
+}
+
+// MongoDB E11000 message: the conflicting value (an e-mail, a code) sits between the braces after `dup key:`.
+const DUPLICATE_KEY_VALUE_PATTERN = /(dup key:\s*\{)[^}]*\}/g;
+
+/**
+ * Masks the conflicting value of a MongoDB duplicate-key (E11000) message: `dup key: { email: "…" }` becomes
+ * `dup key: { **** }`. Collection and index name stay. Known limit: a value that itself holds `}` is cut there.
+ */
+export function maskDuplicateKeyValue(text: string): string {
+    return text.replace(DUPLICATE_KEY_VALUE_PATTERN, `$1 ${MASK} }`);
 }
 
 /** Masks connection addresses, credential pairs and authorization tokens in an error message. */

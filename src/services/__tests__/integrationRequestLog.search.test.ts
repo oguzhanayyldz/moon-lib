@@ -41,6 +41,9 @@ function matchesCondition(doc: any, field: string, cond: any): boolean {
         if ('$exists' in cond) {
             return cond.$exists ? value !== undefined : value === undefined;
         }
+        if ('$ne' in cond && !('$gte' in cond)) {
+            return value !== cond.$ne;
+        }
         if ('$gte' in cond || '$lt' in cond || '$lte' in cond || '$gt' in cond) {
             if (value === undefined) return false;
             if ('$gte' in cond && !(value >= cond.$gte)) return false;

@@ -39,6 +39,13 @@ export interface CommandDispatchInfo {
  */
 export const STOCK_FETCH_MODE_SKIP_REASON = 'stock-fetch-mode';
 
+/**
+ * Kullanıcı bu entegrasyon için stok/fiyat GÖNDERİMİNİ ayardan kapattığında `skipped[].reason` değeri.
+ * Kullanıcının kendi kararıdır: özette `skipped` sayılır, bildirim tetiklemez (catalog SILENT_REASONS).
+ */
+export const STOCK_PUSH_DISABLED_SKIP_REASON = 'stock-push-disabled';
+export const PRICE_PUSH_DISABLED_SKIP_REASON = 'price-push-disabled';
+
 /** `summary` üretilen toplu komutlar */
 export const ITEM_SUMMARY_COMMANDS = ['updatePrices', 'updateStocks'] as const;
 

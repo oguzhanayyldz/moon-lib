@@ -97,6 +97,7 @@ const stockCountFinished_publisher_1 = require("../events/publishers/stockCountF
 class EventPublisherJob {
     constructor(natsClient, connection, serviceName // Optional: Thundering herd prevention için
     ) {
+        var _a;
         this.natsClient = natsClient;
         this.connection = connection;
         this.intervalId = null;
@@ -105,8 +106,10 @@ class EventPublisherJob {
         this.lastAlertLoggedAt = null; // Son ALERT logunun zamanı; sayı eşiğin altına inince sıfırlanır
         // Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz (aynı pod'da üst üste boşaltma yok)
         this.versionDrainRunning = false;
+        this.normalDrainRunning = false;
         this.podId = process.env.HOSTNAME || os_1.default.hostname();
         this.lastLeaseWarnAt = 0;
+        this.lastHintFallbackWarnAt = 0;
         // Kullanıcı bazlı son işlenen priority takibi (priority geçiş bekleme için)
         this.lastProcessedPriority = new Map();
         this.outboxModel = (0, outbox_schema_1.createOutboxModel)(connection);
@@ -114,10 +117,13 @@ class EventPublisherJob {
         const resolvedServiceName = serviceName || this.resolveServiceNameFromEnv();
         // Servis adından deterministik offset hesapla (0-2500ms arası)
         this.serviceOffset = this.calculateServiceOffset(resolvedServiceName);
-        this.serviceLabel = resolvedServiceName || 'unknown';
+        // UC-1211: entegrasyon servislerinin çoğu ServiceName enum'unda yok; etiket SERVICE_NAME'den gelir
+        this.serviceLabel = resolvedServiceName || ((_a = process.env.SERVICE_NAME) === null || _a === void 0 ? void 0 : _a.trim().toLowerCase()) || 'unknown';
         this.versionEventInterval = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_INTERVAL_MS', EventPublisherJob.VERSION_EVENT_INTERVAL_DEFAULT);
         this.versionBatchSize = Math.min(EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_BATCH_SIZE', EventPublisherJob.VERSION_BATCH_SIZE_MAX), EventPublisherJob.VERSION_BATCH_SIZE_MAX);
         this.versionMaxBatchesPerTick = EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_MAX_BATCHES_PER_TICK', EventPublisherJob.VERSION_MAX_BATCHES_PER_TICK_DEFAULT);
+        this.normalDrainBudgetMs = EventPublisherJob.readNonNegativeIntEnv('OUTBOX_DRAIN_BUDGET_MS', EventPublisherJob.NORMAL_DRAIN_BUDGET_MS_DEFAULT);
+        this.coalesceSubjects = EventPublisherJob.readCoalesceSubjects();
         this.versionLeases = new versionEventLease_util_1.VersionEventLeases(() => redisWrapper_service_1.redisWrapper.client, {
             leaseMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LEASE_MS', EventPublisherJob.VERSION_LEASE_MS_DEFAULT),
             latestTtlMs: EventPublisherJob.readPositiveIntEnv('VERSION_EVENT_LATEST_TTL_MS', EventPublisherJob.VERSION_LATEST_TTL_MS_DEFAULT),
@@ -134,7 +140,12 @@ class EventPublisherJob {
             const environment = process.env.NODE_ENV || 'production';
             const now = Date.now();
             const versionFilter = { environment, eventType: common_1.Subjects.EntityVersionUpdated };
-            const [pending, processing, failed, oldest, stuckProcessing, failedFinal] = yield Promise.all([
+            // UC-1211: status + environment önekli indeksle sayılır; eventType elemesi indeks içinde kalır
+            const recordsFilter = { environment, eventType: { $ne: common_1.Subjects.EntityVersionUpdated } };
+            const [recordsPending, recordsProcessing, recordsFailed, pending, processing, failed, oldest, stuckProcessing, failedFinal] = yield Promise.all([
+                this.outboxModel.countDocuments(Object.assign({ status: 'pending' }, recordsFilter)),
+                this.outboxModel.countDocuments(Object.assign({ status: 'processing' }, recordsFilter)),
+                this.outboxModel.countDocuments(Object.assign({ status: 'failed' }, recordsFilter)),
                 this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'pending' })),
                 this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'processing' })),
                 this.outboxModel.countDocuments(Object.assign(Object.assign({}, versionFilter), { status: 'failed' })),
@@ -161,6 +172,7 @@ class EventPublisherJob {
             ]);
             const oldestCreated = oldest === null || oldest === void 0 ? void 0 : oldest.creationDate;
             return {
+                records: { pending: recordsPending, processing: recordsProcessing, failed: recordsFailed },
                 versionRecords: { pending, processing, failed },
                 versionOldestPendingAgeSeconds: oldestCreated ? Math.max(0, (now - new Date(oldestCreated).getTime()) / 1000) : 0,
                 stuckProcessing,
@@ -172,6 +184,23 @@ class EventPublisherJob {
     static readPositiveIntEnv(name, fallback) {
         const value = Number(process.env[name]);
         return Number.isInteger(value) && value > 0 ? value : fallback;
+    }
+    /** Sıfır ya da pozitif tam sayı env değeri; boş ya da geçersizse varsayılan. */
+    /**
+     * UC-1135: yayın anında birleştirilecek olay tipleri (OUTBOX_COALESCE_SUBJECTS, virgüllü). Boş/yok = kapalı.
+     * Yalnız COALESCIBLE_SUBJECTS içindeki tipler kabul edilir; listede olmayan tip (ör. sync:requested) sessizce yok sayılır.
+     */
+    static readCoalesceSubjects() {
+        var _a;
+        const requested = ((_a = process.env.OUTBOX_COALESCE_SUBJECTS) !== null && _a !== void 0 ? _a : '').split(',').map(s => s.trim()).filter(Boolean);
+        return new Set(requested.filter(subject => EventPublisherJob.COALESCIBLE_SUBJECTS.includes(subject)));
+    }
+    static readNonNegativeIntEnv(name, fallback) {
+        const raw = process.env[name];
+        if (raw === undefined || raw.trim() === '')
+            return fallback;
+        const value = Number(raw);
+        return Number.isInteger(value) && value >= 0 ? value : fallback;
     }
     /**
      * Environment variable'dan servis adını çöz
@@ -227,7 +256,7 @@ class EventPublisherJob {
                 this.monitoringId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
                     yield this.monitorFailedEvents();
                 }), EventPublisherJob.RETRY_INTERVAL);
-                logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms, version=${this.versionEventInterval}ms (batch=${this.versionBatchSize}, maxBatches=${this.versionMaxBatchesPerTick}), serviceOffset=${this.serviceOffset}ms`);
+                logger_service_1.logger.info(`EventPublisherJob started: normal=${EventPublisherJob.RETRY_INTERVAL}ms (drainBudget=${this.normalDrainBudgetMs}ms), version=${this.versionEventInterval}ms (batch=${this.versionBatchSize}, maxBatches=${this.versionMaxBatchesPerTick}), serviceOffset=${this.serviceOffset}ms`);
             }, initialDelay);
         });
     }
@@ -262,9 +291,43 @@ class EventPublisherJob {
             }
         }
     }
+    /**
+     * Normal olay turu (UC-1082): tek geçişi bütçe dolana ya da bir geçiş hiç olay yayınlamayana kadar tekrarlar.
+     * Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz. Priority geçiş beklemesi ve _system_ önceliği
+     * her geçişte aynen uygulanır: bekleyen kullanıcı o geçişte olay yayınlamaz, döngü onu zorlamaz.
+     */
     processEvents() {
         return __awaiter(this, void 0, void 0, function* () {
+            if (this.normalDrainRunning) {
+                logger_service_1.logger.debug('Previous outbox drain is still running, skipping this tick');
+                return;
+            }
+            this.normalDrainRunning = true;
+            try {
+                const deadline = Date.now() + this.normalDrainBudgetMs;
+                let passes = 0;
+                let published = 0;
+                do {
+                    const passPublished = yield this.processEventsOnce();
+                    passes++;
+                    published += passPublished;
+                    if (passPublished === 0)
+                        break;
+                } while (Date.now() < deadline);
+                if (published > 0) {
+                    logger_service_1.logger.info(`Outbox drain: ${published} events in ${passes} passes`);
+                }
+            }
+            finally {
+                this.normalDrainRunning = false;
+            }
+        });
+    }
+    /** Tek geçiş: _system_ olayları ya da en çok 10 kullanıcının en düşük priority'li olayları. Yayınlanan olay sayısını döndürür. */
+    processEventsOnce() {
+        return __awaiter(this, void 0, void 0, function* () {
             var _a;
+            let published = 0;
             try {
                 // TTL-based cleanup — eski priority kayıtlarını temizle (bellek sızıntısı önleme)
                 this.cleanupPriorityMap();
@@ -285,8 +348,7 @@ class EventPublisherJob {
                     .limit(20);
                 if (systemEvents.length > 0) {
                     logger_service_1.logger.debug(`Processing ${systemEvents.length} _system_ events (highest priority)`);
-                    yield this.processEventBatch(systemEvents);
-                    return; // _system_ bitmeden diğerlerine geçme
+                    return yield this.processEventBatch(systemEvents); // _system_ bitmeden diğerlerine geçme
                 }
                 // ✅ STEP 2: Her kullanıcı için sequential priority işleme
                 const usersWithPendingEvents = yield this.outboxModel.distinct('userId', {
@@ -297,21 +359,12 @@ class EventPublisherJob {
                     userId: { $nin: ['_system_', null] }
                 });
                 if (usersWithPendingEvents.length === 0) {
-                    return;
+                    return 0;
                 }
                 // Her kullanıcı için en yüksek öncelikli event'leri işle
                 for (const userId of usersWithPendingEvents.slice(0, 10)) {
-                    // ✅ TEK SORGU: Priority sıralı event'leri al, en düşük priority'yi belirle
-                    const sortedEvents = yield this.outboxModel.find({
-                        status: 'pending',
-                        environment: currentEnvironment,
-                        retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
-                        eventType: { $ne: common_1.Subjects.EntityVersionUpdated },
-                        userId: userId
-                    })
-                        .sort({ priority: 1, creationDate: 1 })
-                        .limit(50)
-                        .lean();
+                    // Priority sıralı event'leri al, en düşük priority'yi belirle
+                    const sortedEvents = yield this.findUserEvents(userId, currentEnvironment);
                     if (sortedEvents.length === 0)
                         continue;
                     // İlk event'in priority'si = en düşük priority
@@ -336,7 +389,7 @@ class EventPublisherJob {
                     });
                     if (userEvents.length > 0) {
                         logger_service_1.logger.debug(`Processing ${userEvents.length} priority-${currentPriority} events for user ${userId}`);
-                        yield this.processEventBatch(userEvents);
+                        published += yield this.processEventBatch(userEvents);
                         // Son işlenen priority'yi güncelle
                         this.lastProcessedPriority.set(userId, {
                             priority: currentPriority,
@@ -345,7 +398,7 @@ class EventPublisherJob {
                         // ✅ Ek sorguya gerek yok: 50 event aldık, hepsi aynı priority değilse
                         // veya tam 50 geldiyse, demek ki daha var
                         const remainingCount = sortedEvents.length - userEvents.length;
-                        const mightHaveMore = userEvents.length === 50;
+                        const mightHaveMore = userEvents.length === EventPublisherJob.USER_EVENTS_LIMIT;
                         if (remainingCount > 0 || mightHaveMore) {
                             logger_service_1.logger.debug(`User ${userId} still has pending events (same priority: ${mightHaveMore ? '50+' : '0'}, other priorities: ${remainingCount})`);
                         }
@@ -355,19 +408,151 @@ class EventPublisherJob {
             catch (error) {
                 logger_service_1.logger.error('Event processing failed:', error);
             }
+            return published;
+        });
+    }
+    /**
+     * Kullanıcının en düşük priority'li bekleyen olayları (UC-1117), en çok USER_EVENTS_LIMIT kayıt, priority ve
+     * creationDate sırasıyla. İki sorgu, her biri kendi indeksine hint'li: önce priority 1-4 (ve priority'siz eski
+     * kayıtlar), yoksa priority 5. Sürüm olayları ilk sorgunun indeks aralığına girmez, ikincide eventType sınırıyla
+     * atlanır. İlk sorgu boş değilse sonuç tek sorgununkiyle aynıdır: sonraki adım yalnız en düşük priority'yi yayınlar.
+     */
+    findUserEvents(userId, environment) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const filter = {
+                status: 'pending',
+                environment,
+                retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
+                eventType: { $ne: common_1.Subjects.EntityVersionUpdated },
+                userId,
+            };
+            const urgent = yield this.findWithHint(Object.assign(Object.assign({}, filter), { priority: { $not: { $gte: 5 } } }), EventPublisherJob.USER_PRIORITY_INDEX);
+            if (urgent.length > 0)
+                return urgent;
+            return this.findWithHint(Object.assign(Object.assign({}, filter), { priority: { $gte: 5 } }), EventPublisherJob.USER_EVENT_TYPE_INDEX);
+        });
+    }
+    /** İndeks yoksa ya da henüz kuruluyorsa Mongo hint'li sorguyu reddeder; yayın durmasın diye hint'siz yeniden sorgular. */
+    findWithHint(filter, index) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const query = () => this.outboxModel.find(filter).sort({ priority: 1, creationDate: 1 }).limit(EventPublisherJob.USER_EVENTS_LIMIT);
+            try {
+                return yield query().hint(index).lean();
+            }
+            catch (error) {
+                const now = Date.now();
+                if (now - this.lastHintFallbackWarnAt >= EventPublisherJob.HINT_FALLBACK_WARN_INTERVAL) {
+                    this.lastHintFallbackWarnAt = now;
+                    logger_service_1.logger.warn(`Outbox query with index hint ${JSON.stringify(index)} failed, retrying without hint:`, error);
+                }
+                return query().lean();
+            }
         });
     }
     processEventBatch(events) {
         return __awaiter(this, void 0, void 0, function* () {
+            const { toPublish, groups } = this.groupCoalescible(events);
+            const claimedAt = new Date();
+            if (groups.length > 0) {
+                yield this.claimLosers(groups, claimedAt);
+            }
+            let published = 0;
+            const publishedIds = new Set();
             // Concurrency limit ile paralel işleme
-            for (let i = 0; i < events.length; i += EventPublisherJob.CONCURRENCY_LIMIT) {
-                const chunk = events.slice(i, i + EventPublisherJob.CONCURRENCY_LIMIT);
-                yield Promise.all(chunk.map(event => this.processOneEvent(event)));
+            for (let i = 0; i < toPublish.length; i += EventPublisherJob.CONCURRENCY_LIMIT) {
+                const chunk = toPublish.slice(i, i + EventPublisherJob.CONCURRENCY_LIMIT);
+                const results = yield Promise.all(chunk.map((event) => __awaiter(this, void 0, void 0, function* () {
+                    const ok = yield this.processOneEvent(event);
+                    if (ok)
+                        publishedIds.add(event.id);
+                    return ok;
+                })));
+                published += results.filter(Boolean).length;
+            }
+            if (groups.length > 0) {
+                yield this.settleLosers(groups, publishedIds, claimedAt);
+            }
+            return published;
+        });
+    }
+    /**
+     * UC-1135: bayraktaki tiplerde aynı (tip, kullanıcı, payload.id) için partideki en yüksek payload.version kazanır.
+     * Eşit sürümde ilk gelen (en eski) kazanır. Sürümü/id'si olmayan kayıt birleşmez, olduğu gibi yayınlanır.
+     * Bayrak kapalıyken toPublish = events (davranış değişmez).
+     */
+    groupCoalescible(events) {
+        var _a;
+        if (this.coalesceSubjects.size === 0) {
+            return { toPublish: events, groups: [] };
+        }
+        const byKey = new Map();
+        const toPublish = [];
+        for (const event of events) {
+            const payload = event.payload;
+            if (!this.coalesceSubjects.has(event.eventType) || !(payload === null || payload === void 0 ? void 0 : payload.id) || typeof payload.version !== 'number') {
+                toPublish.push(event);
+                continue;
+            }
+            const key = [event.eventType, (_a = event.userId) !== null && _a !== void 0 ? _a : '', payload.id].join('|');
+            const group = byKey.get(key);
+            if (!group) {
+                byKey.set(key, { winner: event, losers: [] });
+            }
+            else if (payload.version > group.winner.payload.version) {
+                group.losers.push(group.winner);
+                group.winner = event;
+            }
+            else {
+                group.losers.push(event);
+            }
+        }
+        const groups = [];
+        for (const group of byKey.values()) {
+            toPublish.push(group.winner);
+            if (group.losers.length > 0)
+                groups.push(group);
+        }
+        return { toPublish, groups };
+    }
+    /** Kaybedenleri claim et; başka pod'un aldığı satır dokunulmadan kalır (claimedAt filtresi sonraki adımda onu ayıklar). */
+    claimLosers(groups, claimedAt) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.outboxModel.updateMany({ _id: { $in: groups.flatMap(g => g.losers.map(e => e.id)) }, status: 'pending' }, { $set: { status: 'processing', processingStartedAt: claimedAt } });
+            }
+            catch (error) {
+                // Claim düşerse kaybedenler pending kalır ve normal yoldan yayınlanır (kayıp yok)
+                logger_service_1.logger.error('Failed to claim superseded stock events:', error);
             }
         });
     }
+    /**
+     * Kazanan yayınlandıysa kaybedenler 'superseded' + supersededBy olur; yayınlanmadıysa pending'e döner.
+     * Güncelleme düşerse kaybedenler processing'te kalır, monitorFailedEvents 5 dk sonra kurtarır (çift, kayıp değil).
+     */
+    settleLosers(groups, publishedIds, claimedAt) {
+        return __awaiter(this, void 0, void 0, function* () {
+            for (const { winner, losers } of groups) {
+                const filter = { _id: { $in: losers.map(e => e.id) }, status: 'processing', processingStartedAt: claimedAt };
+                try {
+                    if (publishedIds.has(winner.id)) {
+                        const result = yield this.outboxModel.updateMany(filter, { $set: { status: 'superseded', supersededBy: winner.id } });
+                        EventMetrics_1.EventMetrics.outboxEventsCoalescedTotal.inc({ service: this.serviceLabel, event_type: winner.eventType }, result.modifiedCount);
+                    }
+                    else {
+                        yield this.outboxModel.updateMany(filter, { $set: { status: 'pending' }, $unset: { processingStartedAt: 1 } });
+                    }
+                }
+                catch (error) {
+                    logger_service_1.logger.error(`Failed to settle superseded events of ${winner.id}:`, error);
+                }
+            }
+        });
+    }
+    /** Olay bu çağrıda yayınlanıp published işaretlendiyse true. */
     processOneEvent(event) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 // Atomik güncelleme: pending durumundaki event'i processing olarak işaretle
                 const claimedAt = new Date();
@@ -384,7 +569,16 @@ class EventPublisherJob {
                 // Event başka bir pod tarafından alınmış demektir, atla
                 if (updated.modifiedCount === 0) {
                     logger_service_1.logger.debug(`Event ${event.id} is already being processed by another publisher, skipping`);
-                    return;
+                    return false;
+                }
+                // UC-1358: NATS max_payload'ı aşan yük yayınlanmaz. Gönderilseydi sunucu bağlantıyı koparırdı
+                // ("Maximum Payload Exceeded"): servisin BÜTÜN NATS yayını/dinlemesi düşer ve kayıt her denemede
+                // bağlantıyı yeniden koparırdı. Bu yük hiçbir denemede gidemeyeceği için kayıt doğrudan kalıcı failed olur.
+                const payloadBytes = Buffer.byteLength(JSON.stringify((_a = event.payload) !== null && _a !== void 0 ? _a : null), 'utf8');
+                const maxPayloadBytes = this.getMaxPublishPayloadBytes();
+                if (payloadBytes > maxPayloadBytes) {
+                    yield this.markPayloadTooLarge({ _id: event.id, processingStartedAt: claimedAt }, event, payloadBytes, maxPayloadBytes);
+                    return false;
                 }
                 // Deneme hakkını yalnız yayın hatası tüketir; Mongo durum güncellemesi hataları aşağıdaki catch'e düşer
                 try {
@@ -394,14 +588,17 @@ class EventPublisherJob {
                     // Önce logla: markPublishFailed'daki Mongo hatası dış catch'e düşer ve asıl yayın hatası kaybolmaz
                     logger_service_1.logger.error(`Failed to publish event ${event.id}:`, error);
                     yield this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount);
-                    return;
+                    return false;
                 }
                 // Başarılı olarak işaretle
                 yield this.outboxModel.updateOne({ _id: event.id, status: 'processing', processingStartedAt: claimedAt }, { $set: { status: 'published' } });
-                logger_service_1.logger.info(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
+                // UC-1117: olay başına satır debug'da; tur özeti processEvents'te info
+                logger_service_1.logger.debug(`Successfully published event ${event.id} (priority: ${event.priority}, user: ${event.userId})`);
+                return true;
             }
             catch (error) {
                 logger_service_1.logger.error(`Failed to update outbox state of event ${event.id}:`, error);
+                return false;
             }
         });
     }
@@ -425,6 +622,41 @@ class EventPublisherJob {
             });
             if (exhausted && result.modifiedCount > 0) {
                 logger_service_1.logger.error(`${result.modifiedCount} outbox event(s) permanently failed after ${attempts} publish attempts`, filter);
+            }
+        });
+    }
+    /**
+     * UC-1358: yayınlanabilecek en büyük outbox yükü (JSON bayt). Öncelik: OUTBOX_MAX_PAYLOAD_BYTES env →
+     * bağlı NATS sunucusunun bildirdiği max_payload → 10 MB (k8s-single nats-config). Sunucu sınırından
+     * STAN zarfı (clientID, guid, subject, protobuf) için pay düşülür.
+     */
+    getMaxPublishPayloadBytes() {
+        var _a, _b, _c;
+        const fromEnv = EventPublisherJob.readPositiveIntEnv('OUTBOX_MAX_PAYLOAD_BYTES', 0);
+        if (fromEnv > 0)
+            return fromEnv;
+        const serverMax = Number((_c = (_b = (_a = this.natsClient) === null || _a === void 0 ? void 0 : _a.nc) === null || _b === void 0 ? void 0 : _b.info) === null || _c === void 0 ? void 0 : _c.max_payload);
+        const limit = Number.isInteger(serverMax) && serverMax > 0 ? serverMax : EventPublisherJob.NATS_MAX_PAYLOAD_DEFAULT;
+        return Math.max(limit - EventPublisherJob.NATS_ENVELOPE_MARGIN, 1);
+    }
+    /** Max payload'ı aşan kaydı denemeden kalıcı failed yapar (yeniden deneme yok, ALERT sayımına girer). */
+    markPayloadTooLarge(filter, event, payloadBytes, maxPayloadBytes) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const message = `payload too large for NATS: ${payloadBytes} bytes > ${maxPayloadBytes} bytes`;
+            const result = yield this.outboxModel.updateOne(Object.assign(Object.assign({}, filter), { status: 'processing', retryCount: event.retryCount }), {
+                $set: {
+                    status: 'failed',
+                    lastAttempt: new Date(),
+                    retryCount: EventPublisherJob.MAX_PUBLISH_ATTEMPTS,
+                    error: message
+                }
+            });
+            if (result.modifiedCount > 0) {
+                // Yük içeriği loglanmaz (müşteri verisi/dosya içerebilir); yalnız kimlik ve boyut
+                logger_service_1.logger.error(`Outbox event ${event.id} permanently failed without publishing: ${message}`, {
+                    eventType: event.eventType,
+                    userId: event.userId
+                });
             }
         });
     }
@@ -462,7 +694,7 @@ class EventPublisherJob {
                     if (!result.more)
                         break;
                 }
-                if (batches > 1) {
+                if (published > 0) {
                     logger_service_1.logger.info(`🔄 Version event drain: ${published} events in ${batches} batches`);
                 }
             }
@@ -552,7 +784,7 @@ class EventPublisherJob {
                 const sendKeys = new Set(toSend.map(e => (0, versionEventOutbox_util_1.versionEventKey)(e.payload)));
                 const eventIds = toSend.map(e => e.id);
                 const superseded = versionEvents.filter(e => sendKeys.has((0, versionEventOutbox_util_1.versionEventKey)(e.payload)) && winners.get((0, versionEventOutbox_util_1.versionEventKey)(e.payload)) !== e);
-                logger_service_1.logger.info(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk (${toSend.length} sent, ${superseded.length} superseded, ${deferred.length} in flight elsewhere, ${alreadyDelivered.length} already delivered)`);
+                logger_service_1.logger.debug(`🔄 Processing ${versionEvents.length} EntityVersionUpdated events as bulk (${toSend.length} sent, ${superseded.length} superseded, ${deferred.length} in flight elsewhere, ${alreadyDelivered.length} already delivered)`);
                 if (toSend.length === 0) {
                     return { published: 0, more: fullBatch };
                 }
@@ -587,7 +819,7 @@ class EventPublisherJob {
                         })), { ordered: false });
                         EventMetrics_1.EventMetrics.versionEventsCoalescedTotal.inc({ service: this.serviceLabel, stage: 'send' }, superseded.length);
                     }
-                    logger_service_1.logger.info(`✅ Bulk published ${toSend.length} EntityVersionUpdated events (batch: ${batchId})`);
+                    logger_service_1.logger.debug(`✅ Bulk published ${toSend.length} EntityVersionUpdated events (batch: ${batchId})`);
                     return { published: toSend.length, more: fullBatch };
                 }
                 catch (error) {
@@ -662,15 +894,17 @@ class EventPublisherJob {
                 const now = Date.now();
                 const stuckCutoff = new Date(now - EventPublisherJob.STUCK_PROCESSING_TIMEOUT);
                 const fallbackFloor = new Date(now - EventPublisherJob.STUCK_FALLBACK_MAX_AGE);
+                const environment = process.env.NODE_ENV || 'production';
                 const recovered = yield this.outboxModel.updateMany({
                     status: 'processing',
+                    // UC-1070: paylaşımlı Mongo'da başka environment'ın claim'i geri alınmaz (iki dal için de geçerli)
+                    environment,
                     $or: [
                         { processingStartedAt: { $lt: stuckCutoff } },
                         // UC-984: zaman damgası olmayan kayıt hiç kurtarılmıyordu; son 24 saattekiler updatedOn'a,
-                        // updatedOn da yoksa creationDate'e göre kurtarılır (yalnız kendi environment'ı)
+                        // updatedOn da yoksa creationDate'e göre kurtarılır
                         {
                             processingStartedAt: { $not: { $type: 'date' } },
-                            environment: process.env.NODE_ENV || 'production',
                             $or: [
                                 { updatedOn: { $lt: stuckCutoff, $gte: fallbackFloor } },
                                 { updatedOn: { $not: { $type: 'date' } }, creationDate: { $lt: stuckCutoff, $gte: fallbackFloor } }
@@ -689,7 +923,7 @@ class EventPublisherJob {
                 // yeniden yayınlanması ayrı ve onaylı bir operasyondur.
                 const requeued = yield this.outboxModel.updateMany({
                     status: 'failed',
-                    environment: process.env.NODE_ENV || 'production',
+                    environment,
                     retryCount: { $lt: EventPublisherJob.MAX_PUBLISH_ATTEMPTS },
                     nextAttemptAt: { $lte: new Date() }
                 }, {
@@ -700,7 +934,9 @@ class EventPublisherJob {
                     logger_service_1.logger.warn(`Requeued ${requeued.modifiedCount} failed events for another publish attempt`);
                 }
                 // Diğer mevcut monitoring kodları...
+                // UC-1070: başka environment'ın kalıcı hataları bu pod'un ALERT'ine girmez
                 const failedEvents = yield this.outboxModel.countDocuments({
+                    environment,
                     status: 'failed',
                     retryCount: { $gte: EventPublisherJob.MAX_PUBLISH_ATTEMPTS }
                 });
@@ -1038,6 +1274,9 @@ EventPublisherJob.MAX_PUBLISH_ATTEMPTS = 5;
 EventPublisherJob.PUBLISH_RETRY_BASE_DELAY = 30000; // 30 saniye
 EventPublisherJob.PUBLISH_RETRY_MAX_DELAY = 240000; // 4 dakika
 EventPublisherJob.MAX_JITTER = 500; // 0-500ms random jitter
+// UC-1358: NATS max_payload (infra/k8s-single/nats-config.yaml: 10485760) ve STAN zarfı payı
+EventPublisherJob.NATS_MAX_PAYLOAD_DEFAULT = 10 * 1024 * 1024;
+EventPublisherJob.NATS_ENVELOPE_MARGIN = 16 * 1024;
 // processing'te kalan kayıt bu süreden sonra pending'e döner
 EventPublisherJob.STUCK_PROCESSING_TIMEOUT = 5 * 60000; // 5 dakika
 // UC-984: processingStartedAt'ı olmayan (ya da Date olmayan) processing kaydı updatedOn/creationDate'e göre
@@ -1047,9 +1286,22 @@ EventPublisherJob.STUCK_FALLBACK_MAX_AGE = 24 * 60 * 60000; // 24 saat
 // Metrikte "kendiliğinden kurtulmayacak" sayılan processing kaydı: otomatik kurtarmanın iki katı süre
 EventPublisherJob.STUCK_METRIC_AGE = 2 * EventPublisherJob.STUCK_PROCESSING_TIMEOUT;
 EventPublisherJob.PRIORITY_TRANSITION_DELAY = 5000; // 5 saniye - priority geçişlerinde bekleme
+// UC-1082: normal olaylar 3 sn'de bir tek geçişle (kullanıcı başına 50 olay) yayınlanıyordu; tek kullanıcının
+// tavanı ~1.000 olay/dk idi ve 10.000 siparişlik birikim 40 dk'da boşalıyordu. Tur artık bu bütçe dolana ya da
+// kuyrukta yayınlanacak olay kalmayana kadar geçişi tekrarlar. 0 = eski tek geçiş davranışı (OUTBOX_DRAIN_BUDGET_MS).
+EventPublisherJob.NORMAL_DRAIN_BUDGET_MS_DEFAULT = 2000;
+EventPublisherJob.USER_EVENTS_LIMIT = 50;
+// UC-1117: kullanıcı başı sorgunun indeksleri (outbox.schema.ts). Hint'siz tek sorguda planlayıcı, sürüm olayı
+// birikiminde eventType'lı indeksi seçip önbelleğe alıyor; birikim iş olayına dönünce plan değişmiyor ve her
+// geçiş binlerce bekleyen kaydı okuyup bellekte sıralıyordu (UC-1082 profili: sorgu başına ~12 bin belge).
+EventPublisherJob.USER_PRIORITY_INDEX = { status: 1, environment: 1, userId: 1, priority: 1, creationDate: 1 };
+EventPublisherJob.USER_EVENT_TYPE_INDEX = { status: 1, environment: 1, retryCount: 1, userId: 1, eventType: 1 };
+EventPublisherJob.HINT_FALLBACK_WARN_INTERVAL = 60000; // hint'siz sorguya düşme uyarısı en fazla dakikada bir
 EventPublisherJob.PRIORITY_MAP_TTL = 300000; // 5 dakika — bu süreden eski entry'ler temizlenir
 EventPublisherJob.PRIORITY_MAP_MAX_SIZE = 2000; // Maksimum kullanıcı sayısı
 /**
  * Event batch'ini işle — paralel, concurrency limit ile
  */
 EventPublisherJob.CONCURRENCY_LIMIT = 5;
+/** Her güncelleme tam durumu taşıyan, yalnız en yüksek sürümü anlamlı olan olay tipleri (payload.id + payload.version). */
+EventPublisherJob.COALESCIBLE_SUBJECTS = [common_1.Subjects.ProductStockUpdated];

@@ -154,6 +154,33 @@ describe('UC-984 — outbox recovery, claim ownership and outbox metrics (real M
             expect(await statusOf(otherEnv)).toBe('processing');
         });
 
+        it('UC-1070: a record of another environment with an old processingStartedAt stays processing', async () => {
+            // Shared Mongo: a production pod must not hand a development claim back (and vice versa)
+            const otherEnv = await insert({ status: 'processing', environment: 'development', processingStartedAt: ago(10 * MIN) });
+            const own = await insert({ status: 'processing', processingStartedAt: ago(10 * MIN) });
+
+            await newJob().monitorFailedEvents();
+
+            expect(await statusOf(otherEnv)).toBe('processing');
+            expect((await Outbox.collection.findOne({ _id: otherEnv }))?.processingStartedAt).toBeInstanceOf(Date);
+            expect(await statusOf(own)).toBe('pending');
+        });
+
+        it('UC-1070: permanently failed records of another environment do not raise the ALERT', async () => {
+            const { logger } = jest.requireMock('../services/logger.service') as { logger: { error: jest.Mock } };
+            const alerts = () => logger.error.mock.calls.filter(([message]) => String(message).startsWith('ALERT:'));
+            logger.error.mockClear();
+            await Promise.all(Array.from({ length: 6 }, () => insert({ status: 'failed', environment: 'development', retryCount: 5 })));
+
+            await newJob().monitorFailedEvents();
+            expect(alerts()).toHaveLength(0);
+
+            // Control: the same records in the own environment do raise it
+            await Promise.all(Array.from({ length: 6 }, () => insert({ status: 'failed', retryCount: 5 })));
+            await newJob().monitorFailedEvents();
+            expect(alerts()).toEqual([[`ALERT: 6 events have failed permanently!`]]);
+        });
+
         it('UC-984: a recovered record is published by the next version tick (no loss end to end)', async () => {
             const id = await insert({ status: 'processing', updatedOn: ago(10 * MIN) });
             const job = newJob();
@@ -237,6 +264,52 @@ describe('UC-984 — outbox recovery, claim ownership and outbox metrics (real M
             expect(unrecovered).toEqual({ processing_stuck: 2, failed_final: 2 });
         });
 
+        it('UC-1211: outbox_records counts non-version events by status — own environment only', async () => {
+            await insert({ status: 'pending', eventType: Subjects.StockUpdated });
+            await insert({ status: 'pending', eventType: Subjects.OrderUpdated });
+            await insert({ status: 'processing', eventType: Subjects.OrderUpdated, processingStartedAt: ago(30_000) });
+            await insert({ status: 'failed', eventType: Subjects.StockUpdated, retryCount: 5 });
+            await insert({ status: 'failed', eventType: 'catalog:mapping:updated', retryCount: 1, nextAttemptAt: new Date(Date.now() + MIN) });
+            await insert({ status: 'failed', eventType: Subjects.StockUpdated, retryCount: 0 });
+            // Not counted: version events, another environment, published records
+            await insert({ status: 'pending' });
+            await insert({ status: 'failed', retryCount: 5 });
+            await insert({ status: 'pending', eventType: Subjects.StockUpdated, environment: 'development' });
+            await insert({ status: 'failed', eventType: Subjects.StockUpdated, environment: 'development' });
+            await insert({ status: 'published', eventType: Subjects.StockUpdated });
+            newJob();
+
+            const records = await metricValues('outbox_records');
+            const byStatus = Object.fromEntries(records.map(v => [v.labels.status, v.value]));
+            expect(byStatus).toEqual({ pending: 2, processing: 1, failed: 3 });
+            records.forEach(v => expect(v.labels.service).toBe('inventory'));
+        });
+
+        it('UC-1211: outbox_records reports zeros for an empty outbox (alarm sees 0, not "no data")', async () => {
+            newJob();
+
+            const byStatus = Object.fromEntries((await metricValues('outbox_records')).map(v => [v.labels.status, v.value]));
+            expect(byStatus).toEqual({ pending: 0, processing: 0, failed: 0 });
+        });
+
+        it('UC-1211: a service outside the ServiceName enum is labelled with SERVICE_NAME, not "unknown"', async () => {
+            process.env.SERVICE_NAME = 'Hepsiburada';
+            await insert({ status: 'failed', eventType: Subjects.StockUpdated, retryCount: 5 });
+            newJob();
+
+            const failed = (await metricValues('outbox_records')).find(v => v.labels.status === 'failed');
+            expect(failed).toEqual(expect.objectContaining({ value: 1, labels: { service: 'hepsiburada', status: 'failed' } }));
+        });
+
+        it('UC-1211: without SERVICE_NAME the label stays "unknown"', async () => {
+            delete process.env.SERVICE_NAME;
+            newJob();
+
+            const records = await metricValues('outbox_records');
+            expect(records).toHaveLength(3);
+            records.forEach(v => expect(v.labels.service).toBe('unknown'));
+        });
+
         it('empty version queue reports zero age', async () => {
             newJob();
 
@@ -249,10 +322,12 @@ describe('UC-984 — outbox recovery, claim ownership and outbox metrics (real M
 
             await expect(EventMetrics.getRegistry().metrics()).resolves.toContain('outbox_version_records');
             expect(await metricValues('outbox_version_records')).toEqual([]);
+            expect(await metricValues('outbox_records')).toEqual([]);
         });
 
-        it('the three gauges of one scrape share a single collection run', async () => {
+        it('the four gauges of one scrape share a single collection run', async () => {
             const collect = jest.fn().mockResolvedValue({
+                records: { pending: 2, processing: 0, failed: 1 },
                 versionRecords: { pending: 1, processing: 0, failed: 0 },
                 versionOldestPendingAgeSeconds: 4,
                 stuckProcessing: 0,

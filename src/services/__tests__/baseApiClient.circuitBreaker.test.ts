@@ -28,6 +28,13 @@ class RateLimitAwareTestApiClient extends TestApiClient {
     }
 }
 
+// UC-1268: kimlik hatasini govde koduyla (400 + errorCode) bildiren entegrasyonu (n11) simule eder.
+class AuthFailureAwareTestApiClient extends TestApiClient {
+    protected isAuthFailureError(error: any): boolean {
+        return error.response?.status === 400 && error.response?.data?.errorCode === 'SELLER_API.authenticationFailed';
+    }
+}
+
 function makeClient(httpRequest: jest.Mock, authTracking = false, ClientClass: typeof TestApiClient = TestApiClient): TestApiClient {
     const config: any = {
         rateLimiter: { points: 1000, duration: 1 },
@@ -241,6 +248,64 @@ describe('BaseApiClient — isRateLimitedAuthError kancasi (#595)', () => {
         expect(AuthFailureTracker.increment).toHaveBeenCalledWith(
             expect.objectContaining({ userId: 'u1', integrationId: 'i1', integrationName: 'test' }),
             403,
+            expect.any(String),
+            OperationType.FETCH_ORDERS
+        );
+    });
+});
+
+describe('BaseApiClient — isAuthFailureError kancasi (UC-1268)', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const fail400 = (errorCode: string) =>
+        jest.fn(async () => {
+            throw { response: { status: 400, data: { errorCode } }, message: 'bad', isAxiosError: true };
+        });
+
+    it('kanca true dondurunce 400 sayaca girir ve KESIN sinyal (definite) ile gider — 5 cagri = 5 increment', async () => {
+        const client = makeClient(fail400('SELLER_API.authenticationFailed'), true, AuthFailureAwareTestApiClient);
+
+        for (let i = 0; i < 5; i++) {
+            await expect(client.get('/x', { ...REQ, operationType: OperationType.FETCH_ORDERS })).rejects.toBeDefined();
+        }
+
+        expect(AuthFailureTracker.increment).toHaveBeenCalledTimes(5);
+        expect(AuthFailureTracker.increment).toHaveBeenCalledWith(
+            expect.objectContaining({ userId: 'u1', integrationId: 'i1' }),
+            400,
+            expect.any(String),
+            OperationType.FETCH_ORDERS,
+            { definite: true }
+        );
+    });
+
+    it('baska errorCode ile gelen 400 sayilmaz', async () => {
+        const client = makeClient(fail400('SELLER_API.invalidParameter'), true, AuthFailureAwareTestApiClient);
+
+        await expect(client.get('/x', { ...REQ, operationType: OperationType.FETCH_ORDERS })).rejects.toBeDefined();
+
+        expect(AuthFailureTracker.increment).not.toHaveBeenCalled();
+    });
+
+    it('kanca tanimlanmamissa (eski entegrasyonlar) 400 sayilmaz', async () => {
+        const client = makeClient(fail400('SELLER_API.authenticationFailed'), true, TestApiClient);
+
+        await expect(client.get('/x', { ...REQ, operationType: OperationType.FETCH_ORDERS })).rejects.toBeDefined();
+
+        expect(AuthFailureTracker.increment).not.toHaveBeenCalled();
+    });
+
+    it('kancali istemcide 401/403 eskisi gibi sayilir ve definite bayragi tasimaz (esik 2 korunur)', async () => {
+        const httpRequest = jest.fn(async () => {
+            throw { response: { status: 401, data: {} }, message: 'unauthorized', isAxiosError: true };
+        });
+        const client = makeClient(httpRequest, true, AuthFailureAwareTestApiClient);
+
+        await expect(client.get('/x', { ...REQ, operationType: OperationType.FETCH_ORDERS })).rejects.toBeDefined();
+
+        expect(AuthFailureTracker.increment).toHaveBeenCalledWith(
+            expect.objectContaining({ userId: 'u1' }),
+            401,
             expect.any(String),
             OperationType.FETCH_ORDERS
         );

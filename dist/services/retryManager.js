@@ -24,8 +24,14 @@ class RetryManager {
             ttlSeconds: 86400, // 24 saat
             backoffFactor: 2
         };
-        this.redisClient = redisWrapper_service_1.redisWrapper.client;
         this.config = Object.assign(Object.assign({}, this.defaultConfig), config);
+    }
+    /**
+     * Her çağrıda redisWrapper'dan okunur (UC-835): Redis kopunca servisin 'end' işleyicisi yeni istemci kurar;
+     * kurucuda yakalanan istemci kapalı kalır ve deneme sayacı çağrıları fırlardı.
+     */
+    get redisClient() {
+        return redisWrapper_service_1.redisWrapper.client;
     }
     /**
      * Bir olayın retry sayısını al

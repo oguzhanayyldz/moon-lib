@@ -35,13 +35,13 @@ export class EventMetrics {
    *
    * Tracks how long it takes to process an event from receipt to completion.
    * Includes labels: service, event_type, queue_group, status
-   * Buckets: 10ms -> 10s
+   * Buckets: 10ms -> 120s (UC-967: toplu işlemler için 30/60/120)
    */
   static readonly eventProcessingDuration = new Histogram({
     name: 'event_processing_duration_seconds',
     help: 'Duration of event processing in seconds',
     labelNames: ['service', 'event_type', 'queue_group', 'status'],
-    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10], // 10ms -> 10s
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 30, 60, 120], // 10ms -> 120s
     registers: [EventMetrics.registry]
   });
 
@@ -96,6 +96,51 @@ export class EventMetrics {
     name: 'event_dlq_write_error_total',
     help: 'Total number of dead letter records that could not be written',
     labelNames: ['service', 'event_type', 'reason'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Duplicate key (E11000) sonuçları (Counter)
+   *
+   * Counts RetryableListener duplicate key outcomes (UC-1020).
+   * outcome=acked: the message was acked without NATS retry (after duplicateKeyRetries in-process reruns, 0 by default);
+   * if the handler is not idempotent the rest of the event's work is not written.
+   * outcome=resolved: an in-process rerun succeeded, i.e. the E11000 was a race, not a real duplicate.
+   * Includes labels: service, event_type, queue_group, outcome
+   */
+  static readonly eventDuplicateKeyTotal = new Counter<'service' | 'event_type' | 'queue_group' | 'outcome'>({
+    name: 'event_duplicate_key_total',
+    help: 'Total number of duplicate key errors in event listeners by outcome',
+    labelNames: ['service', 'event_type', 'queue_group', 'outcome'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Kalıcı (deterministik) hatalar (Counter) — UC-1043
+   *
+   * outcome: failed_fast (fail-fast açık: ilk denemede 'failed' DLQ kaydı + ack), shadow (fail-fast kapalı: eski
+   * yeniden deneme yolu sürer, yalnız sayılır), recovered (shadow sayılan olay sonraki teslimde BAŞARILI oldu —
+   * yanlış pozitif: fail-fast açık olsaydı bu olay kaybolurdu).
+   * Includes labels: service, event_type, queue_group, outcome
+   */
+  static readonly eventPermanentErrorTotal = new Counter<'service' | 'event_type' | 'queue_group' | 'outcome'>({
+    name: 'event_permanent_error_total',
+    help: 'Total number of deterministic (permanent) listener errors by outcome',
+    labelNames: ['service', 'event_type', 'queue_group', 'outcome'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Takılı iş sayacı (Counter) — UC-1183
+   *
+   * reason=max_lock_hold: kilit yenilemesi maxLockHoldMs'i aştığı için durduruldu.
+   * reason=redelivery: aynı mesaj kilit sahibi hâlâ işlerken N kez yeniden teslim edildi (olay başına bir kez sayılır).
+   * Includes labels: listener, reason
+   */
+  static readonly retryableListenerStuckTotal = new Counter<'listener' | 'reason'>({
+    name: 'retryable_listener_stuck_total',
+    help: 'Total number of stuck listener events (lock hold limit exceeded or repeated same-message redelivery)',
+    labelNames: ['listener', 'reason'],
     registers: [EventMetrics.registry]
   });
 
@@ -155,6 +200,20 @@ export class EventMetrics {
     name: 'version_events_coalesced_total',
     help: 'Total number of entity version events merged into a newer pending event for the same entity',
     labelNames: ['service', 'stage'],
+    registers: [EventMetrics.registry]
+  });
+
+  /**
+   * Yayın anında birleştirilen olay (Counter) — UC-1135
+   *
+   * OUTBOX_COALESCE_SUBJECTS bayrağıyla açılan birleştirmede aynı partide daha yüksek sürümü yayınlanan ve
+   * 'superseded' olan satır sayısı. Kayıp DEĞİLDİR: en son sürüm yayınlanır.
+   * Labels: service, event_type
+   */
+  static readonly outboxEventsCoalescedTotal = new Counter<'service' | 'event_type'>({
+    name: 'outbox_events_coalesced_total',
+    help: 'Total number of outbox events superseded by a newer version of the same entity at publish time',
+    labelNames: ['service', 'event_type'],
     registers: [EventMetrics.registry]
   });
 
@@ -227,6 +286,27 @@ export class EventMetrics {
   });
 
   /**
+   * Outbox kaydı sayısı (Gauge) — UC-1211. outbox_records{service,status}: pending/processing/failed, sürüm olayları
+   * (entity:version-updated) HARİÇ; onlar outbox_version_records'ta. Önceden yalnız orders ve inventory kendi yerel
+   * gauge'larıyla yayınlıyordu; EventPublisherJob'lu her servis artık buradan yayınlar (EventPublishFailureRate,
+   * OutboxPendingEvents* alarmları tüm servisleri görür).
+   */
+  static readonly outboxRecords = new Gauge<'service' | 'status'>({
+    name: 'outbox_records',
+    help: 'Number of outbox records by status (entity version events excluded)',
+    labelNames: ['service', 'status'],
+    registers: [EventMetrics.registry],
+    async collect() {
+      const snapshot = await EventMetrics.readOutboxSnapshot();
+      this.reset();
+      if (!snapshot) return;
+      for (const [status, count] of Object.entries(snapshot.records)) {
+        this.set({ service: snapshot.service, status }, count);
+      }
+    }
+  });
+
+  /**
    * Outbox durumu (Gauge) — UC-984. Değerler her scrape'te EventPublisherJob'un verdiği toplayıcıdan okunur;
    * toplayıcı yoksa (yayıncısı olmayan servis) seri yazılmaz.
    *
@@ -280,7 +360,7 @@ export class EventMetrics {
 
   private static outboxCollector: { service: string; collect: () => Promise<OutboxMetricsSnapshot> } | null = null;
   private static pendingSnapshot: { at: number; promise: Promise<(OutboxMetricsSnapshot & { service: string }) | null> } | null = null;
-  // Aynı scrape'teki üç gauge tek sorgu turunu paylaşır
+  // Aynı scrape'teki dört gauge tek sorgu turunu paylaşır
   private static readonly SNAPSHOT_TTL_MS = 2000;
 
   /** EventPublisherJob kendi outbox'ının toplayıcısını kaydeder (süreçte bir yayıncı: sonuncusu geçerlidir). */
@@ -350,9 +430,12 @@ export class EventMetrics {
     EventMetrics.eventDlqTotal.reset();
     EventMetrics.eventDlqWriteErrorTotal.reset();
     EventMetrics.eventDlqReplayTotal.reset();
+    EventMetrics.eventDuplicateKeyTotal.reset();
+    EventMetrics.eventPermanentErrorTotal.reset();
     EventMetrics.outboxVersionEventsPublishedTotal.reset();
     EventMetrics.versionEventWriteErrorsTotal.reset();
     EventMetrics.versionEventsCoalescedTotal.reset();
+    EventMetrics.outboxEventsCoalescedTotal.reset();
     EventMetrics.versionEventsInflight.reset();
     EventMetrics.versionEventsLeaseExpiredTotal.reset();
     EventMetrics.versionEventsDuplicatePreventedTotal.reset();
@@ -369,14 +452,18 @@ export class EventMetrics {
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqTotal);
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqWriteErrorTotal);
     EventMetrics.registry.registerMetric(EventMetrics.eventDlqReplayTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.eventDuplicateKeyTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.eventPermanentErrorTotal);
     EventMetrics.registry.registerMetric(EventMetrics.circuitBreakerState);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionEventsPublishedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventWriteErrorsTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsCoalescedTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.outboxEventsCoalescedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsInflight);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseExpiredTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsDuplicatePreventedTotal);
     EventMetrics.registry.registerMetric(EventMetrics.versionEventsLeaseUnavailableTotal);
+    EventMetrics.registry.registerMetric(EventMetrics.outboxRecords);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionRecords);
     EventMetrics.registry.registerMetric(EventMetrics.outboxVersionOldestPendingAge);
     EventMetrics.registry.registerMetric(EventMetrics.outboxUnrecoveredRecords);
@@ -385,6 +472,8 @@ export class EventMetrics {
 
 /** EventPublisherJob'un outbox toplayıcısının döndürdüğü anlık durum (UC-984). */
 export interface OutboxMetricsSnapshot {
+  /** Sürüm olayları hariç kayıtlar (UC-1211) */
+  records: { pending: number; processing: number; failed: number };
   versionRecords: { pending: number; processing: number; failed: number };
   versionOldestPendingAgeSeconds: number;
   stuckProcessing: number;

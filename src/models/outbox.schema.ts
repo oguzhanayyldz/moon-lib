@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { BaseAttrs, BaseDoc, BaseModel, createBaseSchema } from "./base/base.schema";
 import { logger } from "../services/logger.service";
+import { sealIntegrationCommandData } from "../utils/commandCredentials.util";
 
 import {
     Subjects,
@@ -341,7 +342,24 @@ outboxSchema.pre('save', function(next) {
         // userId'yi payload'dan çıkar (her zaman yeniden hesapla)
         doc.userId = extractUserIdFromPayload(doc.payload);
 
+        // UC-1408: integration:command kaydında düz credential / tam User belgesi 180 gün durmasın
+        if (doc.eventType === Subjects.IntegrationCommand) {
+            doc.payload = sealIntegrationCommandData(doc.payload);
+        }
+
         logger.debug(`Outbox created: eventType=${doc.eventType}, priority=${doc.priority}, userId=${doc.userId}`);
+    }
+    next();
+});
+
+// UC-1408: insertMany save kancasını atlar; integration:command toplu yazılırsa da mühürle
+outboxSchema.pre('insertMany', function(next: (err?: Error) => void, docs: any[]) {
+    if (Array.isArray(docs)) {
+        for (const d of docs) {
+            if (d && d.eventType === Subjects.IntegrationCommand && d.payload) {
+                d.payload = sealIntegrationCommandData(d.payload);
+            }
+        }
     }
     next();
 });
