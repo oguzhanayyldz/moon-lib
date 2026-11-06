@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ITEM_SUMMARY_COMMANDS = exports.STOCK_FETCH_MODE_SKIP_REASON = void 0;
+exports.ITEM_SUMMARY_COMMANDS = exports.PRICE_PUSH_DISABLED_SKIP_REASON = exports.STOCK_PUSH_DISABLED_SKIP_REASON = exports.STOCK_FETCH_MODE_SKIP_REASON = void 0;
 exports.isItemSummaryCommand = isItemSummaryCommand;
 exports.isItemSummary = isItemSummary;
 exports.buildItemSummary = buildItemSummary;
@@ -12,6 +12,12 @@ exports.attachItemSummary = attachItemSummary;
  * Kullanıcının kendi ayarıdır ve her stok çalışmasında tekrar eder: özette `skipped` sayılır, bildirim tetiklemez.
  */
 exports.STOCK_FETCH_MODE_SKIP_REASON = 'stock-fetch-mode';
+/**
+ * Kullanıcı bu entegrasyon için stok/fiyat GÖNDERİMİNİ ayardan kapattığında `skipped[].reason` değeri.
+ * Kullanıcının kendi kararıdır: özette `skipped` sayılır, bildirim tetiklemez (catalog SILENT_REASONS).
+ */
+exports.STOCK_PUSH_DISABLED_SKIP_REASON = 'stock-push-disabled';
+exports.PRICE_PUSH_DISABLED_SKIP_REASON = 'price-push-disabled';
 /** `summary` üretilen toplu komutlar */
 exports.ITEM_SUMMARY_COMMANDS = ['updatePrices', 'updateStocks'];
 function isItemSummaryCommand(command) {

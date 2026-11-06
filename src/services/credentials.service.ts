@@ -48,6 +48,21 @@ export interface ParsedStockUpdateSettings {
     sources: any[];
 }
 
+/**
+ * Stok/fiyat GÖNDERİM (push) ayarı — BASE `stock_push_settings` / `price_push_settings`.
+ * Varsayılan AÇIK: anahtar yok, JSON bozuk ya da entegrasyon listede yoksa `enabled: true`
+ * (çekme ayarlarının "yoksa false" kuralının bilinçli TERSİ — geriye dönük uyum).
+ */
+export interface ParsedStockPushSettings {
+    enabled: boolean;
+    sources: any[];
+}
+
+export interface ParsedPricePushSettings {
+    enabled: boolean;
+    sources: any[];
+}
+
 export interface ParsedInvoiceSettings {
     enabled: boolean;
     sources: any[];
@@ -82,6 +97,11 @@ export interface ParsedCredentials {
     order_update_settings?: ParsedOrderUpdateSettings;
     shipment_settings?: ParsedShipmentSettings;
     invoice_settings?: ParsedInvoiceSettings;
+
+    // Gönderim (push) kapıları — MarketPlace/Ecommerce'te mergeAndParse her zaman doldurur (varsayılan true).
+    // Alan yoksa (eski payload) tüketici true sayar: bkz. isStockPushEnabled / isPricePushEnabled.
+    stockPushEnabled?: boolean;
+    pricePushEnabled?: boolean;
 
     // Root-level mapped fields (from shipment_settings)
     shipmentEnabled?: boolean;
@@ -205,6 +225,20 @@ export class CredentialsService {
             );
         }
 
+        // MARKETPLACE/ECOMMERCE: Stok/fiyat GÖNDERİM kapıları (her zaman doldurulur; varsayılan true)
+        if (isUpdatedSettings) {
+            merged.stockPushEnabled = this.parseStockPushSettings(
+                merged.stock_push_settings,
+                integrationName,
+                integrationId
+            ).enabled;
+            merged.pricePushEnabled = this.parsePricePushSettings(
+                merged.price_push_settings,
+                integrationName,
+                integrationId
+            ).enabled;
+        }
+
         // MARKETPLACE/ECOMMERCE: Order update settings
         if (isUpdatedSettings && merged.order_update_settings) {
             const { settings, syncAdvanced } = this.parseOrderUpdateSettings(
@@ -308,6 +342,69 @@ export class CredentialsService {
             return String(source.integrationId) === String(integrationId);
         }
         return source?.integrationName === integrationName || source?.name === integrationName;
+    }
+
+    /**
+     * Gönderim (push) ayarı parse — çekme parse'ının TERSİ varsayılanla: eşleşen kaynak yoksa,
+     * anahtar yoksa ya da JSON bozuksa `enabled: true`. Yalnız eşleşen kaynakta `enabled === false`
+     * ise kapalı. Eşleşme çekme ile aynı: integrationId öncelikli, yoksa ad.
+     */
+    private static parsePushSettings(
+        raw: string | any,
+        integrationName: string,
+        integrationId?: string
+    ): { enabled: boolean; sources: any[] } {
+        const settings = this.safeJsonParse(raw);
+
+        if (!settings || !Array.isArray(settings.sources)) {
+            return { enabled: true, sources: [] };
+        }
+
+        const sources = settings.sources.filter((s: any) => this.matchesIntegration(s, integrationName, integrationId));
+
+        return { enabled: !sources.some((s: any) => s?.enabled === false), sources };
+    }
+
+    static parseStockPushSettings(
+        raw: string | any,
+        integrationName: string,
+        integrationId?: string
+    ): ParsedStockPushSettings {
+        return this.parsePushSettings(raw, integrationName, integrationId);
+    }
+
+    static parsePricePushSettings(
+        raw: string | any,
+        integrationName: string,
+        integrationId?: string
+    ): ParsedPricePushSettings {
+        return this.parsePushSettings(raw, integrationName, integrationId);
+    }
+
+    /** Stok gönderimi açık mı? `stockPushEnabled` alanı yoksa (eski payload) true. */
+    static isStockPushEnabled(credentials: { stockPushEnabled?: boolean } | null | undefined): boolean {
+        return credentials?.stockPushEnabled !== false;
+    }
+
+    /** Fiyat gönderimi açık mı? `pricePushEnabled` alanı yoksa (eski payload) true. */
+    static isPricePushEnabled(credentials: { pricePushEnabled?: boolean } | null | undefined): boolean {
+        return credentials?.pricePushEnabled !== false;
+    }
+
+    /**
+     * BASE credentials'tan (ham Map/Object) bir entegrasyon için gönderim kapılarını çözer.
+     * Router ve catalog, mergeAndParse çalıştırmadan karar verebilsin diye.
+     */
+    static resolvePushSettings(
+        baseCredentials: Map<string, string> | Record<string, any> | null | undefined,
+        integrationId: string | undefined,
+        integrationName: string
+    ): { stockPushEnabled: boolean; pricePushEnabled: boolean } {
+        const base = this.toObject(baseCredentials ?? null);
+        return {
+            stockPushEnabled: this.parseStockPushSettings(base.stock_push_settings, integrationName, integrationId).enabled,
+            pricePushEnabled: this.parsePricePushSettings(base.price_push_settings, integrationName, integrationId).enabled
+        };
     }
 
     /**

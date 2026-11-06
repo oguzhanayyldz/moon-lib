@@ -85,6 +85,11 @@ class CredentialsService {
         if (isUpdatedSettings && merged.stock_update_settings) {
             merged.stock_update_settings = this.parseStockUpdateSettings(merged.stock_update_settings, integrationName, integrationId);
         }
+        // MARKETPLACE/ECOMMERCE: Stok/fiyat GÖNDERİM kapıları (her zaman doldurulur; varsayılan true)
+        if (isUpdatedSettings) {
+            merged.stockPushEnabled = this.parseStockPushSettings(merged.stock_push_settings, integrationName, integrationId).enabled;
+            merged.pricePushEnabled = this.parsePricePushSettings(merged.price_push_settings, integrationName, integrationId).enabled;
+        }
         // MARKETPLACE/ECOMMERCE: Order update settings
         if (isUpdatedSettings && merged.order_update_settings) {
             const { settings, syncAdvanced } = this.parseOrderUpdateSettings(merged.order_update_settings, integrationName, integrationId);
@@ -167,6 +172,44 @@ class CredentialsService {
             return String(source.integrationId) === String(integrationId);
         }
         return (source === null || source === void 0 ? void 0 : source.integrationName) === integrationName || (source === null || source === void 0 ? void 0 : source.name) === integrationName;
+    }
+    /**
+     * Gönderim (push) ayarı parse — çekme parse'ının TERSİ varsayılanla: eşleşen kaynak yoksa,
+     * anahtar yoksa ya da JSON bozuksa `enabled: true`. Yalnız eşleşen kaynakta `enabled === false`
+     * ise kapalı. Eşleşme çekme ile aynı: integrationId öncelikli, yoksa ad.
+     */
+    static parsePushSettings(raw, integrationName, integrationId) {
+        const settings = this.safeJsonParse(raw);
+        if (!settings || !Array.isArray(settings.sources)) {
+            return { enabled: true, sources: [] };
+        }
+        const sources = settings.sources.filter((s) => this.matchesIntegration(s, integrationName, integrationId));
+        return { enabled: !sources.some((s) => (s === null || s === void 0 ? void 0 : s.enabled) === false), sources };
+    }
+    static parseStockPushSettings(raw, integrationName, integrationId) {
+        return this.parsePushSettings(raw, integrationName, integrationId);
+    }
+    static parsePricePushSettings(raw, integrationName, integrationId) {
+        return this.parsePushSettings(raw, integrationName, integrationId);
+    }
+    /** Stok gönderimi açık mı? `stockPushEnabled` alanı yoksa (eski payload) true. */
+    static isStockPushEnabled(credentials) {
+        return (credentials === null || credentials === void 0 ? void 0 : credentials.stockPushEnabled) !== false;
+    }
+    /** Fiyat gönderimi açık mı? `pricePushEnabled` alanı yoksa (eski payload) true. */
+    static isPricePushEnabled(credentials) {
+        return (credentials === null || credentials === void 0 ? void 0 : credentials.pricePushEnabled) !== false;
+    }
+    /**
+     * BASE credentials'tan (ham Map/Object) bir entegrasyon için gönderim kapılarını çözer.
+     * Router ve catalog, mergeAndParse çalıştırmadan karar verebilsin diye.
+     */
+    static resolvePushSettings(baseCredentials, integrationId, integrationName) {
+        const base = this.toObject(baseCredentials !== null && baseCredentials !== void 0 ? baseCredentials : null);
+        return {
+            stockPushEnabled: this.parseStockPushSettings(base.stock_push_settings, integrationName, integrationId).enabled,
+            pricePushEnabled: this.parsePricePushSettings(base.price_push_settings, integrationName, integrationId).enabled
+        };
     }
     /**
      * Price update settings parse ve filter
