@@ -1,5 +1,5 @@
 /**
- * UC-962 — İstek loglarına 7 günlük TTL.
+ * UC-962 — İstek loglarına TTL (7 gün; UC-979 Faz 2'de 14 gün).
  *
  * Canlıda 16 entegrasyon veritabanında `requestTime_1` indeksi TTL'siz kurulu. Aynı anahtarla ikinci
  * indeks açılamadığı için `ensureIntegrationRequestLogTtlIndex` mevcut indeksi collMod ile dönüştürür.
@@ -54,8 +54,8 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
         await mms?.stop();
     });
 
-    it('7 gün = 604800 sn', () => {
-        expect(INTEGRATION_REQUEST_LOG_TTL_SECONDS).toBe(604800);
+    it('14 gün = 1209600 sn (UC-979 Faz 2)', () => {
+        expect(INTEGRATION_REQUEST_LOG_TTL_SECONDS).toBe(1209600);
     });
 
     it('canlıdaki TTL\'siz requestTime_1 indeksini collMod ile TTL\'ye çevirir, ikinci çağrı dokunmaz', async () => {
@@ -68,25 +68,25 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('modified');
         let [index] = await requestTimeIndex(connection);
         expect(index.name).toBe('requestTime_1');
-        expect(index.expireAfterSeconds).toBe(604800);
+        expect(index.expireAfterSeconds).toBe(1209600);
 
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('unchanged');
         const after = await requestTimeIndex(connection);
         expect(after).toHaveLength(1);
         [index] = after;
-        expect(index.expireAfterSeconds).toBe(604800);
+        expect(index.expireAfterSeconds).toBe(1209600);
         // Dönüşüm veriye dokunmaz
         expect(await connection.db.collection(COLLECTION).countDocuments({ marker: 'eski-kayit' })).toBe(1);
     });
 
-    it('farklı süreli TTL indeksini hedef süreye günceller', async () => {
+    it('farklı süreli TTL indeksini hedef süreye günceller (Faz 2: canlıdaki 7 gün → 14 gün)', async () => {
         const connection = await freshConnection(false);
-        await connection.db.collection(COLLECTION).createIndex({ requestTime: 1 }, { expireAfterSeconds: 14 * 86400 });
+        await connection.db.collection(COLLECTION).createIndex({ requestTime: 1 }, { expireAfterSeconds: 7 * 86400 });
         createIntegrationRequestLogModel(connection);
 
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('modified');
         const [index] = await requestTimeIndex(connection);
-        expect(index.expireAfterSeconds).toBe(604800);
+        expect(index.expireAfterSeconds).toBe(1209600);
     });
 
     it('koleksiyon hiç yoksa TTL\'li indeksi kurar', async () => {
@@ -95,7 +95,7 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
 
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('created');
         const [index] = await requestTimeIndex(connection);
-        expect(index.expireAfterSeconds).toBe(604800);
+        expect(index.expireAfterSeconds).toBe(1209600);
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('unchanged');
     });
 
@@ -108,7 +108,7 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
 
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('created');
         const [index] = await requestTimeIndex(connection);
-        expect(index.expireAfterSeconds).toBe(604800);
+        expect(index.expireAfterSeconds).toBe(1209600);
     });
 
     it('bileşik requestTime indekslerine dokunmaz', async () => {
@@ -128,7 +128,7 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
         await connection.model('IntegrationRequestLog').init();
 
         const [index] = await requestTimeIndex(connection);
-        expect(index.expireAfterSeconds).toBe(604800);
+        expect(index.expireAfterSeconds).toBe(1209600);
         expect(await ensureIntegrationRequestLogTtlIndex(connection)).toBe('unchanged');
     });
     // Migrasyonun canlıdaki TEK tetikleyicisi initializeModelsForIntegration içindeki ensure çağrısıdır.
@@ -146,9 +146,9 @@ describe('ensureIntegrationRequestLogTtlIndex (UC-962)', () => {
         let ttl: (number | undefined)[] = [];
         for (let i = 0; i < 100; i++) {
             ttl = (await requestTimeIndex(connection)).map(index => index.expireAfterSeconds);
-            if (ttl[0] === 604800) break;
+            if (ttl[0] === 1209600) break;
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-        expect(ttl).toEqual([604800]);
+        expect(ttl).toEqual([1209600]);
     });
 });
