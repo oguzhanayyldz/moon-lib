@@ -178,7 +178,10 @@ class AuthFailureTracker {
                     }
                     return;
                 }
-                // Tam reset: SET uyelerinin tum sayaclarini ve SET'in kendisini temizle.
+                // Tam reset: TUM operasyon sayaclarini ve SET'in kendisini temizle.
+                // UC-1310: SET yalniz esigini ASMIS operasyonlari tutar; esik altindaki sayaclar (orn. 3/5) SET'te
+                // yoktur. Yalniz SET uyelerini silmek onlari birakiyordu ve yeniden aktif edilen entegrasyon
+                // 24 sa icinde 2 hatayla tekrar pasife dusuyordu. Bu yuzden bilinen tum OperationType degerleri de silinir.
                 let members = [];
                 try {
                     members = yield redisWrapper_service_1.redisWrapper.client.sMembers(failedOpsKey);
@@ -186,7 +189,8 @@ class AuthFailureTracker {
                 catch (_a) {
                     members = [];
                 }
-                const keysToDelete = members.map((op) => AuthFailureTracker.getKey(userId, integrationId, op));
+                const ops = new Set([...Object.values(operation_type_enum_1.OperationType).map(String), ...members]);
+                const keysToDelete = Array.from(ops).map((op) => AuthFailureTracker.getKey(userId, integrationId, op));
                 // Legacy (operasyon-oncesi #521) key'i de temizle — deploy gecisi guvenligi
                 keysToDelete.push(`integration:auth-failures:${userId}:${integrationId}`);
                 keysToDelete.push(failedOpsKey);
@@ -203,6 +207,31 @@ class AuthFailureTracker {
                     operationType
                 });
             }
+        });
+    }
+    /**
+     * UC-1310: UserIntegrationSettings olayindaki yeniden aktif edilen kayitlarin sayaclarini, CAGIRAN
+     * servisin kendi Redis DB'sinde sifirlar. Her entegrasyon servisi farkli bir Redis DB'si kullanir;
+     * integration servisindeki toggleActive/save reset'i kendi DB'sine gider ve buraya ulasamaz.
+     *
+     * Yalniz `reactivated === true && active === true` olan ve entegrasyonu belli (BASE kayit degil) ogeler
+     * sifirlanir. Diger UserIntegrationSettings yayinlari (token yenileme, ayar kaydi, pasiflestirme)
+     * sayaclara dokunmaz — yoksa bozuk kimlik hic esige ulasamazdi.
+     * Olay tum entegrasyon servislerine gider; baska servise ait integrationId icin DEL yok-anahtar no-op'tur.
+     * Hata firlatmaz (reset() Redis hatasini yutar, loglar).
+     * @returns Sifirlama denenen oge sayisi
+     */
+    static resetOnReactivation(list) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let resetCount = 0;
+            for (const item of list || []) {
+                if ((item === null || item === void 0 ? void 0 : item.reactivated) !== true || item.active !== true || !item.integration || !item.user) {
+                    continue;
+                }
+                yield AuthFailureTracker.reset(item.user, item.integration);
+                resetCount++;
+            }
+            return resetCount;
         });
     }
     /**
