@@ -312,11 +312,103 @@ describe('AuthFailureTracker (operation-aware #566)', () => {
             expect(store[AuthFailureTracker.getFailedOpsKey(userId, integrationId)]).toBeUndefined();
         });
 
+        it('UC-1310: full reset clears BELOW-threshold counters that are NOT in the failed-ops SET', async () => {
+            // Gercek akis: 3 hata (esik 5) -> SET bos. Eski reset yalniz SET uyelerini siliyordu.
+            for (let i = 0; i < 3; i++) {
+                await AuthFailureTracker.increment(baseContext, 401, 'unauthorized', OperationType.FETCH_ORDERS);
+            }
+            await AuthFailureTracker.increment(baseContext, 401, 'unauthorized', OperationType.OTHER);
+            expect(store[AuthFailureTracker.getFailedOpsKey(userId, integrationId)]).toBeUndefined();
+
+            await AuthFailureTracker.reset(userId, integrationId);
+
+            expect(store[AuthFailureTracker.getKey(userId, integrationId, OperationType.FETCH_ORDERS)]).toBeUndefined();
+            expect(store[AuthFailureTracker.getKey(userId, integrationId, OperationType.OTHER)]).toBeUndefined();
+            // Baska entegrasyonun sayacina dokunmaz
+            store[AuthFailureTracker.getKey(userId, 'int-other', OperationType.FETCH_ORDERS)] = '2';
+            await AuthFailureTracker.reset(userId, integrationId);
+            expect(store[AuthFailureTracker.getKey(userId, 'int-other', OperationType.FETCH_ORDERS)]).toBe('2');
+        });
+
         it('swallows Redis errors without throwing', async () => {
             mockClient.sMembers.mockRejectedValueOnce(new Error('Redis disconnected'));
             mockClient.del.mockRejectedValueOnce(new Error('Redis disconnected'));
 
             await expect(AuthFailureTracker.reset(userId, integrationId)).resolves.toBeUndefined();
+        });
+    });
+
+    describe('resetOnReactivation (UC-1310)', () => {
+        const seedBelowThreshold = async () => {
+            // Esigin altinda sayac (3) + fail-eden SET — kapatip acma senaryosunun baslangici
+            for (let i = 0; i < 3; i++) {
+                await AuthFailureTracker.increment(baseContext, 401, 'unauthorized', OperationType.FETCH_ORDERS);
+            }
+            store[AuthFailureTracker.getFailedOpsKey(userId, integrationId)] = new Set([OperationType.UPDATE_STOCK]);
+            store[AuthFailureTracker.getKey(userId, integrationId, OperationType.UPDATE_STOCK)] = '5';
+        };
+
+        it('reactivated + active ogenin TUM sayaclarini sifirlar (kendi DB)', async () => {
+            await seedBelowThreshold();
+            const n = await AuthFailureTracker.resetOnReactivation([
+                { user: userId, integration: integrationId, active: true, reactivated: true }
+            ]);
+            expect(n).toBe(1);
+            expect(await AuthFailureTracker.get(userId, integrationId, OperationType.FETCH_ORDERS)).toBe(0);
+            expect(await AuthFailureTracker.get(userId, integrationId, OperationType.UPDATE_STOCK)).toBe(0);
+            expect(store[AuthFailureTracker.getFailedOpsKey(userId, integrationId)]).toBeUndefined();
+        });
+
+        it('sifirlamadan sonra esik yeniden tam 5 hata ister (2 hata pasife cekmez)', async () => {
+            await seedBelowThreshold();
+            await AuthFailureTracker.resetOnReactivation([
+                { user: userId, integration: integrationId, active: true, reactivated: true }
+            ]);
+            await AuthFailureTracker.increment(baseContext, 401, 'unauthorized', OperationType.FETCH_ORDERS);
+            const count = await AuthFailureTracker.increment(baseContext, 401, 'unauthorized', OperationType.FETCH_ORDERS);
+            expect(count).toBe(2);
+            expect(OptimisticLockingUtil.saveWithRetry).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['reactivated yok (eski yayinci / token yenileme)', { active: true }],
+            ['reactivated false', { active: true, reactivated: false }],
+            ['active false (pasiflestirme yayini)', { active: false, reactivated: true }],
+        ])('%s -> sayaclara DOKUNMAZ', async (_label, extra) => {
+            await seedBelowThreshold();
+            const n = await AuthFailureTracker.resetOnReactivation([
+                { user: userId, integration: integrationId, ...(extra as any) }
+            ]);
+            expect(n).toBe(0);
+            expect(mockClient.del).not.toHaveBeenCalled();
+            expect(await AuthFailureTracker.get(userId, integrationId, OperationType.FETCH_ORDERS)).toBe(3);
+        });
+
+        it('BASE kayit (integration null) atlanir; karisik listede yalniz isaretli oge sifirlanir', async () => {
+            await seedBelowThreshold();
+            const otherKey = AuthFailureTracker.getKey(userId, 'int-other', OperationType.FETCH_ORDERS);
+            store[otherKey] = '4';
+            const n = await AuthFailureTracker.resetOnReactivation([
+                { user: userId, integration: null, active: true, reactivated: true },
+                { user: userId, integration: 'int-other', active: true },
+                { user: userId, integration: integrationId, active: true, reactivated: true },
+            ]);
+            expect(n).toBe(1);
+            expect(store[otherKey]).toBe('4');
+            expect(await AuthFailureTracker.get(userId, integrationId, OperationType.FETCH_ORDERS)).toBe(0);
+        });
+
+        it('bos/undefined liste hata firlatmaz', async () => {
+            expect(await AuthFailureTracker.resetOnReactivation([])).toBe(0);
+            expect(await AuthFailureTracker.resetOnReactivation(undefined as any)).toBe(0);
+        });
+
+        it('Redis hatasi firlatilmaz (dinleyiciyi kirmaz)', async () => {
+            mockClient.sMembers.mockRejectedValueOnce(new Error('down'));
+            mockClient.del.mockRejectedValueOnce(new Error('down'));
+            await expect(AuthFailureTracker.resetOnReactivation([
+                { user: userId, integration: integrationId, active: true, reactivated: true }
+            ])).resolves.toBe(1);
         });
     });
 

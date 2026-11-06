@@ -1094,6 +1094,8 @@ export const AuthFailureTracker = {
         `integration:auth-failed-ops:${userId}:${integrationId}`),
     increment: jest.fn().mockResolvedValue(1),
     reset: jest.fn().mockResolvedValue(undefined),
+    // UC-1310: UserIntegrationSettings dinleyicileri cagirir; servis testleri listeye gore dogrular
+    resetOnReactivation: jest.fn().mockResolvedValue(0),
     get: jest.fn().mockResolvedValue(0),
 };
 

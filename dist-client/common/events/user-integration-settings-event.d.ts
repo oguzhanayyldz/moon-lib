@@ -213,4 +213,11 @@ export interface UserIntegrationSettingsData {
     updatedOn?: Date;
     deleted?: boolean;
     deletionDate?: Date | null;
+    /**
+     * UC-1310: Kayit bu yayinda PASIFTEN AKTIFE gecti (kullanici elle actı ya da kimligi yeniden kaydetti).
+     * Entegrasyon servisleri bu isaretle kendi Redis DB'lerindeki AuthFailureTracker sayaclarini sifirlar
+     * (bkz. AuthFailureTracker.resetOnReactivation). Opsiyonel: alani bilmeyen yayinci/dinleyici etkilenmez;
+     * yoksa "yeniden aktivasyon degil" sayilir.
+     */
+    reactivated?: boolean;
 }

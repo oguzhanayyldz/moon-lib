@@ -385,6 +385,7 @@ export declare const AuthFailureTracker: {
     getFailedOpsKey: jest.Mock<string, [userId: string, integrationId: string], any>;
     increment: jest.Mock<any, any, any>;
     reset: jest.Mock<any, any, any>;
+    resetOnReactivation: jest.Mock<any, any, any>;
     get: jest.Mock<any, any, any>;
 };
 export declare const createOutboxModel: jest.Mock<{

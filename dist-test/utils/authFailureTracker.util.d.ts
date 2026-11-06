@@ -69,6 +69,24 @@ export declare class AuthFailureTracker {
      */
     static reset(userId: string, integrationId: string, operationType?: OperationType | string): Promise<void>;
     /**
+     * UC-1310: UserIntegrationSettings olayindaki yeniden aktif edilen kayitlarin sayaclarini, CAGIRAN
+     * servisin kendi Redis DB'sinde sifirlar. Her entegrasyon servisi farkli bir Redis DB'si kullanir;
+     * integration servisindeki toggleActive/save reset'i kendi DB'sine gider ve buraya ulasamaz.
+     *
+     * Yalniz `reactivated === true && active === true` olan ve entegrasyonu belli (BASE kayit degil) ogeler
+     * sifirlanir. Diger UserIntegrationSettings yayinlari (token yenileme, ayar kaydi, pasiflestirme)
+     * sayaclara dokunmaz — yoksa bozuk kimlik hic esige ulasamazdi.
+     * Olay tum entegrasyon servislerine gider; baska servise ait integrationId icin DEL yok-anahtar no-op'tur.
+     * Hata firlatmaz (reset() Redis hatasini yutar, loglar).
+     * @returns Sifirlama denenen oge sayisi
+     */
+    static resetOnReactivation(list: ReadonlyArray<{
+        user: string;
+        integration: string | null;
+        active: boolean;
+        reactivated?: boolean;
+    }>): Promise<number>;
+    /**
      * Mevcut counter degerini oku (debug/UI icin).
      *  - operationType verilirse: o operasyonun sayaci.
      *  - verilmezse: fail-eden tum operasyonlarin sayaclari toplami (best-effort aggregate).
