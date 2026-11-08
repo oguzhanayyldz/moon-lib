@@ -1,6 +1,7 @@
 import mongoose, { FilterQuery } from 'mongoose';
 import { Stan } from 'node-nats-streaming';
 import { Subjects, ServiceName } from '../common/';
+import { maskErrorText } from '../utils/logSafety.util';
 import { createOutboxModel, OutboxDoc, OutboxModel } from '../models/outbox.schema';
 import { ProductCreatedPublisher } from '../events/publishers/productCreated.publisher';
 import { ProductUpdatedPublisher } from '../events/publishers/productUpdated.publisher';
@@ -106,6 +107,7 @@ export class EventPublisherJob {
     // Issue #648 K-1: bir kaydın job seviyesindeki yayın denemesi üst sınırı. Hakkı kalan başarısız kayıt
     // bekleme süresi dolunca yeniden kuyruğa alınır (30 sn → 60 → 120 → 240 sn); son denemede kalıcı failed olur.
     private static readonly MAX_PUBLISH_ATTEMPTS = 5;
+    private static readonly LAST_ERROR_MAX_LENGTH = 1000; // UC-1533
     private static readonly PUBLISH_RETRY_BASE_DELAY = 30000; // 30 saniye
     private static readonly PUBLISH_RETRY_MAX_DELAY = 240000; // 4 dakika
     private static readonly MAX_JITTER = 500; // 0-500ms random jitter
@@ -671,7 +673,7 @@ export class EventPublisherJob {
             } catch (error) {
                 // Önce logla: markPublishFailed'daki Mongo hatası dış catch'e düşer ve asıl yayın hatası kaybolmaz
                 logger.error(`Failed to publish event ${event.id}:`, error);
-                await this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount);
+                await this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount, error);
                 return false;
             }
 
@@ -697,17 +699,19 @@ export class EventPublisherJob {
      * Filtre claim anındaki `retryCount`'u içerir; retryCount durum değişikliğiyle aynı güncellemede arttığı için
      * kaydı eski bir okumayla yeniden claim eden ya da ikinci kez sayan başka bir pod olamaz.
      */
-    private async markPublishFailed(filter: FilterQuery<OutboxDoc>, retryCount: number): Promise<void> {
+    private async markPublishFailed(filter: FilterQuery<OutboxDoc>, retryCount: number, publishError?: unknown): Promise<void> {
         const attempts = retryCount + 1;
         const exhausted = attempts >= EventPublisherJob.MAX_PUBLISH_ATTEMPTS;
         const now = new Date();
+        // UC-1533: neden kayıtta kalsın. Başarılı yayında temizlenmez (tarihçe; failed→published kayıtta son hata iz olarak durur).
+        const errorFields = publishError === undefined ? {} : { lastError: EventPublisherJob.toStoredError(publishError), lastErrorAt: now };
 
         const result = await this.outboxModel.updateMany(
             { ...filter, status: 'processing', retryCount },
             {
                 $set: exhausted
-                    ? { status: 'failed', lastAttempt: now }
-                    : { status: 'failed', lastAttempt: now, nextAttemptAt: new Date(now.getTime() + this.getPublishRetryDelay(attempts)) },
+                    ? { status: 'failed', lastAttempt: now, ...errorFields }
+                    : { status: 'failed', lastAttempt: now, ...errorFields, nextAttemptAt: new Date(now.getTime() + this.getPublishRetryDelay(attempts)) },
                 $inc: { retryCount: 1 }
             }
         );
@@ -715,6 +719,15 @@ export class EventPublisherJob {
         if (exhausted && result.modifiedCount > 0) {
             logger.error(`${result.modifiedCount} outbox event(s) permanently failed after ${attempts} publish attempts`, filter);
         }
+    }
+
+    /** UC-1533: kayda yazılacak hata metni — sır maskeli (bağlantı dizgesi/parola/token), en çok LAST_ERROR_MAX_LENGTH karakter. */
+    private static toStoredError(error: unknown): string {
+        const raw = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        const masked = maskErrorText(raw);
+        return masked.length > EventPublisherJob.LAST_ERROR_MAX_LENGTH
+            ? `${masked.slice(0, EventPublisherJob.LAST_ERROR_MAX_LENGTH - 1)}…`
+            : masked;
     }
 
     /**
@@ -960,7 +973,7 @@ export class EventPublisherJob {
                     idsByRetryCount.set(versionEvent.retryCount, ids);
                 }
                 for (const [retryCount, ids] of idsByRetryCount) {
-                    await this.markPublishFailed({ _id: { $in: ids }, processingStartedAt: claimedAt }, retryCount);
+                    await this.markPublishFailed({ _id: { $in: ids }, processingStartedAt: claimedAt }, retryCount, error);
                 }
                 // Yayın başarısız: bu turda başka parti denenmez (NATS sorunluysa yükü büyütme)
                 return { published: 0, more: false };
