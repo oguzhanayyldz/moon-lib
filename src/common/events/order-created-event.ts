@@ -139,6 +139,8 @@ export interface OrderCreated {
     note?: string;
     date: Date;
     dueDate?: Date;
+    /** UC-1537: siparişin ilk iptal/iade anı (orders yazar, bir kez; eski kayıtlarda yok) */
+    outcomeAt?: Date;
     currency: CurrencyCode;
     uniqueCode?: string | null;
     orderProducts?: OrderProductCretedEvent[];
