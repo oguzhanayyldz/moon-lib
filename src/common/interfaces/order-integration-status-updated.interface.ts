@@ -6,6 +6,8 @@ export interface OrderIntegrationStatusUpdated {
     purchaseNumber: string;
     platformNumber?: string;
     status?: OrderStatus;
+    /** UC-1522: platformun güncel kargoya teslim son tarihi; verilmişse orders `Order.dueDate`'i ezer (platform kazanır). */
+    dueDate?: Date | string;
     costTotal?: number;
     commissionTotal?: number;
     invoiceTotal?: number;
