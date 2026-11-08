@@ -82,6 +82,8 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     lastAttempt?: Date;
     nextAttemptAt?: Date;
     error?: string;
+    lastError?: string;
+    lastErrorAt?: Date;
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;
@@ -99,6 +101,8 @@ export interface OutboxDoc extends BaseDoc {
     lastAttempt?: Date;
     nextAttemptAt?: Date;
     error?: string;
+    lastError?: string;
+    lastErrorAt?: Date;
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;

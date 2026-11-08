@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventPublisherJob = void 0;
 const common_1 = require("../common/");
+const logSafety_util_1 = require("../utils/logSafety.util");
 const outbox_schema_1 = require("../models/outbox.schema");
 const productCreated_publisher_1 = require("../events/publishers/productCreated.publisher");
 const productUpdated_publisher_1 = require("../events/publishers/productUpdated.publisher");
@@ -559,7 +560,7 @@ class EventPublisherJob {
             catch (error) {
                 // Önce logla: markPublishFailed'daki Mongo hatası dış catch'e düşer ve asıl yayın hatası kaybolmaz
                 logger_service_1.logger.error(`Failed to publish event ${event.id}:`, error);
-                await this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount);
+                await this.markPublishFailed({ _id: event.id, processingStartedAt: claimedAt }, event.retryCount, error);
                 return false;
             }
             // Başarılı olarak işaretle
@@ -580,19 +581,28 @@ class EventPublisherJob {
      * Filtre claim anındaki `retryCount`'u içerir; retryCount durum değişikliğiyle aynı güncellemede arttığı için
      * kaydı eski bir okumayla yeniden claim eden ya da ikinci kez sayan başka bir pod olamaz.
      */
-    async markPublishFailed(filter, retryCount) {
+    async markPublishFailed(filter, retryCount, publishError) {
         const attempts = retryCount + 1;
         const exhausted = attempts >= EventPublisherJob.MAX_PUBLISH_ATTEMPTS;
         const now = new Date();
+        // UC-1533: neden kayıtta kalsın. Başarılı yayında temizlenmez (tarihçe; failed→published kayıtta son hata iz olarak durur).
+        const errorFields = publishError === undefined ? {} : { lastError: EventPublisherJob.toStoredError(publishError), lastErrorAt: now };
         const result = await this.outboxModel.updateMany(Object.assign(Object.assign({}, filter), { status: 'processing', retryCount }), {
             $set: exhausted
-                ? { status: 'failed', lastAttempt: now }
-                : { status: 'failed', lastAttempt: now, nextAttemptAt: new Date(now.getTime() + this.getPublishRetryDelay(attempts)) },
+                ? Object.assign({ status: 'failed', lastAttempt: now }, errorFields) : Object.assign(Object.assign({ status: 'failed', lastAttempt: now }, errorFields), { nextAttemptAt: new Date(now.getTime() + this.getPublishRetryDelay(attempts)) }),
             $inc: { retryCount: 1 }
         });
         if (exhausted && result.modifiedCount > 0) {
             logger_service_1.logger.error(`${result.modifiedCount} outbox event(s) permanently failed after ${attempts} publish attempts`, filter);
         }
+    }
+    /** UC-1533: kayda yazılacak hata metni — sır maskeli (bağlantı dizgesi/parola/token), en çok LAST_ERROR_MAX_LENGTH karakter. */
+    static toStoredError(error) {
+        const raw = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        const masked = (0, logSafety_util_1.maskErrorText)(raw);
+        return masked.length > EventPublisherJob.LAST_ERROR_MAX_LENGTH
+            ? `${masked.slice(0, EventPublisherJob.LAST_ERROR_MAX_LENGTH - 1)}…`
+            : masked;
     }
     /**
      * UC-1358: yayınlanabilecek en büyük outbox yükü (JSON bayt). Öncelik: OUTBOX_MAX_PAYLOAD_BYTES env →
@@ -797,7 +807,7 @@ class EventPublisherJob {
                     idsByRetryCount.set(versionEvent.retryCount, ids);
                 }
                 for (const [retryCount, ids] of idsByRetryCount) {
-                    await this.markPublishFailed({ _id: { $in: ids }, processingStartedAt: claimedAt }, retryCount);
+                    await this.markPublishFailed({ _id: { $in: ids }, processingStartedAt: claimedAt }, retryCount, error);
                 }
                 // Yayın başarısız: bu turda başka parti denenmez (NATS sorunluysa yükü büyütme)
                 return { published: 0, more: false };
@@ -1226,6 +1236,7 @@ EventPublisherJob.ALERT_LOG_INTERVAL = 15 * 60000; // 15 dakika
 // Issue #648 K-1: bir kaydın job seviyesindeki yayın denemesi üst sınırı. Hakkı kalan başarısız kayıt
 // bekleme süresi dolunca yeniden kuyruğa alınır (30 sn → 60 → 120 → 240 sn); son denemede kalıcı failed olur.
 EventPublisherJob.MAX_PUBLISH_ATTEMPTS = 5;
+EventPublisherJob.LAST_ERROR_MAX_LENGTH = 1000; // UC-1533
 EventPublisherJob.PUBLISH_RETRY_BASE_DELAY = 30000; // 30 saniye
 EventPublisherJob.PUBLISH_RETRY_MAX_DELAY = 240000; // 4 dakika
 EventPublisherJob.MAX_JITTER = 500; // 0-500ms random jitter

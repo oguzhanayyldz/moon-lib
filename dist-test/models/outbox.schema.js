@@ -36,6 +36,8 @@ const outboxSchemaDefination = {
     error: {
         type: String
     },
+    lastError: { type: String },
+    lastErrorAt: { type: Date },
     result: {
         type: mongoose_1.default.Schema.Types.Mixed
     },

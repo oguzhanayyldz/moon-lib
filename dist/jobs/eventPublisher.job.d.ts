@@ -15,6 +15,7 @@ export declare class EventPublisherJob {
     private static readonly ALERT_THRESHOLD;
     private static readonly ALERT_LOG_INTERVAL;
     private static readonly MAX_PUBLISH_ATTEMPTS;
+    private static readonly LAST_ERROR_MAX_LENGTH;
     private static readonly PUBLISH_RETRY_BASE_DELAY;
     private static readonly PUBLISH_RETRY_MAX_DELAY;
     private static readonly MAX_JITTER;
@@ -132,6 +133,8 @@ export declare class EventPublisherJob {
      * kaydı eski bir okumayla yeniden claim eden ya da ikinci kez sayan başka bir pod olamaz.
      */
     private markPublishFailed;
+    /** UC-1533: kayda yazılacak hata metni — sır maskeli (bağlantı dizgesi/parola/token), en çok LAST_ERROR_MAX_LENGTH karakter. */
+    private static toStoredError;
     /**
      * UC-1358: yayınlanabilecek en büyük outbox yükü (JSON bayt). Öncelik: OUTBOX_MAX_PAYLOAD_BYTES env →
      * bağlı NATS sunucusunun bildirdiği max_payload → 10 MB (k8s-single nats-config). Sunucu sınırından

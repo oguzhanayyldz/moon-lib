@@ -164,6 +164,8 @@ export interface OutboxAttrs<T extends keyof EventPayloadMap = keyof EventPayloa
     lastAttempt?: Date;
     nextAttemptAt?: Date; // failed kaydın yeniden kuyruğa alınacağı an (issue #648 K-1)
     error?: string;
+    lastError?: string; // UC-1533: son yayın hatası (maskeli, kesilmiş); bilgi alanı
+    lastErrorAt?: Date;
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;
@@ -182,6 +184,8 @@ export interface OutboxDoc extends BaseDoc {
     lastAttempt?: Date;
     nextAttemptAt?: Date; // failed kaydın yeniden kuyruğa alınacağı an (issue #648 K-1)
     error?: string;
+    lastError?: string; // UC-1533: son yayın hatası (maskeli, kesilmiş); bilgi alanı
+    lastErrorAt?: Date;
     result?: any;
     processedAt?: Date;
     processingStartedAt?: Date;
@@ -218,6 +222,8 @@ const outboxSchemaDefination = {
     error: {
         type: String
     },
+    lastError: { type: String },
+    lastErrorAt: { type: Date },
     result: {
         type: mongoose.Schema.Types.Mixed
     },
