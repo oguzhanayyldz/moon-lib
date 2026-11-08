@@ -138,6 +138,10 @@ export interface OrderUpdated {
     note?: string;
     date?: Date;
     dueDate?: Date;
+    /** UC-1537: siparişin iptal kategorisine ilk giriş anı (orders yazar, bir kez; eski kayıtlarda yok) */
+    cancelledAt?: Date;
+    /** UC-1537: siparişin iade kategorisine ilk giriş anı (orders yazar, bir kez; eski kayıtlarda yok) */
+    returnedAt?: Date;
     currency?: CurrencyCode;
     uniqueCode?: string | null;
     deleted?: boolean;
