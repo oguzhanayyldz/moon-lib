@@ -29,6 +29,11 @@ export interface OrderIntegrationCreated {
     shippingTotal?: number;
     shippingTaxRate?: number;
     date: Date;
+    /**
+     * UC-1522: pazaryerinin 'kargoya teslim son tarihi' (UTC anı). Platform veriyorsa orders `Order.dueDate`'e yazar;
+     * vermiyorsa HİÇ gönderilmez (anahtar yok) → orders dokunmaz.
+     */
+    dueDate?: Date | string;
     currency: CurrencyCode;
     orderProducts: OrderIntegrationProductCreted[];
     fields?: Record<string, any>;
