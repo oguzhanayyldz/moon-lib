@@ -9,5 +9,7 @@ export interface OrderIntegrationCreatedEvent {
         orders: OrderIntegrationCreated[];
         source?: ResourceName;
         timestamp?: Date;
+        /** UC-1532: geçmiş aktarımı (backfill) işinden gelen parti; orders canlı alım gecikmesi metriğine katmaz. Yoksa canlı. */
+        backfill?: boolean;
     };
 }

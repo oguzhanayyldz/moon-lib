@@ -71,6 +71,8 @@ export interface UpdateProductsParams {
 // === Sipariş Parametreleri ===
 
 export interface SyncOrdersParams {
+    /** UC-1532: geçmiş aktarımı (backfill) penceresi; siparişler OrderIntegrationCreated'a `backfill: true` ile gider. */
+    backfill?: boolean;
     page?: number;
     limit?: number;
     cursor?: string;
