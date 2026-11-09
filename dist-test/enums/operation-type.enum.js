@@ -28,6 +28,7 @@ var OperationType;
     // Sipariş İşlemleri
     OperationType["CREATE_ORDER"] = "CREATE_ORDER";
     OperationType["UPDATE_ORDER"] = "UPDATE_ORDER";
+    OperationType["CHANGE_CARGO_PROVIDER"] = "CHANGE_CARGO_PROVIDER";
     OperationType["CANCEL_ORDER"] = "CANCEL_ORDER";
     OperationType["FETCH_ORDERS"] = "FETCH_ORDERS";
     // Kargo/Tracking İşlemleri

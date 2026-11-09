@@ -28,6 +28,7 @@ export enum OperationType {
     // Sipariş İşlemleri
     CREATE_ORDER = 'CREATE_ORDER',
     UPDATE_ORDER = 'UPDATE_ORDER',
+    CHANGE_CARGO_PROVIDER = 'CHANGE_CARGO_PROVIDER', // Kargo firması değiştirme (UC-1562): UPDATE_ORDER'dan ayrı rate-limit grubu / circuit breaker
     CANCEL_ORDER = 'CANCEL_ORDER',
     FETCH_ORDERS = 'FETCH_ORDERS',
 
