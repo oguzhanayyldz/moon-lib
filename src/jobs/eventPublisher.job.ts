@@ -137,6 +137,8 @@ export class EventPublisherJob {
     private intervalId: NodeJS.Timeout | null = null;
     private versionEventIntervalId: NodeJS.Timeout | null = null; // Version eventleri için ayrı interval
     private monitoringId: NodeJS.Timeout | null = null;
+    private startTimeoutId: NodeJS.Timeout | null = null; // UC-1589: initialDelay zamanlayıcısı — stop() bunu da temizler
+    private stopped = false; // UC-1589: true iken initialDelay geri çağrısı interval kurmaz
     private lastAlertLoggedAt: number | null = null; // Son ALERT logunun zamanı; sayı eşiğin altına inince sıfırlanır
     private readonly outboxModel: OutboxModel;
     private readonly serviceOffset: number; // Servis bazlı offset (thundering herd prevention)
@@ -306,13 +308,17 @@ export class EventPublisherJob {
     }
 
     async start() {
+        this.stopped = false;
         // Servis bazlı offset + random jitter ile başlangıcı geciktir
         const initialDelay = this.serviceOffset + this.getJitter();
         
         logger.info(`EventPublisherJob starting with offset=${this.serviceOffset}ms, initialDelay=${initialDelay}ms`);
 
         // İlk çalışmayı geciktir, sonra normal interval ile devam et
-        setTimeout(() => {
+        this.startTimeoutId = setTimeout(() => {
+            this.startTimeoutId = null;
+            if (this.stopped) return; // UC-1589: bekleme sırasında stop() çağrıldı
+
             // Normal event publishing job (3 saniye)
             this.intervalId = setInterval(async () => {
                 await this.processEvents();
@@ -333,6 +339,11 @@ export class EventPublisherJob {
     }
 
     stop() {
+        this.stopped = true;
+        if (this.startTimeoutId) {
+            clearTimeout(this.startTimeoutId);
+            this.startTimeoutId = null;
+        }
         [this.intervalId, this.versionEventIntervalId, this.monitoringId].forEach(interval => {
             if (interval) clearInterval(interval);
         });

@@ -95,6 +95,8 @@ class EventPublisherJob {
         this.intervalId = null;
         this.versionEventIntervalId = null; // Version eventleri için ayrı interval
         this.monitoringId = null;
+        this.startTimeoutId = null; // UC-1589: initialDelay zamanlayıcısı — stop() bunu da temizler
+        this.stopped = false; // UC-1589: true iken initialDelay geri çağrısı interval kurmaz
         this.lastAlertLoggedAt = null; // Son ALERT logunun zamanı; sayı eşiğin altına inince sıfırlanır
         // Bir tur bir sonraki interval'e taşarsa ikinci tur başlamaz (aynı pod'da üst üste boşaltma yok)
         this.versionDrainRunning = false;
@@ -228,11 +230,15 @@ class EventPublisherJob {
         return Math.floor(Math.random() * EventPublisherJob.MAX_JITTER);
     }
     async start() {
+        this.stopped = false;
         // Servis bazlı offset + random jitter ile başlangıcı geciktir
         const initialDelay = this.serviceOffset + this.getJitter();
         logger_service_1.logger.info(`EventPublisherJob starting with offset=${this.serviceOffset}ms, initialDelay=${initialDelay}ms`);
         // İlk çalışmayı geciktir, sonra normal interval ile devam et
-        setTimeout(() => {
+        this.startTimeoutId = setTimeout(() => {
+            this.startTimeoutId = null;
+            if (this.stopped)
+                return; // UC-1589: bekleme sırasında stop() çağrıldı
             // Normal event publishing job (3 saniye)
             this.intervalId = setInterval(async () => {
                 await this.processEvents();
@@ -249,6 +255,11 @@ class EventPublisherJob {
         }, initialDelay);
     }
     stop() {
+        this.stopped = true;
+        if (this.startTimeoutId) {
+            clearTimeout(this.startTimeoutId);
+            this.startTimeoutId = null;
+        }
         [this.intervalId, this.versionEventIntervalId, this.monitoringId].forEach(interval => {
             if (interval)
                 clearInterval(interval);
