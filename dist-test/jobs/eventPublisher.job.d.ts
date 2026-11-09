@@ -33,6 +33,8 @@ export declare class EventPublisherJob {
     private intervalId;
     private versionEventIntervalId;
     private monitoringId;
+    private startTimeoutId;
+    private stopped;
     private lastAlertLoggedAt;
     private readonly outboxModel;
     private readonly serviceOffset;
