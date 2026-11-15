@@ -27,6 +27,17 @@ exports.MARKETPLACE_SETTLEMENT_MAX_RECORDS_PER_EVENT = void 0;
  * (ayni `id`) yeniden teslimde ya da geriye donuk taramada tekrar gelebilir; tuketici `id` ile
  * upsert ETMELIDIR (toplam sismez). Kayitlarin sirasi garanti degildir.
  *
+ * SIPARIS DUZEYI KAYIT (UC-1699, Pazarama paymentAgreement — olcum UC-1698):
+ * - `level: 'order'` → kayit SIPARIS basinadir; barcode/shipmentPackageId YOKTUR.
+ *   Eslesme `orderId` (= Order.platformNumber) ile; kalem dagitimi tuketicidedir.
+ * - Pazarama: `trxId` satir basina TEKIL DEGIL (ayni siparisin Satış ve İade satiri ayni trxId'yi
+ *   tasiyor, UC-1698 olcumu). `id` bilesiktir: `<trxId>:<status>:<YYYY-MM-DD>:<|amount| kurus>#<n>`
+ *   (n = ayni yanitta ayni tabanin sira no'su). Tuketici yine yalniz `id` ile upsert eder.
+ *   `transactionType` ham 'Satış' | 'İade'; `amount` ve `commissionAmount`
+ *   yine POZITIF (ham isaret atilir), yon `direction` ('Satış' → credit, 'İade' → debt).
+ *   Siparis net komisyonu = Σ Satış.kom − Σ İade.kom. Stopaj / entegrasyon bedeli olaya GIRMEZ.
+ * - `level` yoksa 'unit' sayilir (Trendyol, geriye uyumlu).
+ *
  * GERIYE UYUMLULUK: yeni subject; kayit alanlarinin `id`, `transactionType` disindakileri isteğe
  * baglidir — ileride eklenecek alan tuketiciyi kirmaz.
  */
