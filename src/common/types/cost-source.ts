@@ -24,7 +24,12 @@ export enum CostSource {
     /** Pazaryeri hakedis/finans API'si (kargo ve komisyon) */
     Marketplace = 'marketplace',
     /** Kendi kademeli tarifemizden hesaplandi (kargo maliyeti) — TAHMIN */
-    Tariff = 'tariff'
+    Tariff = 'tariff',
+    /**
+     * Pazaryeri satir ORANINDAN hesaplanan komisyon — TAHMIN (UC-1682).
+     * Marketplace (kesin tutar) bunu ezer; en dusuk kesinlik.
+     */
+    Estimate = 'estimate'
 }
 
 /**
@@ -43,5 +48,6 @@ export const costSourcePrecedence: Record<CostSource, number> = {
     [CostSource.Marketplace]: 30,
     [CostSource.Fixed]: 20,
     [CostSource.Tariff]: 10,
-    [CostSource.Import]: 10
+    [CostSource.Import]: 10,
+    [CostSource.Estimate]: 5
 };
