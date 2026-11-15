@@ -28,7 +28,10 @@ import { Subjects } from "./subjects";
  * SIPARIS DUZEYI KAYIT (UC-1699, Pazarama paymentAgreement — olcum UC-1698):
  * - `level: 'order'` → kayit SIPARIS basinadir; barcode/shipmentPackageId YOKTUR.
  *   Eslesme `orderId` (= Order.platformNumber) ile; kalem dagitimi tuketicidedir.
- * - Pazarama: `id` = trxId, `transactionType` ham 'Satış' | 'İade'; `amount` ve `commissionAmount`
+ * - Pazarama: `trxId` satir basina TEKIL DEGIL (ayni siparisin Satış ve İade satiri ayni trxId'yi
+ *   tasiyor, UC-1698 olcumu). `id` bilesiktir: `<trxId>:<status>:<YYYY-MM-DD>:<|amount| kurus>#<n>`
+ *   (n = ayni yanitta ayni tabanin sira no'su). Tuketici yine yalniz `id` ile upsert eder.
+ *   `transactionType` ham 'Satış' | 'İade'; `amount` ve `commissionAmount`
  *   yine POZITIF (ham isaret atilir), yon `direction` ('Satış' → credit, 'İade' → debt).
  *   Siparis net komisyonu = Σ Satış.kom − Σ İade.kom. Stopaj / entegrasyon bedeli olaya GIRMEZ.
  * - `level` yoksa 'unit' sayilir (Trendyol, geriye uyumlu).
