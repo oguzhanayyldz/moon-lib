@@ -26,6 +26,14 @@ import { Subjects } from "./subjects";
  * (ayni `id`) yeniden teslimde ya da geriye donuk taramada tekrar gelebilir; tuketici `id` ile
  * upsert ETMELIDIR (toplam sismez). Kayitlarin sirasi garanti degildir.
  *
+ * SIPARIS DUZEYI KAYIT (UC-1699, Pazarama paymentAgreement — olcum UC-1698):
+ * - `level: 'order'` → kayit SIPARIS basinadir; barcode/shipmentPackageId YOKTUR.
+ *   Eslesme `orderId` (= Order.platformNumber) ile; kalem dagitimi tuketicidedir.
+ * - Pazarama: `id` = trxId, `transactionType` ham 'Satış' | 'İade'; `amount` ve `commissionAmount`
+ *   yine POZITIF (ham isaret atilir), yon `direction` ('Satış' → credit, 'İade' → debt).
+ *   Siparis net komisyonu = Σ Satış.kom − Σ İade.kom. Stopaj / entegrasyon bedeli olaya GIRMEZ.
+ * - `level` yoksa 'unit' sayilir (Trendyol, geriye uyumlu).
+ *
  * GERIYE UYUMLULUK: yeni subject; kayit alanlarinin `id`, `transactionType` disindakileri isteğe
  * baglidir — ileride eklenecek alan tuketiciyi kirmaz.
  */
@@ -36,11 +44,18 @@ export const MARKETPLACE_SETTLEMENT_MAX_RECORDS_PER_EVENT = 500;
 /** Tutar yonu: saticiya alacak (Satış) ya da saticidan kesinti (İade/İndirim/Kupon). */
 export type MarketplaceSettlementDirection = 'credit' | 'debt';
 
+/** Kayit duzeyi: 'unit' = satilan birim (Trendyol), 'order' = siparis (Pazarama). Yoksa 'unit'. */
+export type MarketplaceSettlementLevel = 'order' | 'unit';
+
 export interface MarketplaceSettlementRecord {
     /** Platformda tekil kayit kimligi — upsert anahtari (Trendyol `id`) */
     id: string;
     /** HAM platform etiketi (Trendyol: 'Satış' | 'İade' | 'İndirim' | 'Kupon') */
     transactionType: string;
+    /** Kayit duzeyi; yoksa 'unit' (UC-1699) */
+    level?: MarketplaceSettlementLevel;
+    /** level='order': platform siparis kimligi (= Order.platformNumber), string (UC-1699) */
+    orderId?: string;
     /** Pozitif tutar (Trendyol: credit ya da debt alanindaki deger) */
     amount?: number;
     direction?: MarketplaceSettlementDirection;
