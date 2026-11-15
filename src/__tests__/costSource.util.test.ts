@@ -94,3 +94,16 @@ describe('canOverrideCost', () => {
         }
     });
 });
+
+describe('canOverrideCost — Estimate (UC-1682 tahmini komisyon)', () => {
+    it('Marketplace kesin tutari tahmini ezer; tahmin Marketplace i ezemez', () => {
+        expect(canOverrideCost(CostSource.Estimate, CostSource.Marketplace)).toBe(true);
+        expect(canOverrideCost(CostSource.Marketplace, CostSource.Estimate)).toBe(false);
+    });
+
+    it('Manual tahmin tarafindan ezilemez, tahmin yalniz bos alani doldurur ve kendini ezer', () => {
+        expect(canOverrideCost(CostSource.Manual, CostSource.Estimate)).toBe(false);
+        expect(canOverrideCost(undefined, CostSource.Estimate)).toBe(true);
+        expect(canOverrideCost(CostSource.Estimate, CostSource.Estimate)).toBe(true);
+    });
+});
