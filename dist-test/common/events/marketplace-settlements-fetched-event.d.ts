@@ -65,7 +65,7 @@ export interface MarketplaceSettlementsFetchedEvent {
         user: string;
         /** Moon Integration id'si (komut yukunden; yoksa bos) */
         integration?: string;
-        /** ResourceName, ör. 'trendyol' */
+        /** ResourceName değeri, ör. 'Trendyol' (tüketici büyük/küçük harf duyarsız karşılaştırmalı) */
         platform: string;
         records: MarketplaceSettlementRecord[];
         /** Bu kayitlari getiren cekim penceresi (epoch ms) — denetim izi */
