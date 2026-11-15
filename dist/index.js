@@ -107,6 +107,7 @@ __exportStar(require("./utils/commandCredentials.util"), exports);
 __exportStar(require("./utils/costSource.util"), exports);
 __exportStar(require("./utils/authFailureTracker.util"), exports);
 __exportStar(require("./utils/logSafety.util"), exports);
+__exportStar(require("./utils/redisConnection.util"), exports);
 __exportStar(require("./utils/integrationRequestLogPolicy.util"), exports);
 __exportStar(require("./utils/testMode.util"), exports);
 // Database - MongoDB Atlas Native Transactions

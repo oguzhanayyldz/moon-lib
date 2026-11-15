@@ -98,7 +98,9 @@ describe('redisWrapper log safety', () => {
         client.handlers.connect();
 
         const masked = url.replace(FAKE_PASSWORD, '****');
-        expect(mockedCreateClient).toHaveBeenCalledWith(expect.objectContaining({ url }));
+        // UC-1770: istemciye kimliksiz adres + ayrı parola gider
+        expect(mockedCreateClient).toHaveBeenCalledWith(expect.objectContaining({ url: url.replace(`:${FAKE_PASSWORD}@`, ''), password: FAKE_PASSWORD }));
+        expect(inspect(mockedCreateClient.mock.calls[0][0].url)).not.toContain(FAKE_PASSWORD);
         expect(mockedLogger.info).toHaveBeenCalledWith(`Connecting to Redis at ${masked} with 1000ms timeout...`);
         expect(mockedLogger.info).toHaveBeenCalledWith(`✅ Successfully connected to Redis at ${masked}`);
         expect(mockedLogger.info).toHaveBeenCalledWith(`✅ Redis Client Connected to ${masked}`);
@@ -132,13 +134,37 @@ describe('redisWrapper log safety', () => {
         expect(loggedText()).not.toContain(FAKE_PASSWORD);
     });
 
-    it('rejects with a sanitized error (not the raw one) for an invalid URL, preserving the code', async () => {
+    it('rejects an invalid URL before createClient with a safe error that carries no address (UC-1770)', async () => {
+        const rejected = await redisWrapper.connect(`redis://:${FAKE_PASSWORD}@redis master:6379`, 1000).catch((e) => e);
+
+        expect(mockedCreateClient).not.toHaveBeenCalled();
+        expect(rejected).toMatchObject({ name: 'TypeError', code: 'ERR_INVALID_REDIS_URL' });
+        expect(rejected).not.toHaveProperty('cause');
+        expect(inspect(rejected, { depth: 8, showHidden: true })).not.toContain(FAKE_PASSWORD);
+        expect(loggedText()).not.toContain(FAKE_PASSWORD);
+    });
+
+    it('uses REDIS_PASSWORD when set, so REDIS_HOST can stay credential-free (UC-1770)', async () => {
+        const client = createFakeClient();
+        mockedCreateClient.mockReturnValue(client);
+        process.env.REDIS_PASSWORD = FAKE_PASSWORD;
+        try {
+            await redisWrapper.connect('redis://redis-env-pw:6379/0', 1000);
+        } finally {
+            delete process.env.REDIS_PASSWORD;
+        }
+
+        expect(mockedCreateClient).toHaveBeenCalledWith(expect.objectContaining({ url: 'redis://redis-env-pw:6379/0', password: FAKE_PASSWORD }));
+        expect(loggedText()).not.toContain(FAKE_PASSWORD);
+    });
+
+    it('rejects with a sanitized error (not the raw one) when createClient throws, preserving the code', async () => {
         const error = invalidUrlError();
         mockedCreateClient.mockImplementation(() => {
             throw error;
         });
 
-        const rejected = await redisWrapper.connect(`redis://:${FAKE_PASSWORD}/x@127.0.0.1:1`, 1000).catch((e) => e);
+        const rejected = await redisWrapper.connect(nextRedisUrl(), 1000).catch((e) => e);
 
         expect(rejected).not.toBe(error);
         expect(rejected).toMatchObject({ name: 'TypeError', code: 'ERR_INVALID_URL', message: 'Invalid URL' });

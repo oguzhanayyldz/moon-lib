@@ -1,6 +1,7 @@
 import { createClient, RedisClientType } from 'redis';
 import { logger } from './logger.service';
 import { maskConnectionUriSecret, sanitizeConnectionError, toSafeError } from '../utils/logSafety.util';
+import { parseRedisConnectionUrl } from '../utils/redisConnection.util';
 
 const STARTUP_RETRY_BASE_DELAY_MS = 1000;
 const STARTUP_RETRY_MAX_DELAY_MS = 30000;
@@ -100,9 +101,15 @@ class RedisWrapper {
             let connectionFailed = false;
             let connectionError: Error | null = null;
 
+            // UC-1770: adres güvenli ayrıştırılır (geçersizse hata ham adresi taşımaz); parola REDIS_PASSWORD
+            // doluysa oradan gelir. İstemciye kimliksiz adres + ayrı kimlik verilir.
+            const connection = parseRedisConnectionUrl(url);
+
             // Yeni bağlantı oluştur - socket timeout, keepalive ve geliştirilmiş reconnect strategy ile
             const client: RedisClientType = createClient<{}, {}, {}>({
-                url,
+                url: connection.url,
+                ...(connection.username !== undefined ? { username: connection.username } : {}),
+                ...(connection.password !== undefined ? { password: connection.password } : {}),
                 socket: {
                     connectTimeout: timeoutMs,
                     keepAlive: 30000, // 30 saniyede bir keepalive paketi gönder

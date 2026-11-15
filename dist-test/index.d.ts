@@ -70,6 +70,7 @@ export * from './utils/commandCredentials.util';
 export * from './utils/costSource.util';
 export * from './utils/authFailureTracker.util';
 export * from './utils/logSafety.util';
+export * from './utils/redisConnection.util';
 export * from './utils/integrationRequestLogPolicy.util';
 export * from './utils/testMode.util';
 export * from './database';

@@ -6,6 +6,7 @@ exports.getRedisStartupRetryDelay = getRedisStartupRetryDelay;
 const redis_1 = require("redis");
 const logger_service_1 = require("./logger.service");
 const logSafety_util_1 = require("../utils/logSafety.util");
+const redisConnection_util_1 = require("../utils/redisConnection.util");
 const STARTUP_RETRY_BASE_DELAY_MS = 1000;
 const STARTUP_RETRY_MAX_DELAY_MS = 30000;
 /**
@@ -97,10 +98,11 @@ class RedisWrapper {
             // Connection error handling flag
             let connectionFailed = false;
             let connectionError = null;
+            // UC-1770: adres güvenli ayrıştırılır (geçersizse hata ham adresi taşımaz); parola REDIS_PASSWORD
+            // doluysa oradan gelir. İstemciye kimliksiz adres + ayrı kimlik verilir.
+            const connection = (0, redisConnection_util_1.parseRedisConnectionUrl)(url);
             // Yeni bağlantı oluştur - socket timeout, keepalive ve geliştirilmiş reconnect strategy ile
-            const client = (0, redis_1.createClient)({
-                url,
-                socket: {
+            const client = (0, redis_1.createClient)(Object.assign(Object.assign(Object.assign({ url: connection.url }, (connection.username !== undefined ? { username: connection.username } : {})), (connection.password !== undefined ? { password: connection.password } : {})), { socket: {
                     connectTimeout: timeoutMs,
                     keepAlive: 30000, // 30 saniyede bir keepalive paketi gönder
                     noDelay: true, // TCP Nagle algoritmasını devre dışı bırak (düşük latency için)
@@ -115,8 +117,7 @@ class RedisWrapper {
                         logger_service_1.logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries}/10)`);
                         return delay;
                     }
-                }
-            })
+                } }))
                 .on('connect', () => logger_service_1.logger.info(`✅ Redis Client Connected to ${safeUrl}`))
                 .on('error', (err) => {
                 logger_service_1.logger.error('❌ Redis Client Error:', (0, logSafety_util_1.sanitizeConnectionError)(err));
