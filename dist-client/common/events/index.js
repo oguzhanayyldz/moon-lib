@@ -66,6 +66,7 @@ __exportStar(require("./newsletter-email-requested-event"), exports);
 __exportStar(require("./user-sessions-revoked-event"), exports);
 __exportStar(require("./product-cost-updated-event"), exports);
 __exportStar(require("./order-product-cost-assigned-event"), exports);
+__exportStar(require("./marketplace-settlements-fetched-event"), exports);
 __exportStar(require("./entity-version-updated-event"), exports);
 __exportStar(require("./entity-version-bulk-updated-event"), exports);
 __exportStar(require("./sync-requested-event"), exports);

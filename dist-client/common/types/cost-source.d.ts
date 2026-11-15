@@ -24,7 +24,12 @@ export declare enum CostSource {
     /** Pazaryeri hakedis/finans API'si (kargo ve komisyon) */
     Marketplace = "marketplace",
     /** Kendi kademeli tarifemizden hesaplandi (kargo maliyeti) — TAHMIN */
-    Tariff = "tariff"
+    Tariff = "tariff",
+    /**
+     * Pazaryeri satir ORANINDAN hesaplanan komisyon — TAHMIN (UC-1682).
+     * Marketplace (kesin tutar) bunu ezer; en dusuk kesinlik.
+     */
+    Estimate = "estimate"
 }
 /**
  * Kesinlik sirasi — buyuk sayi daha kesin kaynagi gosterir.

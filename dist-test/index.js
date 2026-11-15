@@ -157,6 +157,7 @@ __exportStar(require("./events/publishers/productPriceIntegrationUpdated.publish
 __exportStar(require("./events/publishers/productPriceUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productCostUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/orderProductCostAssigned.publisher"), exports);
+__exportStar(require("./events/publishers/marketplaceSettlementsFetched.publisher"), exports);
 __exportStar(require("./events/publishers/productStockIntegrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productImageIntegrationUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/catalogMappingCreated.publisher"), exports);

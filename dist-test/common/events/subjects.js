@@ -114,6 +114,10 @@ var Subjects;
     // NEDEN AYRI EVENT: maliyet inventory'de hesaplanir (katmanlar orada NATIVE'dir),
     // ama siparis kalemi orders'a aittir. Kural 2 geregi inventory oraya yazamaz.
     Subjects["OrderProductCostAssigned"] = "order:product:cost:assigned";
+    // Pazaryeri hakedis (settlement) kayitlari cekildi (UC-1688, issue #693 Faz 6 — komisyon).
+    // Yayinlayan: pazaryeri entegrasyonu (trendyol) — finans API'sinden periyodik cekilen yeni kayitlar.
+    // Dinleyen: orders (kalem komisyonunu kesin tutarla kumulatif yazar, tahmini ezer).
+    Subjects["MarketplaceSettlementsFetched"] = "marketplace:settlements:fetched";
     // Newsletter (issue #611)
     // auth → notification: bulten abonesine tek bir mail gonderilecek.
     // NotificationCreated YENIDEN KULLANILMADI: onun payload'i userId zorunlu kilar ve

@@ -28,6 +28,7 @@ import { ProductPriceIntegrationUpdatedPublisher } from '../events/publishers/pr
 import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceUpdated.publisher';
 import { ProductCostUpdatedPublisher } from '../events/publishers/productCostUpdated.publisher';
 import { OrderProductCostAssignedPublisher } from '../events/publishers/orderProductCostAssigned.publisher';
+import { MarketplaceSettlementsFetchedPublisher } from '../events/publishers/marketplaceSettlementsFetched.publisher';
 import { ProductErpIdUpdatedPublisher } from '../events/publishers/productErpIdUpdated.publisher';
 import { ProductStockIntegrationUpdatedPublisher } from '../events/publishers/productStockIntegrationUpdated.publisher';
 import { ProductImageIntegrationUpdatedPublisher } from '../events/publishers/productImageIntegrationUpdated.publisher';
@@ -1206,6 +1207,10 @@ export class EventPublisherJob {
                     break;
             case Subjects.OrderProductCostAssigned:
                 await new OrderProductCostAssignedPublisher(this.natsClient)
+                    .publish(event.payload);
+                    break;
+            case Subjects.MarketplaceSettlementsFetched:
+                await new MarketplaceSettlementsFetchedPublisher(this.natsClient)
                     .publish(event.payload);
                     break;
             case Subjects.ProductErpIdUpdated:

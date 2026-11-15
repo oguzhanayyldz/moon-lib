@@ -31,6 +31,7 @@ import {
     ProductPriceUpdatedEvent,
     ProductCostUpdatedEvent,
     OrderProductCostAssignedEvent,
+    MarketplaceSettlementsFetchedEvent,
     ProductErpIdUpdatedEvent,
     ProductStockIntegrationUpdatedEvent,
     CatalogMappingCreatedEvent,
@@ -90,6 +91,7 @@ interface EventPayloadMap {
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
     [Subjects.ProductCostUpdated]: ProductCostUpdatedEvent['data'];
     [Subjects.OrderProductCostAssigned]: OrderProductCostAssignedEvent['data'];
+    [Subjects.MarketplaceSettlementsFetched]: MarketplaceSettlementsFetchedEvent['data'];
     [Subjects.ProductErpIdUpdated]: ProductErpIdUpdatedEvent['data'];
     // Combination/PPL/RPL outbox type'ları kaldırıldı (issue #507)
     [Subjects.UserCreated]: UserCreatedEvent['data'];

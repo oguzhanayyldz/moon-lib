@@ -50,6 +50,7 @@ export * from './newsletter-email-requested-event';
 export * from './user-sessions-revoked-event';
 export * from './product-cost-updated-event';
 export * from './order-product-cost-assigned-event';
+export * from './marketplace-settlements-fetched-event';
 export * from './entity-version-updated-event';
 export * from './entity-version-bulk-updated-event';
 export * from './sync-requested-event';
