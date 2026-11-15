@@ -79,5 +79,6 @@ export declare enum Subjects {
     StockCountFinished = "stock:count:finished",
     ProductCostUpdated = "product:cost:updated",
     OrderProductCostAssigned = "order:product:cost:assigned",
+    MarketplaceSettlementsFetched = "marketplace:settlements:fetched",
     NewsletterEmailRequested = "newsletter:email:requested"
 }

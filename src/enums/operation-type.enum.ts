@@ -51,6 +51,9 @@ export enum OperationType {
     // Fatura İşlemleri
     SEND_INVOICES = 'SEND_INVOICES',
     FETCH_INVOICES = 'FETCH_INVOICES',
+
+    // Finans/hakedis okuma (UC-1688): pazaryeri settlements; siparis sayacindan ayri kota grubu
+    FETCH_SETTLEMENTS = 'FETCH_SETTLEMENTS',
     CANCEL_INVOICE = 'CANCEL_INVOICE',
 
     // Diğer İşlemler

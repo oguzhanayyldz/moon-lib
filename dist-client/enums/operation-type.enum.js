@@ -47,6 +47,8 @@ var OperationType;
     // Fatura İşlemleri
     OperationType["SEND_INVOICES"] = "SEND_INVOICES";
     OperationType["FETCH_INVOICES"] = "FETCH_INVOICES";
+    // Finans/hakedis okuma (UC-1688): pazaryeri settlements; siparis sayacindan ayri kota grubu
+    OperationType["FETCH_SETTLEMENTS"] = "FETCH_SETTLEMENTS";
     OperationType["CANCEL_INVOICE"] = "CANCEL_INVOICE";
     // Diğer İşlemler
     OperationType["HEALTH_CHECK"] = "HEALTH_CHECK";

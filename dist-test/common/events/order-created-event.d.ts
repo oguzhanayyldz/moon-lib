@@ -115,6 +115,12 @@ export interface OrderCreated {
     taxTotal?: number;
     costTotal?: number;
     commissionTotal?: number;
+    /**
+     * Siparisin komisyonu KESINLESTI mi (opsiyonel, additive — UC-1688). true: komisyonlu ana
+     * kalemlerin TAMAMI pazaryerinin verdigi kesin tutarla (`CostSource.Marketplace`) yazili.
+     * Yoksa tuketici "bilinmiyor" sayar; sozlesme kirilmaz.
+     */
+    commissionSettled?: boolean;
     discountTotal?: number;
     /**
      * Tutar sozlesmesi isareti (v2). VARSA kalem `discountTotal` muhasebe indirimidir, siparis
@@ -187,6 +193,11 @@ export interface OrderProductCretedEvent {
      */
     costSource?: CostSource;
     costSequence?: number;
+    /**
+     * Kalem komisyonunun KAYNAGI (opsiyonel, additive — UC-1688): `estimate` (oran tahmini),
+     * `marketplace` (pazaryeri kesin tutari), `manual`. Yoksa tuketici eski davranisla calisir.
+     */
+    commissionSource?: CostSource;
     cancelled?: boolean;
     cancelledQuantity?: number;
     cancelledDate?: Date;
