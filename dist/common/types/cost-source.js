@@ -29,6 +29,11 @@ var CostSource;
     CostSource["Marketplace"] = "marketplace";
     /** Kendi kademeli tarifemizden hesaplandi (kargo maliyeti) — TAHMIN */
     CostSource["Tariff"] = "tariff";
+    /**
+     * Pazaryeri satir ORANINDAN hesaplanan komisyon — TAHMIN (UC-1682).
+     * Marketplace (kesin tutar) bunu ezer; en dusuk kesinlik.
+     */
+    CostSource["Estimate"] = "estimate";
 })(CostSource || (exports.CostSource = CostSource = {}));
 /**
  * Kesinlik sirasi — buyuk sayi daha kesin kaynagi gosterir.
@@ -46,5 +51,6 @@ exports.costSourcePrecedence = {
     [CostSource.Marketplace]: 30,
     [CostSource.Fixed]: 20,
     [CostSource.Tariff]: 10,
-    [CostSource.Import]: 10
+    [CostSource.Import]: 10,
+    [CostSource.Estimate]: 5
 };
