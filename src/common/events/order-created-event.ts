@@ -141,6 +141,15 @@ export interface OrderCreated {
      * Girilmemisse `undefined` kalir — kar panosu bunu "kargo haric" olarak isaretler.
      */
     cargoCost?: number;
+    /**
+     * Taban para birimine (TRY) kur — UC-1948. `1 birim currency = fxRateToBase TRY`; siparis tarihli TCMB doviz alis kuru.
+     * Opsiyonel, additive: TRY siparis ve kur alinamayan siparis tasimaz (tuketici "kur yok" sayar, rakam uydurmaz).
+     */
+    fxRateToBase?: number;
+    /** Kurun kaynagi (orn. 'TCMB_DOVIZ_ALIS') — UC-1948 */
+    fxRateSource?: string;
+    /** Kurun GECERLI oldugu TCMB gunu (siparis gunu hafta sonu/tatilse onceki is gunu) — UC-1948 */
+    fxRateDate?: Date;
     shippingTaxRate?: number;
     note?: string;
     date: Date;
