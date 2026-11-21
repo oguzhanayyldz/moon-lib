@@ -32,6 +32,8 @@ export class IntegrationRouter {
         [ResourceName.N11]: IntegrationType.MarketPlace,
         [ResourceName.CicekSepeti]: IntegrationType.MarketPlace,
         [ResourceName.Pazarama]: IntegrationType.MarketPlace,
+        [ResourceName.Ebay]: IntegrationType.MarketPlace,
+        [ResourceName.Etsy]: IntegrationType.MarketPlace,
         [ResourceName.Parasut]: IntegrationType.Erp,
         [ResourceName.Aras]: IntegrationType.Cargo,
         [ResourceName.Yurtici]: IntegrationType.Cargo,
