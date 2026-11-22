@@ -109,6 +109,12 @@ export interface ParsedCredentials {
     user?: string;
     platform?: string;
 }
+/**
+ * UC-2167: Etsy kaydı mı? (ad büyük-küçük harf / boşluk duyarsız)
+ * UC-2169: ad sabit dize değil, katalog adıyla AYNI kaynaktan (ResourceName.Etsy) okunur; her çağrıda
+ * okunur ki enum değişirse kural onunla birlikte gitsin. Kilit: __tests__/credentials.etsyContract.uc2169.test.ts
+ */
+export declare function isEtsyIntegration(integrationName: string | undefined): boolean;
 export declare class CredentialsService {
     /**
      * BASE ve Integration credentials'ı birleştirir ve parse eder

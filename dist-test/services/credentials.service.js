@@ -19,13 +19,19 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CredentialsService = void 0;
+exports.isEtsyIntegration = isEtsyIntegration;
 const logger_service_1 = require("./logger.service");
 const integration_type_1 = require("../common/types/integration-type");
+const resourceName_1 = require("../common/types/resourceName");
 const encryption_util_1 = require("../utils/encryption.util");
 const testMode_util_1 = require("../utils/testMode.util");
-/** UC-2167: Etsy kaydı mı? (ad büyük-küçük harf / boşluk duyarsız) */
+/**
+ * UC-2167: Etsy kaydı mı? (ad büyük-küçük harf / boşluk duyarsız)
+ * UC-2169: ad sabit dize değil, katalog adıyla AYNI kaynaktan (ResourceName.Etsy) okunur; her çağrıda
+ * okunur ki enum değişirse kural onunla birlikte gitsin. Kilit: __tests__/credentials.etsyContract.uc2169.test.ts
+ */
 function isEtsyIntegration(integrationName) {
-    return typeof integrationName === 'string' && integrationName.trim().toLowerCase() === 'etsy';
+    return typeof integrationName === 'string' && integrationName.trim().toLowerCase() === resourceName_1.ResourceName.Etsy.toLowerCase();
 }
 /** UC-2167: yalnız açık `false` / `'false'` (büyük-küçük harf ve boşluk duyarsız). */
 function isExplicitFalse(value) {
