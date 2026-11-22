@@ -138,6 +138,16 @@ export interface ParsedCredentials {
     platform?: string;
 }
 
+/** UC-2167: Etsy kaydı mı? (ad büyük-küçük harf / boşluk duyarsız) */
+function isEtsyIntegration(integrationName: string | undefined): boolean {
+    return typeof integrationName === 'string' && integrationName.trim().toLowerCase() === 'etsy';
+}
+
+/** UC-2167: yalnız açık `false` / `'false'` (büyük-küçük harf ve boşluk duyarsız). */
+function isExplicitFalse(value: unknown): boolean {
+    return value === false || (typeof value === 'string' && value.trim().toLowerCase() === 'false');
+}
+
 export class CredentialsService {
     /**
      * BASE ve Integration credentials'ı birleştirir ve parse eder
@@ -187,7 +197,13 @@ export class CredentialsService {
 
         // 2.6. testMode DB'de string ("false") saklanır → boolean'a normalize et.
         // Anahtar yoksa dokunma: platform varsayılanı (ör. Amazon sandbox) korunur.
-        if (merged.testMode !== undefined) {
+        // UC-2167: Etsy TERS varsayılandır (sandbox yok, canlı = gerçek satış riski). Yalnız ENTEGRASYON kaydındaki
+        // açık false/'false' CANLI; '', '0', 0, null, 'yes', BASE'ten miras dahil diğer her değer TEST (true).
+        // isTestMode Etsy'de kullanılmaz: tanımadığı değeri canlı sayar. Diğer entegrasyonların davranışı değişmez.
+        if (isEtsyIntegration(integrationName)) {
+            const ownValue = Object.prototype.hasOwnProperty.call(integrationObj, 'testMode') ? merged.testMode : undefined;
+            merged.testMode = !isExplicitFalse(ownValue);
+        } else if (merged.testMode !== undefined) {
             merged.testMode = isTestMode(merged.testMode);
         }
 
