@@ -1,4 +1,4 @@
-import { redactSensitiveText } from './logSafety.util';
+import { redactPersonalDataText, redactSensitiveText } from './logSafety.util';
 import type { AuthFailureResponseSummary } from '../common/events/integration-auth-failure-exceeded-event';
 
 const RESPONSE_BODY_SNIPPET_LIMIT = 200;
@@ -44,8 +44,8 @@ export function summarizeAuthFailureResponse(
             summary.bodySnippet = '[unserializable]';
         }
         if (text) {
-            // Once maskele sonra kes: kesilmis JSON yapisal maskeden gecemez
-            summary.bodySnippet = redactSensitiveText(text).slice(0, RESPONSE_BODY_SNIPPET_LIMIT);
+            // Once maskele (kimlik bilgisi + kisisel veri, KVKK UC-2276) sonra kes: kesilmis JSON yapisal maskeden gecemez
+            summary.bodySnippet = redactPersonalDataText(redactSensitiveText(text)).slice(0, RESPONSE_BODY_SNIPPET_LIMIT);
         }
     }
     return summary;

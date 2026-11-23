@@ -500,6 +500,41 @@ describe('summarizeAuthFailureResponse (UC-2241)', () => {
         expect(summary?.bodySnippet).not.toContain('super-secret-value');
     });
 
+    it('govdedeki kisisel veri (e-posta, telefon, ad, adres) ozete girmez; kimlik bilgisi de maskeli kalir (UC-2276)', () => {
+        const summary = summarizeAuthFailureResponse({
+            status: 403,
+            headers: {},
+            data: {
+                message: 'Forbidden',
+                customerEmail: 'ali.veli@example.com',
+                phone: '05551112233',
+                firstName: 'Ali',
+                shippingAddress: 'Ataturk Cad. No:5 Kadikoy',
+                password: 'super-secret-value'
+            }
+        });
+
+        const snippet = summary?.bodySnippet ?? '';
+        expect(snippet).toContain('Forbidden');
+        expect(snippet).not.toContain('ali.veli@example.com');
+        expect(snippet).not.toContain('05551112233');
+        expect(snippet).not.toContain('Ali"');
+        expect(snippet).not.toContain('Kadikoy');
+        expect(snippet).not.toContain('super-secret-value');
+        expect(snippet).toContain('***PII***');
+    });
+
+    it('kisisel veri maskesi 200 karakter kesmeden ONCE uygulanir (UC-2276)', () => {
+        const summary = summarizeAuthFailureResponse({
+            status: 403,
+            headers: {},
+            data: { email: 'ali.veli@example.com', padding: 'x'.repeat(500) }
+        });
+
+        expect(summary?.bodySnippet).not.toContain('ali.veli');
+        expect(summary?.bodySnippet).toHaveLength(200);
+    });
+
     it('yanit yoksa undefined; donguslu govde hata firlatmaz', () => {
         expect(summarizeAuthFailureResponse(undefined)).toBeUndefined();
         const circular: any = { a: 1 };
