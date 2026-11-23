@@ -56,6 +56,7 @@ import { ResourceName } from '../common';
 import { CircuitBreakerMetrics, CircuitBreakerState } from '../common/types/api-client.types';
 import { OperationType } from '../enums/operation-type.enum';
 import { AuthFailureTracker } from '../utils/authFailureTracker.util';
+import { summarizeAuthFailureResponse } from '../utils/authFailureResponseSummary.util';
 
 export abstract class BaseApiClient implements IApiClient {
   protected httpClient!: any;
@@ -476,13 +477,13 @@ export abstract class BaseApiClient implements IApiClient {
           this.config.authFailureTracking;
         const errorMessage = (error as Error).message?.substring(0, 500);
         const trackerContext = { userId, integrationId, integrationName, threshold, deactivationOperationThreshold };
-        // Kesin sinyal yoksa 5. arguman HIC verilmez: 401/403 yolu eskisiyle birebir ayni cagri.
-        (isDefiniteAuthFailure
-          ? AuthFailureTracker.increment(trackerContext, errorStatus as number, errorMessage, operationType, {
-              definite: true
-            })
-          : AuthFailureTracker.increment(trackerContext, errorStatus as number, errorMessage, operationType)
-        ).catch((err) => {
+        // UC-2241: yanit ozeti (durum, Retry-After, X-RateLimit-*, maskeli govde basi) pasiflestirme
+        // olayina tasinir; neden kalici saklanir. Kesin sinyal yoksa `definite` hic yazilmaz.
+        const responseSummary = summarizeAuthFailureResponse((error as AxiosError).response);
+        AuthFailureTracker.increment(trackerContext, errorStatus as number, errorMessage, operationType, {
+          ...(isDefiniteAuthFailure ? { definite: true } : {}),
+          ...(responseSummary ? { responseSummary } : {})
+        }).catch((err) => {
           logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
             error: err.message,
             integrationName: this.integrationName

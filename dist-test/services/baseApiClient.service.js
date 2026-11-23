@@ -15,6 +15,7 @@ const logger_service_1 = require("./logger.service");
 const api_client_types_2 = require("../common/types/api-client.types");
 const operation_type_enum_1 = require("../enums/operation-type.enum");
 const authFailureTracker_util_1 = require("../utils/authFailureTracker.util");
+const authFailureResponseSummary_util_1 = require("../utils/authFailureResponseSummary.util");
 class BaseApiClient {
     constructor(config, serviceName, integrationName, tracer, logService) {
         /**
@@ -322,12 +323,10 @@ class BaseApiClient {
                 const { userId, integrationId, integrationName, threshold, deactivationOperationThreshold } = this.config.authFailureTracking;
                 const errorMessage = (_k = error.message) === null || _k === void 0 ? void 0 : _k.substring(0, 500);
                 const trackerContext = { userId, integrationId, integrationName, threshold, deactivationOperationThreshold };
-                // Kesin sinyal yoksa 5. arguman HIC verilmez: 401/403 yolu eskisiyle birebir ayni cagri.
-                (isDefiniteAuthFailure
-                    ? authFailureTracker_util_1.AuthFailureTracker.increment(trackerContext, errorStatus, errorMessage, operationType, {
-                        definite: true
-                    })
-                    : authFailureTracker_util_1.AuthFailureTracker.increment(trackerContext, errorStatus, errorMessage, operationType)).catch((err) => {
+                // UC-2241: yanit ozeti (durum, Retry-After, X-RateLimit-*, maskeli govde basi) pasiflestirme
+                // olayina tasinir; neden kalici saklanir. Kesin sinyal yoksa `definite` hic yazilmaz.
+                const responseSummary = (0, authFailureResponseSummary_util_1.summarizeAuthFailureResponse)(error.response);
+                authFailureTracker_util_1.AuthFailureTracker.increment(trackerContext, errorStatus, errorMessage, operationType, Object.assign(Object.assign({}, (isDefiniteAuthFailure ? { definite: true } : {})), (responseSummary ? { responseSummary } : {}))).catch((err) => {
                     logger_service_1.logger.warn('BaseApiClient: AuthFailureTracker.increment failed', {
                         error: err.message,
                         integrationName: this.integrationName

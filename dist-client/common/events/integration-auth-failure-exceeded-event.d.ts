@@ -1,5 +1,19 @@
 import { Subjects } from "./subjects";
 /**
+ * UC-2241: pasiflestirme olayina eklenen, platformun son hata yanitinin ozeti. Nedenin (kimlik mi,
+ * kota mi, gecici ret mi) kalici saklanmasi icindir: istek loglari 14 gun, pod logu dakikalar,
+ * Redis sayaclari 24 saat yasar. Yalniz secilmis basliklar ve maskeli govde basi tasinir.
+ */
+export interface AuthFailureResponseSummary {
+    status: number;
+    /** `Retry-After` basligi (varsa) */
+    retryAfter?: string;
+    /** `X-RateLimit-*` basliklari, kucuk harfli adla (varsa) */
+    rateLimitHeaders?: Record<string, string>;
+    /** Govdenin ilk 200 karakteri, ONCE maskelenmis sonra kesilmis */
+    bodySnippet?: string;
+}
+/**
  * Auth hatasi esigi asildiginda yayinlanan event.
  * Integration servisi dinleyip UserIntegrationSettings.active=false yapar
  * ve kullaniciya in-app + email bildirim gonderir.
@@ -23,5 +37,10 @@ export interface IntegrationAuthFailureExceededEvent {
          * Opsiyonel — geriye uyumlu (eski publisher'lar gondermez).
          */
         failedOperations?: string[];
+        /**
+         * UC-2241: esigi asan son hatanin yanit ozeti (durum, Retry-After, X-RateLimit-*, maskeli
+         * govde basi). Opsiyonel — geriye uyumlu.
+         */
+        lastErrorResponse?: AuthFailureResponseSummary;
     };
 }

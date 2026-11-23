@@ -102,7 +102,7 @@ class AuthFailureTracker {
                 status: lastErrorStatus
             });
             if (count >= threshold) {
-                yield AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage, (options === null || options === void 0 ? void 0 : options.definite) === true);
+                yield AuthFailureTracker.evaluateDeactivation(context, op, count, lastErrorStatus, lastErrorMessage, (options === null || options === void 0 ? void 0 : options.definite) === true, options === null || options === void 0 ? void 0 : options.responseSummary);
             }
             return count;
         });
@@ -113,7 +113,7 @@ class AuthFailureTracker {
      * entegrasyonu pasife cekip cekmeyecegine karar verir.
      */
     static evaluateDeactivation(context_1, operationType_1, failureCount_1, lastErrorStatus_1, lastErrorMessage_1) {
-        return __awaiter(this, arguments, void 0, function* (context, operationType, failureCount, lastErrorStatus, lastErrorMessage, definite = false) {
+        return __awaiter(this, arguments, void 0, function* (context, operationType, failureCount, lastErrorStatus, lastErrorMessage, definite = false, responseSummary) {
             var _a;
             const failedOpsKey = AuthFailureTracker.getFailedOpsKey(context.userId, context.integrationId);
             // UC-1268: kesin kimlik sinyali (BaseApiClient.isAuthFailureError) hesap geneli sorundur;
@@ -142,7 +142,7 @@ class AuthFailureTracker {
             }
             if (distinctFailedOps >= deactivationThreshold) {
                 // Gercek credential-geneli sorun: entegrasyonu pasife cek.
-                yield AuthFailureTracker.publishExceededEvent(context, failureCount, lastErrorStatus, lastErrorMessage, failedOperations);
+                yield AuthFailureTracker.publishExceededEvent(context, failureCount, lastErrorStatus, lastErrorMessage, failedOperations, responseSummary);
             }
             else {
                 // Tek operasyon bozuk: entegrasyon AÇIK kalir, yalnizca o operasyonun devresi acilir.
@@ -266,7 +266,7 @@ class AuthFailureTracker {
      * AuthFailureTracker.initialize(connection) servis startup'inda cagrilmamissa
      * uyari log'lar ama exception fırlatmaz (API isteklerini kirmaz).
      */
-    static publishExceededEvent(context, failureCount, lastErrorStatus, lastErrorMessage, failedOperations) {
+    static publishExceededEvent(context, failureCount, lastErrorStatus, lastErrorMessage, failedOperations, responseSummary) {
         return __awaiter(this, void 0, void 0, function* () {
             const connection = AuthFailureTracker.connection;
             if (!connection) {
@@ -280,16 +280,10 @@ class AuthFailureTracker {
                 const Outbox = (0, outbox_schema_1.createOutboxModel)(connection);
                 const outboxEvent = Outbox.build({
                     eventType: subjects_1.Subjects.IntegrationAuthFailureExceeded,
-                    payload: {
-                        userId: context.userId,
-                        integrationId: context.integrationId,
-                        integrationName: context.integrationName,
-                        failureCount,
+                    payload: Object.assign(Object.assign({ userId: context.userId, integrationId: context.integrationId, integrationName: context.integrationName, failureCount,
                         lastErrorStatus,
                         lastErrorMessage,
-                        failedOperations,
-                        timestamp: new Date()
-                    },
+                        failedOperations }, (responseSummary ? { lastErrorResponse: responseSummary } : {})), { timestamp: new Date() }),
                     status: 'pending'
                 });
                 yield optimisticLocking_util_1.OptimisticLockingUtil.saveWithRetry(outboxEvent);
@@ -305,7 +299,8 @@ class AuthFailureTracker {
                     integrationName: context.integrationName,
                     failureCount,
                     lastErrorStatus,
-                    failedOperations
+                    failedOperations,
+                    lastErrorResponse: responseSummary
                 });
             }
             catch (error) {

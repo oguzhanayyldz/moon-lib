@@ -5,6 +5,7 @@ import { createOutboxModel } from '../models/outbox.schema';
 import { Subjects } from '../common/events/subjects';
 import { OperationType } from '../enums/operation-type.enum';
 import { OptimisticLockingUtil } from './optimisticLocking.util';
+import type { AuthFailureResponseSummary } from '../common/events/integration-auth-failure-exceeded-event';
 
 export interface AuthFailureTrackerContext {
     userId: string;
@@ -75,7 +76,7 @@ export class AuthFailureTracker {
         lastErrorStatus: number,
         lastErrorMessage?: string,
         operationType?: OperationType | string,
-        options?: { definite?: boolean }
+        options?: { definite?: boolean; responseSummary?: AuthFailureResponseSummary }
     ): Promise<number> {
         const op = operationType || OperationType.OTHER;
         const key = AuthFailureTracker.getKey(context.userId, context.integrationId, op);
@@ -125,7 +126,8 @@ export class AuthFailureTracker {
                 count,
                 lastErrorStatus,
                 lastErrorMessage,
-                options?.definite === true
+                options?.definite === true,
+                options?.responseSummary
             );
         }
 
@@ -143,7 +145,8 @@ export class AuthFailureTracker {
         failureCount: number,
         lastErrorStatus: number,
         lastErrorMessage?: string,
-        definite = false
+        definite = false,
+        responseSummary?: AuthFailureResponseSummary
     ): Promise<void> {
         const failedOpsKey = AuthFailureTracker.getFailedOpsKey(context.userId, context.integrationId);
         // UC-1268: kesin kimlik sinyali (BaseApiClient.isAuthFailureError) hesap geneli sorundur;
@@ -178,7 +181,8 @@ export class AuthFailureTracker {
                 failureCount,
                 lastErrorStatus,
                 lastErrorMessage,
-                failedOperations
+                failedOperations,
+                responseSummary
             );
         } else {
             // Tek operasyon bozuk: entegrasyon AÇIK kalir, yalnizca o operasyonun devresi acilir.
@@ -318,7 +322,8 @@ export class AuthFailureTracker {
         failureCount: number,
         lastErrorStatus: number,
         lastErrorMessage: string | undefined,
-        failedOperations: string[]
+        failedOperations: string[],
+        responseSummary?: AuthFailureResponseSummary
     ): Promise<void> {
         const connection = AuthFailureTracker.connection;
         if (!connection) {
@@ -341,6 +346,7 @@ export class AuthFailureTracker {
                     lastErrorStatus,
                     lastErrorMessage,
                     failedOperations,
+                    ...(responseSummary ? { lastErrorResponse: responseSummary } : {}),
                     timestamp: new Date()
                 },
                 status: 'pending'
@@ -360,7 +366,8 @@ export class AuthFailureTracker {
                 integrationName: context.integrationName,
                 failureCount,
                 lastErrorStatus,
-                failedOperations
+                failedOperations,
+                lastErrorResponse: responseSummary
             });
         } catch (error) {
             logger.error('AuthFailureTracker: Failed to queue IntegrationAuthFailureExceeded event', {
