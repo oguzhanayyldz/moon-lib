@@ -19,6 +19,7 @@
 
 import { logger } from './logger.service';
 import { IntegrationType } from '../common/types/integration-type';
+import { ResourceName } from '../common/types/resourceName';
 import { EncryptionUtil } from '../utils/encryption.util';
 import { isTestMode } from '../utils/testMode.util';
 
@@ -138,9 +139,13 @@ export interface ParsedCredentials {
     platform?: string;
 }
 
-/** UC-2167: Etsy kaydı mı? (ad büyük-küçük harf / boşluk duyarsız) */
-function isEtsyIntegration(integrationName: string | undefined): boolean {
-    return typeof integrationName === 'string' && integrationName.trim().toLowerCase() === 'etsy';
+/**
+ * UC-2167: Etsy kaydı mı? (ad büyük-küçük harf / boşluk duyarsız)
+ * UC-2169: ad sabit dize değil, katalog adıyla AYNI kaynaktan (ResourceName.Etsy) okunur; her çağrıda
+ * okunur ki enum değişirse kural onunla birlikte gitsin. Kilit: __tests__/credentials.etsyContract.uc2169.test.ts
+ */
+export function isEtsyIntegration(integrationName: string | undefined): boolean {
+    return typeof integrationName === 'string' && integrationName.trim().toLowerCase() === ResourceName.Etsy.toLowerCase();
 }
 
 /** UC-2167: yalnız açık `false` / `'false'` (büyük-küçük harf ve boşluk duyarsız). */
