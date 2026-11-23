@@ -148,11 +148,21 @@ export declare function redactPersonalData<T>(value: T): T;
 /**
  * Masks personal data inside a text body: a JSON text structurally (returned unchanged when it holds
  * none), otherwise XML elements and `"name": value` pairs in place.
+ * UC-2275: e-mail addresses and phone numbers that carry no field name (`"message": "ali@x.com
+ * adresine gönderilemedi"`) are masked by shape (`redactPersonalDataPatterns`), also inside JSON string
+ * values.
  * Known limits: form (`name=value`) and header (`Name: value`) pairs are not masked for personal data
  * (in the integrations' payloads those shapes carry credentials, not buyer data), and in a text that
  * is not JSON an address object (`"address": {…}`) keeps its inner fields other than the named ones.
+ * A bare 10-digit mobile number with no `0`/`+90` prefix (`5321234567`) is not masked: that shape
+ * is also an order number.
  */
 export declare function redactPersonalDataText(text: string): string;
+/**
+ * Masks e-mail addresses and phone numbers that appear in a text without a field name (UC-2275).
+ * Used by `redactPersonalDataText` (and through it on every string value of `redactPersonalData`).
+ */
+export declare function redactPersonalDataPatterns(text: string): string;
 export declare function escapeRegExp(value: string): string;
 /** Upper bound of the serialized meta, in characters. Longer output is cut and marked. */
 export declare const MAX_LOG_META_LENGTH = 8192;
