@@ -47,8 +47,8 @@ function summarizeAuthFailureResponse(response) {
             summary.bodySnippet = '[unserializable]';
         }
         if (text) {
-            // Once maskele sonra kes: kesilmis JSON yapisal maskeden gecemez
-            summary.bodySnippet = (0, logSafety_util_1.redactSensitiveText)(text).slice(0, RESPONSE_BODY_SNIPPET_LIMIT);
+            // Once maskele (kimlik bilgisi + kisisel veri, KVKK UC-2276) sonra kes: kesilmis JSON yapisal maskeden gecemez
+            summary.bodySnippet = (0, logSafety_util_1.redactPersonalDataText)((0, logSafety_util_1.redactSensitiveText)(text)).slice(0, RESPONSE_BODY_SNIPPET_LIMIT);
         }
     }
     return summary;
