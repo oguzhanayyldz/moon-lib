@@ -579,6 +579,15 @@ const PHONE_PATTERN = new RegExp(
 /**
  * Masks e-mail addresses and phone numbers that appear in a text without a field name (UC-2275).
  * Used by `redactPersonalDataText` (and through it on every string value of `redactPersonalData`).
+ *
+ * Known limits (Exxe UC-2298 B-2; shape-based, logs only, accepted):
+ * - False positives (masked although not personal data): an amount with a leading `+`
+ *   (`+1.234.567,89` → `***PII***,89`), an image name like `logo@2x.png`, a SKU such as
+ *   `SKU-0532-123-45-67`, an 11-digit tracking number starting with `0[2-5]`.
+ * - False negatives (left visible): `+1 (212) 555-0100` (parenthesised non-TR area code),
+ *   `905321234567` (country code without `+`/`00`), `532 123 45 67` (no trunk `0`),
+ *   URL-encoded `ali%40x.com`.
+ * Named fields (`email`, `phone`, …) are masked by name regardless of these limits.
  */
 export function redactPersonalDataPatterns(text: string): string {
     return text

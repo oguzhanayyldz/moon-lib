@@ -1008,6 +1008,11 @@ describe('redactPersonalDataText — adsız e-posta ve telefon serbest metinde (
             ['takip kimliği (uuid)', 'trackingId 0532a1b2-1234-4567-89ab-123456789012 işleniyor'],
             ['@ ile kullanıcı adı', 'Geliştirici @moontra servis anahtarı'],
             ['dosya adı', 'integrator-ticket-upload.json yüklendi'],
+            // Exxe UC-2298 B-1: harf TLD'si olmayan alan adı e-posta değildir (ML-6 mutasyonunu yakalar).
+            ['sürüm etiketi (paket@sürüm)', 'Bağımlılık axios@1.7.9 yüklendi'],
+            ['noktasız alan adı', 'Kullanıcı x@localhost bağlandı'],
+            // Exxe UC-2298 B-1: soldan rakama yapışık 0 + 10 hane telefon değildir (ML-8 mutasyonunu yakalar).
+            ['sipariş no (12 hane, içinde 05… geçen)', 'Sipariş 105321234567 bulunamadı'],
         ])('%s', (_label, text) => {
             expect(redactPersonalDataText(text)).toBe(text);
         });
