@@ -45,9 +45,17 @@ describe('HepsiburadaResponseInterpreter — hata durumları başarısız yoruml
         });
 
         it('ürün gönderimi: errors: [] → hata dalına düşmez', () => {
-            const result = interpreter.interpret({ errors: [], success: true }, OperationType.SEND_PRODUCTS, 200);
+            // UC-2292: `success` alanı OLMAYAN ve trackingId taşımayan gövde; yalnız hasErrors() boş diziyi
+            // hata saymadığı için başarılı kalır (`!!errors` olsaydı [] truthy → başarısız olurdu).
+            const result = interpreter.interpret({ errors: [], itemCount: 1 }, OperationType.SEND_PRODUCTS, 200);
             expect(result!.success).toBe(true);
             expect(result!.summary).not.toContain('başarısız');
+        });
+
+        it('ürün gönderimi: errors: [] + trackingId → batch isteği başarılı', () => {
+            const result = interpreter.interpret({ errors: [], trackingId: 'trk-1' }, OperationType.SEND_PRODUCTS, 200);
+            expect(result!.success).toBe(true);
+            expect(result!.details?.trackingId).toBe('trk-1');
         });
 
         it('ürün gönderimi: dolu errors → success:false', () => {
@@ -70,6 +78,25 @@ describe('HepsiburadaResponseInterpreter — hata durumları başarısız yoruml
             expect(result!.success).toBe(false);
             expect(result!.failureCount).toBe(1);
             expect(result!.summary).toContain('Fiyat alt sınırın altında');
+        });
+
+        it('UC-2292: gövde hem trackingId hem dolu priceValidations taşırsa başarısız/kısmi (trackingId ezmez)', () => {
+            const result = interpreter.interpret(
+                { trackingId: 'trk-9', itemCount: 3, priceValidations: [body.priceValidations[0]] },
+                OperationType.UPDATE_PRICES,
+                200
+            );
+            expect(result!.success).toBe(false);
+            expect(result!.summary).toContain('kısmen başarısız');
+            expect(result!.failureCount).toBe(1);
+            expect(result!.successCount).toBe(2); // 3 ürün - 1 doğrulama hatası: özetle tutarlı
+            expect(result!.details?.trackingId).toBe('trk-9');
+        });
+
+        it('UC-2292: trackingId + boş priceValidations → hâlâ başarılı batch isteği', () => {
+            const result = interpreter.interpret({ trackingId: 'trk-9', itemCount: 3, priceValidations: [] }, OperationType.UPDATE_PRICES, 200);
+            expect(result!.success).toBe(true);
+            expect(result!.successCount).toBe(3);
         });
 
         it('priceValidations boşsa Done yanıtı başarılıdır', () => {

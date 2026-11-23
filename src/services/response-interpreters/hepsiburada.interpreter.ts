@@ -382,6 +382,26 @@ export class HepsiburadaResponseInterpreter extends BaseResponseInterpreter {
      * Hepsiburada stok/fiyat güncelleme trackingId döndürebilir
      */
     private interpretStockAndPriceUpdate(response: any, operationType: OperationType): InterpretedResponse {
+        // UC-2225: status "Done" olsa da priceValidations dolu ise fiyat uygulanmamıştır (MIN_LOCK vb.) → başarı değil.
+        // UC-2292: trackingId dalından ÖNCE değerlendirilir; gövde ikisini birden taşıyorsa trackingId başarıyı ezmez.
+        const priceValidations = Array.isArray(response?.priceValidations) ? response.priceValidations : [];
+        if (priceValidations.length > 0) {
+            const firstDescription = priceValidations[0]?.description || priceValidations[0]?.type || 'Fiyat doğrulaması';
+            return {
+                summary: `Güncelleme kısmen başarısız: ${priceValidations.length} üründe fiyat doğrulaması (${firstDescription})`,
+                success: false,
+                successCount: Math.max((Number(response?.itemCount) || 0) - priceValidations.length, 0),
+                failureCount: priceValidations.length,
+                details: {
+                    operationType,
+                    trackingId: response?.trackingId,
+                    status: response?.status,
+                    priceValidations: priceValidations.slice(0, 20)
+                },
+                parsedAt: new Date()
+            };
+        }
+
         // TrackingId varsa - asenkron işlem
         if (response?.trackingId) {
             const trackingId = response.trackingId;
@@ -396,24 +416,6 @@ export class HepsiburadaResponseInterpreter extends BaseResponseInterpreter {
                     trackingId,
                     itemCount,
                     operationType
-                },
-                parsedAt: new Date()
-            };
-        }
-
-        // UC-2225: status "Done" olsa da priceValidations dolu ise fiyat uygulanmamıştır (MIN_LOCK vb.) → başarı değil
-        const priceValidations = Array.isArray(response?.priceValidations) ? response.priceValidations : [];
-        if (priceValidations.length > 0) {
-            const firstDescription = priceValidations[0]?.description || priceValidations[0]?.type || 'Fiyat doğrulaması';
-            return {
-                summary: `Güncelleme kısmen başarısız: ${priceValidations.length} üründe fiyat doğrulaması (${firstDescription})`,
-                success: false,
-                successCount: 0,
-                failureCount: priceValidations.length,
-                details: {
-                    operationType,
-                    status: response?.status,
-                    priceValidations: priceValidations.slice(0, 20)
                 },
                 parsedAt: new Date()
             };
