@@ -158,7 +158,9 @@ describe('BaseApiClient — operation-aware auth tracking (#566)', () => {
             expect.objectContaining({ userId: 'u1', integrationId: 'i1', integrationName: 'test' }),
             401,
             expect.any(String),
-            OperationType.FETCH_INVOICES
+            OperationType.FETCH_INVOICES,
+            // UC-2241: 5. arguman yanit ozetini tasir; `definite` anahtari YOK (tam esitlik)
+            { responseSummary: expect.objectContaining({ status: 401 }) }
         );
     });
 
@@ -213,7 +215,9 @@ describe('BaseApiClient — isRateLimitedAuthError kancasi (#595)', () => {
             expect.objectContaining({ userId: 'u1', integrationId: 'i1', integrationName: 'test' }),
             403,
             expect.any(String),
-            OperationType.UPDATE_PRICES
+            OperationType.UPDATE_PRICES,
+            // UC-2241: 5. arguman yanit ozetini tasir; `definite` anahtari YOK (tam esitlik)
+            { responseSummary: expect.objectContaining({ status: 403 }) }
         );
     });
 
@@ -236,6 +240,32 @@ describe('BaseApiClient — isRateLimitedAuthError kancasi (#595)', () => {
         expect(AuthFailureTracker.increment).not.toHaveBeenCalled();
     });
 
+    it('UC-2241: sayaca giden 401/403 yanit ozetini (durum, Retry-After, X-RateLimit-*, govde) tasir', async () => {
+        const httpRequest = jest.fn(async () => {
+            throw {
+                response: {
+                    status: 403,
+                    headers: { 'x-ratelimit-remaining': '0', authorization: 'Basic abc' },
+                    data: { message: 'Forbidden', secretKey: 'abc' }
+                },
+                message: 'forbidden-auth',
+                isAxiosError: true
+            };
+        });
+        const client = makeClient(httpRequest, true, RateLimitAwareTestApiClient);
+
+        await expect(client.get('/x', { ...REQ, operationType: OperationType.UPDATE_PRICES })).rejects.toBeDefined();
+
+        const options = (AuthFailureTracker.increment as jest.Mock).mock.calls[0][4];
+        expect(options.responseSummary).toEqual({
+            status: 403,
+            rateLimitHeaders: { 'x-ratelimit-remaining': '0' },
+            bodySnippet: expect.stringContaining('Forbidden')
+        });
+        expect(options.responseSummary.bodySnippet).not.toContain('abc');
+        expect(options.definite).toBeUndefined();
+    });
+
     it('isRateLimitedAuthError tanimlanmamis ise (eski entegrasyonlar) davranis DEGISMEZ — her 401/403 sayilir', async () => {
         const httpRequest = jest.fn(async () => {
             throw { response: { status: 403, headers: { 'retry-after': '2' } }, message: 'forbidden', isAxiosError: true };
@@ -249,7 +279,9 @@ describe('BaseApiClient — isRateLimitedAuthError kancasi (#595)', () => {
             expect.objectContaining({ userId: 'u1', integrationId: 'i1', integrationName: 'test' }),
             403,
             expect.any(String),
-            OperationType.FETCH_ORDERS
+            OperationType.FETCH_ORDERS,
+            // UC-2241: 5. arguman yanit ozetini tasir; `definite` anahtari YOK (tam esitlik)
+            { responseSummary: expect.objectContaining({ status: 403 }) }
         );
     });
 });
@@ -275,7 +307,7 @@ describe('BaseApiClient — isAuthFailureError kancasi (UC-1268)', () => {
             400,
             expect.any(String),
             OperationType.FETCH_ORDERS,
-            { definite: true }
+            { definite: true, responseSummary: expect.objectContaining({ status: 400 }) }
         );
     });
 
@@ -307,7 +339,9 @@ describe('BaseApiClient — isAuthFailureError kancasi (UC-1268)', () => {
             expect.objectContaining({ userId: 'u1' }),
             401,
             expect.any(String),
-            OperationType.FETCH_ORDERS
+            OperationType.FETCH_ORDERS,
+            // UC-2241: 5. arguman yanit ozetini tasir; `definite` anahtari YOK (tam esitlik)
+            { responseSummary: expect.objectContaining({ status: 401 }) }
         );
     });
 });

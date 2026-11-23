@@ -1,4 +1,5 @@
 import { AuthFailureTracker } from '../utils/authFailureTracker.util';
+import { summarizeAuthFailureResponse } from '../utils/authFailureResponseSummary.util';
 import { OperationType } from '../enums/operation-type.enum';
 
 // In-memory Redis store — gercek incr/SET semantigi ile (operation-aware testler icin)
@@ -232,6 +233,25 @@ describe('AuthFailureTracker (operation-aware #566)', () => {
             expect(OptimisticLockingUtil.saveWithRetry).not.toHaveBeenCalled();
         });
 
+        it('UC-2241: esigi asan son hatanin yanit ozeti olay yukune lastErrorResponse olarak tasinir', async () => {
+            const summary = {
+                status: 403,
+                retryAfter: '30',
+                rateLimitHeaders: { 'x-ratelimit-remaining': '0' },
+                bodySnippet: '{"message":"Forbidden"}'
+            };
+            for (let i = 0; i < 5; i++) {
+                await AuthFailureTracker.increment(baseContext, 403, 'forbidden', OperationType.FETCH_ORDERS, {
+                    definite: true,
+                    responseSummary: summary
+                });
+            }
+
+            expect(OptimisticLockingUtil.saveWithRetry).toHaveBeenCalledTimes(1);
+            const published = (OptimisticLockingUtil.saveWithRetry as jest.Mock).mock.calls[0][0];
+            expect(published.payload.lastErrorResponse).toEqual(summary);
+        });
+
         it('UC-1302: clears its OWN counters + failed-ops SET right after queueing the exceeded event (same Redis DB as increment)', async () => {
             // Sayaclari yazan surec (entegrasyon servisi) kendi Redis DB'sinde calisir; integration servisinin
             // dinleyicisindeki reset() BASKA bir DB'ye gider ve bu anahtarlara ulasamaz (canli: n11 /15, integration /0).
@@ -435,6 +455,93 @@ describe('AuthFailureTracker (operation-aware #566)', () => {
             mockClient.get.mockRejectedValueOnce(new Error('network'));
 
             expect(await AuthFailureTracker.get(userId, integrationId, OperationType.FETCH_ORDERS)).toBe(0);
+        });
+    });
+});
+
+describe('summarizeAuthFailureResponse (UC-2241)', () => {
+    it('durum, Retry-After ve X-RateLimit-* basliklarini alir; diger basliklari almaz', () => {
+        const summary = summarizeAuthFailureResponse({
+            status: 403,
+            headers: {
+                'Retry-After': '12',
+                'X-RateLimit-Limit': '180',
+                'x-ratelimit-remaining': '0',
+                'X-RateLimit-Reset': '41',
+                'set-cookie': 'sid=abc',
+                'content-type': 'application/json'
+            },
+            data: { message: 'Forbidden' }
+        });
+
+        expect(summary).toEqual({
+            status: 403,
+            retryAfter: '12',
+            rateLimitHeaders: {
+                'x-ratelimit-limit': '180',
+                'x-ratelimit-remaining': '0',
+                'x-ratelimit-reset': '41'
+            },
+            bodySnippet: '{"message":"Forbidden"}'
+        });
+    });
+
+    it('axios basliklari (toJSON) okunur; govde once maskelenir sonra 200 karaktere kesilir', () => {
+        const longBody = { password: 'super-secret-value', detail: 'x'.repeat(500) };
+        const summary = summarizeAuthFailureResponse({
+            status: 401,
+            headers: { toJSON: () => ({ 'retry-after': '5' }) },
+            data: longBody
+        });
+
+        expect(summary?.retryAfter).toBe('5');
+        expect(summary?.rateLimitHeaders).toBeUndefined();
+        expect(summary?.bodySnippet).toHaveLength(200);
+        expect(summary?.bodySnippet).not.toContain('super-secret-value');
+    });
+
+    it('govdedeki kisisel veri (e-posta, telefon, ad, adres) ozete girmez; kimlik bilgisi de maskeli kalir (UC-2276)', () => {
+        const summary = summarizeAuthFailureResponse({
+            status: 403,
+            headers: {},
+            data: {
+                message: 'Forbidden',
+                customerEmail: 'ali.veli@example.com',
+                phone: '05551112233',
+                firstName: 'Ali',
+                shippingAddress: 'Ataturk Cad. No:5 Kadikoy',
+                password: 'super-secret-value'
+            }
+        });
+
+        const snippet = summary?.bodySnippet ?? '';
+        expect(snippet).toContain('Forbidden');
+        expect(snippet).not.toContain('ali.veli@example.com');
+        expect(snippet).not.toContain('05551112233');
+        expect(snippet).not.toContain('Ali"');
+        expect(snippet).not.toContain('Kadikoy');
+        expect(snippet).not.toContain('super-secret-value');
+        expect(snippet).toContain('***PII***');
+    });
+
+    it('kisisel veri maskesi 200 karakter kesmeden ONCE uygulanir (UC-2276)', () => {
+        const summary = summarizeAuthFailureResponse({
+            status: 403,
+            headers: {},
+            data: { email: 'ali.veli@example.com', padding: 'x'.repeat(500) }
+        });
+
+        expect(summary?.bodySnippet).not.toContain('ali.veli');
+        expect(summary?.bodySnippet).toHaveLength(200);
+    });
+
+    it('yanit yoksa undefined; donguslu govde hata firlatmaz', () => {
+        expect(summarizeAuthFailureResponse(undefined)).toBeUndefined();
+        const circular: any = { a: 1 };
+        circular.self = circular;
+        expect(summarizeAuthFailureResponse({ status: 403, headers: {}, data: circular })).toEqual({
+            status: 403,
+            bodySnippet: '[unserializable]'
         });
     });
 });

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { OperationType } from '../enums/operation-type.enum';
+import type { AuthFailureResponseSummary } from '../common/events/integration-auth-failure-exceeded-event';
 export interface AuthFailureTrackerContext {
     userId: string;
     integrationId: string;
@@ -54,6 +55,7 @@ export declare class AuthFailureTracker {
      */
     static increment(context: AuthFailureTrackerContext, lastErrorStatus: number, lastErrorMessage?: string, operationType?: OperationType | string, options?: {
         definite?: boolean;
+        responseSummary?: AuthFailureResponseSummary;
     }): Promise<number>;
     /**
      * Bir operasyon kendi esigini astiginda cagrilir.
