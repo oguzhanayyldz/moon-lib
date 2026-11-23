@@ -23,6 +23,7 @@ exports.redactSensitiveText = redactSensitiveText;
 exports.isPersonalDataFieldName = isPersonalDataFieldName;
 exports.redactPersonalData = redactPersonalData;
 exports.redactPersonalDataText = redactPersonalDataText;
+exports.redactPersonalDataPatterns = redactPersonalDataPatterns;
 exports.escapeRegExp = escapeRegExp;
 exports.isLoggableError = isLoggableError;
 exports.toSafeLogError = toSafeLogError;
@@ -520,9 +521,14 @@ function redactPersonalData(value) {
 /**
  * Masks personal data inside a text body: a JSON text structurally (returned unchanged when it holds
  * none), otherwise XML elements and `"name": value` pairs in place.
+ * UC-2275: e-mail addresses and phone numbers that carry no field name (`"message": "ali@x.com
+ * adresine gönderilemedi"`) are masked by shape (`redactPersonalDataPatterns`), also inside JSON string
+ * values.
  * Known limits: form (`name=value`) and header (`Name: value`) pairs are not masked for personal data
  * (in the integrations' payloads those shapes carry credentials, not buyer data), and in a text that
  * is not JSON an address object (`"address": {…}`) keeps its inner fields other than the named ones.
+ * A bare 10-digit mobile number with no `0`/`+90` prefix (`5321234567`) is not masked: that shape
+ * is also an order number.
  */
 function redactPersonalDataText(text) {
     const trimmed = text.trim();
@@ -536,7 +542,36 @@ function redactPersonalDataText(text) {
             // Not JSON after all: fall through to the text rules.
         }
     }
-    return redactJsonPairs(redactXmlElements(text, isPersonalDataFieldName, exports.PERSONAL_DATA_MASK), isPersonalDataFieldName, exports.PERSONAL_DATA_MASK);
+    return redactPersonalDataPatterns(redactJsonPairs(redactXmlElements(text, isPersonalDataFieldName, exports.PERSONAL_DATA_MASK), isPersonalDataFieldName, exports.PERSONAL_DATA_MASK));
+}
+// UC-2275: e-mail by shape. The look-behind lets a match start only at the start of a local-part
+// run, so a long run with no `@` is scanned once (linear time). The domain must end in a letter TLD,
+// checked in the callback to keep the pattern free of nested quantifiers.
+const EMAIL_CANDIDATE_PATTERN = /(?<![\w.%+-])[\w.%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+const EMAIL_DOMAIN_TLD_PATTERN = /\.[A-Za-z]{2,}$/;
+// UC-2275: phone numbers by shape, every quantifier bounded (constant work per start position):
+// - Turkish number with an international prefix: `+90 532 123 45 67`, `0090…`, `+905321234567`;
+// - Turkish number with the trunk `0` (mobile and land lines, area code 2xx–5xx): `0532 123 45 67`,
+//   `0 (532) 123-45-67`, `05321234567`;
+// - any other international number written with `+`: `+44 20 7946 0958`.
+// No digit may touch either end, so a 13-digit barcode (`0532123456789`) never matches a 11-digit
+// part of it. Order numbers, dates and amounts have no `+`/`00` prefix or no trunk `0` + 10 digits.
+const PHONE_PATTERN = new RegExp('(?<![\\d+])(?:' +
+    '(?:\\+|00)\\s?90[\\s.-]?\\(?\\d{3}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{2}[\\s.-]?\\d{2}' +
+    '|0\\s?\\(?[2-5]\\d{2}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{2}[\\s.-]?\\d{2}' +
+    '|\\+\\d{1,3}(?:[\\s.-]?\\d{2,4}){2,5}' +
+    ')(?!\\d)', 'g');
+/**
+ * Masks e-mail addresses and phone numbers that appear in a text without a field name (UC-2275).
+ * Used by `redactPersonalDataText` (and through it on every string value of `redactPersonalData`).
+ */
+function redactPersonalDataPatterns(text) {
+    return text
+        .replace(EMAIL_CANDIDATE_PATTERN, (match) => {
+        const domain = match.slice(match.lastIndexOf('@') + 1);
+        return EMAIL_DOMAIN_TLD_PATTERN.test(domain) ? exports.PERSONAL_DATA_MASK : match;
+    })
+        .replace(PHONE_PATTERN, exports.PERSONAL_DATA_MASK);
 }
 function redactXmlElements(text, isMaskedName = isSensitiveFieldName, mask = exports.REDACTED_FIELD_MASK) {
     const startTag = new RegExp(XML_START_TAG_PATTERN.source, 'g');

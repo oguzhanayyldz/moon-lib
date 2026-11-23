@@ -12,7 +12,10 @@ import {
     redactSensitiveText,
     sanitizeConnectionError,
     toSafeError,
-    maskLogMessageText
+    maskLogMessageText,
+    PERSONAL_DATA_MASK,
+    redactPersonalData,
+    redactPersonalDataText
 } from '../utils/logSafety.util';
 
 // Fake values. They appear in source as `${...}` templates; the plaintext credential K0 gate
@@ -952,5 +955,87 @@ describe('redactSensitiveText — name-free tokens, header lines, session/jwt/si
             expect(out).not.toContain('FAKE_PASS_UC832');
             expect(out).toContain('redis://u:****@h:6379/0');
         });
+    });
+});
+
+describe('redactPersonalDataText — adsız e-posta ve telefon serbest metinde (UC-2275, Exxe UC-2279 B-1)', () => {
+    describe('maskelenir', () => {
+        it('JSON mesaj alanındaki adsız e-posta (alan adı kişisel değil)', () => {
+            const out = redactPersonalDataText('{"message":"ali@x.com adresine gönderilemedi"}');
+            expect(out).not.toContain('ali@x.com');
+            expect(JSON.parse(out)).toEqual({ message: `${PERSONAL_DATA_MASK} adresine gönderilemedi` });
+        });
+
+        it('düz metindeki e-posta (alt alan, artı, nokta)', () => {
+            const out = redactPersonalDataText('Alıcı ayse.yilmaz+kargo@posta.ornek.com.tr bulunamadı');
+            expect(out).toBe(`Alıcı ${PERSONAL_DATA_MASK} bulunamadı`);
+        });
+
+        it.each([
+            ['+90 532 123 45 67'],
+            ['+905321234567'],
+            ['0090 532 123 45 67'],
+            ['0532 123 45 67'],
+            ['0 (532) 123-45-67'],
+            ['05321234567'],
+            ['+44 20 7946 0958'],
+        ])('telefon %s', (phone) => {
+            const out = redactPersonalDataText(`Müşteriye ${phone} numarasından ulaşılamadı`);
+            expect(out).toBe(`Müşteriye ${PERSONAL_DATA_MASK} numarasından ulaşılamadı`);
+        });
+
+        it('JSON içinde iç içe adsız telefon (redactPersonalData dize değerleri)', () => {
+            expect(redactPersonalData({ errors: [{ detail: 'Tel 0532 123 45 67 geçersiz', code: 4001 }] }))
+                .toEqual({ errors: [{ detail: `Tel ${PERSONAL_DATA_MASK} geçersiz`, code: 4001 }] });
+        });
+
+        it('XML gövde içindeki adsız e-posta', () => {
+            expect(redactPersonalDataText('<Error><Message>ali@x.com hatalı</Message></Error>'))
+                .toBe(`<Error><Message>${PERSONAL_DATA_MASK} hatalı</Message></Error>`);
+        });
+    });
+
+    describe('yanlış pozitif yok: aynen kalır', () => {
+        it.each([
+            ['sipariş no (10 hane)', 'Sipariş 5321234567 bulunamadı'],
+            ['sipariş no (11 hane, 0 ile başlamayan)', 'Sipariş 10342567890 iptal'],
+            ['sipariş no (HB biçimi)', 'Paket 4123456789-1 için hata'],
+            ['EAN-13 barkod', 'Barkod 8691234567890 eşleşmedi'],
+            ['05 ile başlayan EAN-13 barkod', 'Barkod 0532123456789 eşleşmedi'],
+            ['ISO tarih ve saat', 'Tarih 2026-11-23T10:20:56Z geçersiz'],
+            ['TR tarih', 'Teslim 23.11.2026 14:30 gecikti'],
+            ['tutar', 'Tutar 1.234,56 TL'],
+            ['takip kimliği (uuid)', 'trackingId 0532a1b2-1234-4567-89ab-123456789012 işleniyor'],
+            ['@ ile kullanıcı adı', 'Geliştirici @moontra servis anahtarı'],
+            ['dosya adı', 'integrator-ticket-upload.json yüklendi'],
+        ])('%s', (_label, text) => {
+            expect(redactPersonalDataText(text)).toBe(text);
+        });
+
+        it('JSON biçimi kişisel veri yoksa aynen döner', () => {
+            const text = '{ "orderNumber": "5321234567",  "barcode": "8691234567890", "date": "2026-11-23" }';
+            expect(redactPersonalDataText(text)).toBe(text);
+        });
+    });
+});
+
+describe('redactPersonalDataPatterns — linear time on hostile input (UC-2275)', () => {
+    const HARD_LIMIT_MS = 2000;
+    const LINEAR_BUDGET_MS = 1000;
+    const MB = 1000000;
+    const repeatTo = (unit: string, size: number): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+
+    it.each([
+        ['e-mail: local part with no @', 'a'.repeat(MB)],
+        ['e-mail: dotted local part with no @', repeatTo('a.', MB)],
+        ['e-mail: @ runs', repeatTo('a@', MB)],
+        ['e-mail: domain labels with no TLD', 'a@' + repeatTo('1.', MB)],
+        ['phone: trunk zero runs', repeatTo('0 ', MB)],
+        ['phone: plus runs', repeatTo('+1 ', MB)],
+        ['phone: digit groups', repeatTo('12 ', MB)],
+    ])('%s (1 MB)', (_label, input) => {
+        const started = performance.now();
+        runInNewContext('redact(input)', { redact: redactPersonalDataText, input }, { timeout: HARD_LIMIT_MS });
+        expect(performance.now() - started).toBeLessThan(LINEAR_BUDGET_MS);
     });
 });

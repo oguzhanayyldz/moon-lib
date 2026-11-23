@@ -442,7 +442,7 @@ class BaseApiClient {
     }
     executeRequest(requestConfig, signal) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f;
+            var _a, _b, _c, _d, _e, _f, _g;
             let lastError;
             const retryConfig = this.config.retries;
             const maxRetries = requestConfig.skipRetry ? 0 : ((retryConfig === null || retryConfig === void 0 ? void 0 : retryConfig.maxRetries) || 0);
@@ -452,8 +452,15 @@ class BaseApiClient {
                 if (signal === null || signal === void 0 ? void 0 : signal.aborted) {
                     throw (_a = lastError) !== null && _a !== void 0 ? _a : new Error('Request aborted before it was sent');
                 }
+                // UC-2275: deneme basina kanca try DISINDA: reddi bir HTTP hatasi degildir, yeniden denenmez.
+                if (this.beforeRequestAttempt) {
+                    yield this.beforeRequestAttempt(requestConfig, signal);
+                    if (signal === null || signal === void 0 ? void 0 : signal.aborted) {
+                        throw (_b = lastError) !== null && _b !== void 0 ? _b : new Error('Request aborted before it was sent');
+                    }
+                }
                 try {
-                    const span = (_b = this.tracer) === null || _b === void 0 ? void 0 : _b.startSpan(`api-request-${(_c = requestConfig.method) === null || _c === void 0 ? void 0 : _c.toLowerCase()}`);
+                    const span = (_c = this.tracer) === null || _c === void 0 ? void 0 : _c.startSpan(`api-request-${(_d = requestConfig.method) === null || _d === void 0 ? void 0 : _d.toLowerCase()}`);
                     if (span) {
                         span.setTag('http.method', requestConfig.method);
                         span.setTag('http.url', requestConfig.url);
@@ -472,8 +479,8 @@ class BaseApiClient {
                     // Enhanced error logging with defensive checks
                     logger_service_1.logger.error('Request execution error', {
                         hasResponse: !!lastError.response,
-                        status: (_d = lastError.response) === null || _d === void 0 ? void 0 : _d.status,
-                        statusText: (_e = lastError.response) === null || _e === void 0 ? void 0 : _e.statusText,
+                        status: (_e = lastError.response) === null || _e === void 0 ? void 0 : _e.status,
+                        statusText: (_f = lastError.response) === null || _f === void 0 ? void 0 : _f.statusText,
                         code: lastError.code,
                         message: lastError.message,
                         method: requestConfig.method,
@@ -486,7 +493,7 @@ class BaseApiClient {
                         throw lastError;
                     }
                     // Handle rate limit errors specifically
-                    if (((_f = lastError.response) === null || _f === void 0 ? void 0 : _f.status) === 429) {
+                    if (((_g = lastError.response) === null || _g === void 0 ? void 0 : _g.status) === 429) {
                         logger_service_1.logger.warn('Rate limit detected (429), calling handleRateLimitError', {
                             integrationName: this.integrationName,
                             retryCount,
