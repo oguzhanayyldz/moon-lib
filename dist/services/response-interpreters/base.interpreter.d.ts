@@ -9,9 +9,10 @@ export declare abstract class BaseResponseInterpreter {
      * Response'u yorumlayıp InterpretedResponse formatına dönüştürür
      * @param response - Platform yanıtı (any tipinde, platform'a göre farklılık gösterir)
      * @param operationType - İşlem tipi
+     * @param httpStatus - UC-2225: HTTP durum kodu (opsiyonel; durumu kullanmayan interpreter'lar yok sayar)
      * @returns Yorumlanmış yanıt
      */
-    abstract interpret(response: any, operationType: OperationType): InterpretedResponse | null;
+    abstract interpret(response: any, operationType: OperationType, httpStatus?: number): InterpretedResponse | null;
     /**
      * Varsayılan hata yorumlama
      */

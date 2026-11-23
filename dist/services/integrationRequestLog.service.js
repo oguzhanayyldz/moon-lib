@@ -194,7 +194,7 @@ class IntegrationRequestLogService {
                         try {
                             const interpreter = interpreter_factory_1.ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
                             if (interpreter) {
-                                const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
+                                const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType, options.responseStatus);
                                 if (interpretedResponse) {
                                     // Yorumlayıcılar müşteri alanlarını details'e kopyalayabilir (T-Soft UPDATE_ORDER)
                                     updateData.interpretedResponse = (0, logSafety_util_1.redactPersonalData)(interpretedResponse);

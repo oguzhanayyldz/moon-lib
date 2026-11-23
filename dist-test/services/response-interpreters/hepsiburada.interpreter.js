@@ -15,9 +15,15 @@ const logger_service_1 = require("../logger.service");
  * - Brands: { data: { brands: [...] } }
  */
 class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInterpreter {
-    interpret(response, operationType) {
+    interpret(response, operationType, httpStatus) {
         if (this.isEmptyResponse(response)) {
             return null;
+        }
+        // UC-2225: HTTP hata durumu ve zarf hata kodu, operasyon tipinden bağımsız başarısızdır;
+        // aksi halde tanınmayan gövde "işlemi tamamlandı / success:true" fallback'ine düşer.
+        const envelopeFailure = this.interpretEnvelopeFailure(response, httpStatus);
+        if (envelopeFailure) {
+            return envelopeFailure;
         }
         try {
             switch (operationType) {
@@ -62,6 +68,45 @@ class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInte
             });
             return null;
         }
+    }
+    /**
+     * UC-2225: HTTP >= 400 ya da zarfta sıfırdan farklı sayısal `code` → başarısız yanıt; yoksa null.
+     */
+    interpretEnvelopeFailure(response, httpStatus) {
+        const httpFailed = typeof httpStatus === 'number' && httpStatus >= 400;
+        const code = response === null || response === void 0 ? void 0 : response.code;
+        const envelopeFailed = typeof code === 'number' && code !== 0;
+        if (!httpFailed && !envelopeFailed) {
+            return null;
+        }
+        const errorMessage = this.extractErrorMessage(response);
+        const prefix = httpFailed ? `HTTP ${httpStatus}` : `Hata kodu ${code}`;
+        return {
+            summary: `${prefix}: ${errorMessage || 'İşlem başarısız'}`,
+            success: false,
+            successCount: 0,
+            failureCount: 1,
+            details: Object.assign(Object.assign(Object.assign({}, (httpFailed ? { responseStatus: httpStatus } : {})), (envelopeFailed ? { code } : {})), { error: errorMessage }),
+            parsedAt: new Date()
+        };
+    }
+    /** UC-2225: `errors: []` boş dizisi hata sayılmaz; yalnız dolu dizi/nesne/metin hatadır. */
+    hasErrors(response) {
+        const errors = response === null || response === void 0 ? void 0 : response.errors;
+        if (Array.isArray(errors))
+            return errors.length > 0;
+        return !!errors;
+    }
+    extractErrorMessage(response) {
+        var _a;
+        const first = Array.isArray(response === null || response === void 0 ? void 0 : response.errors) ? response.errors[0] : undefined;
+        const firstDetail = Array.isArray(first === null || first === void 0 ? void 0 : first.errors) ? first.errors[0] : undefined;
+        const candidate = (first === null || first === void 0 ? void 0 : first.message) ||
+            (typeof first === 'string' ? first : undefined) ||
+            (typeof firstDetail === 'string' ? firstDetail : undefined) ||
+            ((_a = response === null || response === void 0 ? void 0 : response.error) === null || _a === void 0 ? void 0 : _a.message) ||
+            (response === null || response === void 0 ? void 0 : response.message);
+        return typeof candidate === 'string' && candidate !== '' ? candidate : undefined;
     }
     /**
      * Batch request (ürün upload) yanıtını yorumla
@@ -312,7 +357,26 @@ class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInte
      * Hepsiburada stok/fiyat güncelleme trackingId döndürebilir
      */
     interpretStockAndPriceUpdate(response, operationType) {
-        var _a, _b, _c;
+        var _a, _b;
+        // UC-2225: status "Done" olsa da priceValidations dolu ise fiyat uygulanmamıştır (MIN_LOCK vb.) → başarı değil.
+        // UC-2292: trackingId dalından ÖNCE değerlendirilir; gövde ikisini birden taşıyorsa trackingId başarıyı ezmez.
+        const priceValidations = Array.isArray(response === null || response === void 0 ? void 0 : response.priceValidations) ? response.priceValidations : [];
+        if (priceValidations.length > 0) {
+            const firstDescription = ((_a = priceValidations[0]) === null || _a === void 0 ? void 0 : _a.description) || ((_b = priceValidations[0]) === null || _b === void 0 ? void 0 : _b.type) || 'Fiyat doğrulaması';
+            return {
+                summary: `Güncelleme kısmen başarısız: ${priceValidations.length} üründe fiyat doğrulaması (${firstDescription})`,
+                success: false,
+                successCount: Math.max((Number(response === null || response === void 0 ? void 0 : response.itemCount) || 0) - priceValidations.length, 0),
+                failureCount: priceValidations.length,
+                details: {
+                    operationType,
+                    trackingId: response === null || response === void 0 ? void 0 : response.trackingId,
+                    status: response === null || response === void 0 ? void 0 : response.status,
+                    priceValidations: priceValidations.slice(0, 20)
+                },
+                parsedAt: new Date()
+            };
+        }
         // TrackingId varsa - asenkron işlem
         if (response === null || response === void 0 ? void 0 : response.trackingId) {
             const trackingId = response.trackingId;
@@ -346,11 +410,8 @@ class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInte
             };
         }
         // Hata durumu
-        if ((response === null || response === void 0 ? void 0 : response.errors) || (response === null || response === void 0 ? void 0 : response.error) || (response === null || response === void 0 ? void 0 : response.success) === false) {
-            const errorMessage = ((_b = (_a = response === null || response === void 0 ? void 0 : response.errors) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) ||
-                ((_c = response === null || response === void 0 ? void 0 : response.error) === null || _c === void 0 ? void 0 : _c.message) ||
-                (response === null || response === void 0 ? void 0 : response.message) ||
-                'Bilinmeyen hata';
+        if (this.hasErrors(response) || (response === null || response === void 0 ? void 0 : response.error) || (response === null || response === void 0 ? void 0 : response.success) === false) {
+            const errorMessage = this.extractErrorMessage(response) || 'Bilinmeyen hata';
             return {
                 summary: `Güncelleme başarısız: ${errorMessage}`,
                 success: false,
@@ -379,7 +440,7 @@ class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInte
      * TrackingId veya success/fail bilgisi içerebilir
      */
     interpretProductSendUpdate(response) {
-        var _a, _b, _c;
+        var _a;
         // TrackingId varsa - asenkron batch işlemi
         if (response === null || response === void 0 ? void 0 : response.trackingId) {
             return this.interpretBatchRequest(response);
@@ -403,10 +464,8 @@ class HepsiburadaResponseInterpreter extends base_interpreter_1.BaseResponseInte
             };
         }
         // Hata response
-        if ((response === null || response === void 0 ? void 0 : response.success) === false || (response === null || response === void 0 ? void 0 : response.errors)) {
-            const errorMessage = ((_c = (_b = response === null || response === void 0 ? void 0 : response.errors) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) ||
-                (response === null || response === void 0 ? void 0 : response.message) ||
-                'Bilinmeyen hata';
+        if ((response === null || response === void 0 ? void 0 : response.success) === false || this.hasErrors(response)) {
+            const errorMessage = this.extractErrorMessage(response) || 'Bilinmeyen hata';
             return {
                 summary: `Ürün işlemi başarısız: ${errorMessage}`,
                 success: false,

@@ -12,7 +12,14 @@ import { BaseResponseInterpreter } from './base.interpreter';
  * - Brands: { data: { brands: [...] } }
  */
 export declare class HepsiburadaResponseInterpreter extends BaseResponseInterpreter {
-    interpret(response: any, operationType: OperationType): InterpretedResponse | null;
+    interpret(response: any, operationType: OperationType, httpStatus?: number): InterpretedResponse | null;
+    /**
+     * UC-2225: HTTP >= 400 ya da zarfta sıfırdan farklı sayısal `code` → başarısız yanıt; yoksa null.
+     */
+    private interpretEnvelopeFailure;
+    /** UC-2225: `errors: []` boş dizisi hata sayılmaz; yalnız dolu dizi/nesne/metin hatadır. */
+    private hasErrors;
+    private extractErrorMessage;
     /**
      * Batch request (ürün upload) yanıtını yorumla
      * Hepsiburada response: { trackingId: "xxx" }
