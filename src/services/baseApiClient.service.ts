@@ -143,6 +143,14 @@ export abstract class BaseApiClient implements IApiClient {
   // Tanimlanmazsa (varsayilan) davranis degismez: yalniz 401/403 sayilir, esik degismez.
   protected isAuthFailureError?(error: AxiosError): boolean;
 
+  // UC-2275: her GERCEK HTTP denemesinden hemen once cagrilir (yeniden denemeler dahil). Kanca
+  // beklerken gecen sure cagrinin deadline'ina sayilir; deadline dolunca `signal` iptal olur ve kanca
+  // reddetmelidir. Kanca reddederse istek gonderilmez, hata yeniden denenmeden cagirana ulasir.
+  // Ornek: Hepsiburada IP basina dakika kotasini burada sayar; makeRequest'te bir kez saymak
+  // 429/5xx yeniden denemelerini kotanin disinda birakiyordu.
+  // Tanimlanmazsa (varsayilan) davranis degismez.
+  protected beforeRequestAttempt?(requestConfig: RequestConfig, signal?: AbortSignal): Promise<void>;
+
   // Public API methods
   async get<T>(url: string, config?: RequestConfig): Promise<T> {
     return this.makeRequest<T>({ ...config, method: 'GET', url });
@@ -601,6 +609,14 @@ export abstract class BaseApiClient implements IApiClient {
       // The caller has already received a timeout error; never send another attempt.
       if (signal?.aborted) {
         throw lastError! ?? new Error('Request aborted before it was sent');
+      }
+
+      // UC-2275: deneme basina kanca try DISINDA: reddi bir HTTP hatasi degildir, yeniden denenmez.
+      if (this.beforeRequestAttempt) {
+        await this.beforeRequestAttempt(requestConfig, signal);
+        if (signal?.aborted) {
+          throw lastError! ?? new Error('Request aborted before it was sent');
+        }
       }
 
       try {
