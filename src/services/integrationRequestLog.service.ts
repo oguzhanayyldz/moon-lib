@@ -239,7 +239,7 @@ export class IntegrationRequestLogService {
                     try {
                         const interpreter = ResponseInterpreterFactory.getInterpreter(logEntry.integrationName);
                         if (interpreter) {
-                            const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType);
+                            const interpretedResponse = interpreter.interpret(options.responseBody, logEntry.operationType, options.responseStatus);
                             if (interpretedResponse) {
                                 // Yorumlayıcılar müşteri alanlarını details'e kopyalayabilir (T-Soft UPDATE_ORDER)
                                 updateData.interpretedResponse = redactPersonalData(interpretedResponse);
