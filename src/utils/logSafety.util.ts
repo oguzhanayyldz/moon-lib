@@ -589,6 +589,35 @@ const PHONE_PATTERN = new RegExp(
  *   URL-encoded `ali%40x.com`.
  * Named fields (`email`, `phone`, …) are masked by name regardless of these limits.
  */
+// UC-2412: TC kimlik numarası adayı — 11 hane, ilk hane 0 değil, iki ucunda rakam yok. Asıl karar
+// sağlama toplamında (isValidTurkishNationalId): geçersiz 11 haneli sayı (sipariş/takip no) okunur kalır.
+const TURKISH_NATIONAL_ID_CANDIDATE_PATTERN = /(?<!\d)[1-9]\d{10}(?!\d)/g;
+// UC-2412: TR IBAN — `TR` + 24 rakam, bitişik ya da 4'lü gruplar arasında tek boşlukla. Her niceleyici sınırlı.
+const TURKISH_IBAN_PATTERN = /(?<![A-Za-z0-9])TR\d{2}(?: ?\d{4}){5} ?\d{2}(?!\d)/gi;
+
+function isValidTurkishNationalId(candidate: string): boolean {
+    const d = candidate.split('').map(Number);
+    const odd = d[0] + d[2] + d[4] + d[6] + d[8];
+    const even = d[1] + d[3] + d[5] + d[7];
+    const tenth = (((odd * 7 - even) % 10) + 10) % 10;
+    const eleventh = d.slice(0, 10).reduce((sum, digit) => sum + digit, 0) % 10;
+    return d[9] === tenth && d[10] === eleventh;
+}
+
+/**
+ * UC-2412: metindeki TR IBAN'ları ve sağlama toplamı geçerli TC kimlik numaralarını `PERSONAL_DATA_MASK`
+ * yapar. Bugün yalnız errorHandler'ın 4xx/5xx satırı kullanır; `redactPersonalDataPatterns`'e (kütüphane
+ * geneli) bağlanması ayrı iştir (UC-2413), çünkü entegrasyon gövdelerinde yanlış pozitif ölçülmedi.
+ * Sınır: yabancı IBAN, noktalı/tireli yazılmış TC (`123.456.789-50`) ve sağlaması geçersiz TC maskelenmez.
+ */
+export function redactNationalIdAndIbanPatterns(text: string): string {
+    return text
+        .replace(TURKISH_IBAN_PATTERN, PERSONAL_DATA_MASK)
+        .replace(TURKISH_NATIONAL_ID_CANDIDATE_PATTERN, (match) =>
+            isValidTurkishNationalId(match) ? PERSONAL_DATA_MASK : match
+        );
+}
+
 export function redactPersonalDataPatterns(text: string): string {
     return text
         .replace(EMAIL_CANDIDATE_PATTERN, (match) => {
