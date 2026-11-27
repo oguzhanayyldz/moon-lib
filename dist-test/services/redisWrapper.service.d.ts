@@ -7,12 +7,27 @@ import { RedisClientType } from 'redis';
 export declare function resolveRedisStartupMaxWaitMs(): number;
 /** n. başarısız açılış denemesinden sonraki bekleme: 1, 2, 4, 8, 16, 30, 30 ... sn. */
 export declare function getRedisStartupRetryDelay(attempt: number): number;
+/**
+ * Çalışma sırasında kopan bağlantı için n. yeniden bağlanma denemesinden önceki bekleme: 1, 2, 4, 8, 10, 10 ... sn.
+ * Her zaman sayı döner (UC-2494): Error/false dönmek istemciyi kalıcı kapatır. Tavan 10 sn: Redis geri gelince
+ * istemci en geç ~10 sn'de toparlanır.
+ */
+export declare function getRedisReconnectDelay(retries: number): number;
 declare class RedisWrapper {
     private static instances;
     private _client?;
     private _url?;
     private hasConnected;
+    private reopening?;
+    private endedClients;
     get client(): RedisClientType;
+    /**
+     * UC-2494: 'end' yaymadan kapanmış (isOpen=false) istemciyi AYNI nesne üzerinden yeniden açar. Aynı nesne
+     * önemlidir: RateLimiter, güvenlik servisi gibi bileşenler istemci referansını açılışta saklar; yeni istemci
+     * kurulsaydı onlar kapalı istemcide kalırdı. Tek uçuş: eşzamanlı çağrılar aynı söze bağlanır, connect() bir
+     * kez çağrılır. Bilinçli kapatılmış (quit/disconnect → 'end') istemciye dokunmaz.
+     */
+    reopenClosedClient(): Promise<void>;
     /**
      * Redis'e bağlanır. Açılışta (bu süreç henüz hiç bağlanmadıysa) Redis geç gelirse tavanlı üstel geri çekilmeyle
      * yeniden dener (UC-1043): CI Redis'i ve servisleri birlikte yeniden başlattığında servis Redis'ten önce açılıp
