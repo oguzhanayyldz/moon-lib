@@ -35,6 +35,7 @@ export class IntegrationRouter {
         [ResourceName.Ebay]: IntegrationType.MarketPlace,
         [ResourceName.Etsy]: IntegrationType.MarketPlace,
         [ResourceName.Parasut]: IntegrationType.Erp,
+        [ResourceName.MikroErp]: IntegrationType.Erp,
         [ResourceName.Aras]: IntegrationType.Cargo,
         [ResourceName.Yurtici]: IntegrationType.Cargo,
         [ResourceName.HepsiJet]: IntegrationType.Cargo,
