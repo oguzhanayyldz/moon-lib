@@ -23,4 +23,5 @@ var ResourceName;
     ResourceName["Ebay"] = "Ebay";
     ResourceName["Etsy"] = "Etsy";
     ResourceName["MikroErp"] = "MikroErp";
+    ResourceName["KolayBi"] = "KolayBi";
 })(ResourceName || (exports.ResourceName = ResourceName = {}));

@@ -18,5 +18,6 @@ export declare enum ResourceName {
     Pazarama = "Pazarama",
     Ebay = "Ebay",
     Etsy = "Etsy",
-    MikroErp = "MikroErp"
+    MikroErp = "MikroErp",
+    KolayBi = "KolayBi"
 }
