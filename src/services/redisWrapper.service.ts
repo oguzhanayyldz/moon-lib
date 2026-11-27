@@ -23,17 +23,57 @@ export function getRedisStartupRetryDelay(attempt: number): number {
     return Math.min(STARTUP_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), STARTUP_RETRY_MAX_DELAY_MS);
 }
 
+/** Bu denemeden sonra yeniden bağlanma logu warn'a yükselir (vazgeçilmez; UC-2494). */
+const RECONNECT_WARN_AFTER_RETRIES = 10;
+const RECONNECT_MAX_DELAY_MS = 10000;
+
+/**
+ * Çalışma sırasında kopan bağlantı için n. yeniden bağlanma denemesinden önceki bekleme: 1, 2, 4, 8, 10, 10 ... sn.
+ * Her zaman sayı döner (UC-2494): Error/false dönmek istemciyi kalıcı kapatır. Tavan 10 sn: Redis geri gelince
+ * istemci en geç ~10 sn'de toparlanır.
+ */
+export function getRedisReconnectDelay(retries: number): number {
+    return Math.min(Math.pow(2, Math.max(0, retries)) * 1000, RECONNECT_MAX_DELAY_MS);
+}
+
 class RedisWrapper {
     private static instances: Map<string, RedisClientType> = new Map();
     private _client?: RedisClientType;
     private _url?: string;
     private hasConnected = false;
+    private reopening?: Promise<void>;
+    private endedClients = new WeakSet<RedisClientType>();
 
     get client() {
         if (!this._client) {
             throw new Error('Cannot access Redis client before connecting');
         }
+        if (!this._client.isOpen) {
+            // UC-2494: kapalı kalmış istemciyi aynı nesne üzerinden yeniden aç. connect() isOpen'ı eşzamanlı
+            // true yaptığından bu çağrının komutu çevrimdışı kuyrukta bekler, bağlantı gelince çalışır.
+            void this.reopenClosedClient();
+        }
         return this._client;
+    }
+
+    /**
+     * UC-2494: 'end' yaymadan kapanmış (isOpen=false) istemciyi AYNI nesne üzerinden yeniden açar. Aynı nesne
+     * önemlidir: RateLimiter, güvenlik servisi gibi bileşenler istemci referansını açılışta saklar; yeni istemci
+     * kurulsaydı onlar kapalı istemcide kalırdı. Tek uçuş: eşzamanlı çağrılar aynı söze bağlanır, connect() bir
+     * kez çağrılır. Bilinçli kapatılmış (quit/disconnect → 'end') istemciye dokunmaz.
+     */
+    reopenClosedClient(): Promise<void> {
+        const client = this._client;
+        if (this.reopening) return this.reopening;
+        if (!client || client.isOpen || this.endedClients.has(client)) return Promise.resolve();
+
+        logger.warn('🔄 Redis client is closed (reconnect gave up); reopening the same client');
+        const reopening: Promise<void> = client.connect()
+            .then(() => { logger.info('✅ Redis client reopened'); })
+            .catch((err) => { logger.error('❌ Redis client reopen failed:', sanitizeConnectionError(err)); })
+            .finally(() => { this.reopening = undefined; });
+        this.reopening = reopening;
+        return reopening;
     }
 
     /**
@@ -114,15 +154,15 @@ class RedisWrapper {
                     connectTimeout: timeoutMs,
                     keepAlive: 30000, // 30 saniyede bir keepalive paketi gönder
                     noDelay: true, // TCP Nagle algoritmasını devre dışı bırak (düşük latency için)
+                    // UC-2494: vazgeçmez. Error döndürmek node-redis'te istemciyi 'end' yaymadan kalıcı kapatıyordu
+                    // ("The client is closed"); servislerin 'end' işleyicisi hiç tetiklenmiyordu.
                     reconnectStrategy: (retries) => {
-                        // Max 10 deneme ile daha dayanıklı reconnect
-                        if (retries > 10) {
-                            logger.error(`Redis reconnection failed after ${retries} attempts`);
-                            return new Error('Max reconnection attempts reached');
+                        const delay = getRedisReconnectDelay(retries);
+                        if (retries >= RECONNECT_WARN_AFTER_RETRIES) {
+                            logger.warn(`Redis still unreachable, reconnecting in ${delay}ms (attempt ${retries})`);
+                        } else {
+                            logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
                         }
-                        // Exponential backoff with max 30 seconds
-                        const delay = Math.min(Math.pow(2, retries) * 1000, 30000);
-                        logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries}/10)`);
                         return delay;
                     }
                 }
@@ -134,7 +174,12 @@ class RedisWrapper {
                     connectionFailed = true;
                 })
                 .on('reconnecting', () => logger.warn('🔄 Redis Client Reconnecting...'))
-                .on('end', () => logger.warn('⚠️ Redis connection ended'));
+                .on('ready', () => this.endedClients.delete(client))
+                .on('end', () => {
+                    // 'end' yalnız quit()/disconnect() ile yayılır: bilinçli kapanış, kendiliğinden yeniden açılmaz.
+                    this.endedClients.add(client);
+                    logger.warn('⚠️ Redis connection ended');
+                });
 
             // Timeout wrapper ile connection - improved error handling
             let timeoutTimer: NodeJS.Timeout | undefined;
