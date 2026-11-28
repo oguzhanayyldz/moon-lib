@@ -39,7 +39,10 @@ function toVatIncludedPrice(price, vatIncluded, vatRate) {
  * Bir kaynak hedefi için stok miktarı.
  * - `sourceLocationId` seçiliyse yalnız o deponun miktarı; ERP o depoyu vermiyorsa 0 (ikas/Shopify kalıbı: sıfır stoklu depo kalemini listelemeyen ERP'de eski stok kalmasın).
  * - Seçili değilse `stock`; o da yoksa depo kırılımının toplamı.
- * - ERP'de negatif stok ATLANIR (null) — ikas/Shopify kalıbı (`quantity < 0` → satır yazılmaz).
+ * - Negatif stok OLDUĞU GİBİ döner (UC-2628, K-574514 A): "eksi stok 0 yazılır" kuralı tüm kaynaklar için
+ *   TEK yerde, inventory `ProductStockIntegrationUpdated` dinleyicisinde uygulanır. Burada atlamak Moon'da eski
+ *   stoğu bırakıyordu (ERP 5 → -2 olunca Moon 5 kalıyor, pazaryerine 5 gidiyordu).
+ * - Stok alanı yoksa/geçersizse null (yazılmaz) — değişmedi.
  */
 function resolveErpStockQuantity(item, sourceLocationId) {
     var _a;
@@ -56,7 +59,7 @@ function resolveErpStockQuantity(item, sourceLocationId) {
     }
     if (typeof quantity !== 'number' || !isFinite(quantity))
         return null;
-    return quantity < 0 ? null : quantity;
+    return quantity;
 }
 /** Kalem stok/fiyat eşleştirmesine uygun mu (SKU şart). */
 function hasSku(item) {
