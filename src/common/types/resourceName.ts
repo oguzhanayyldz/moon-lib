@@ -20,4 +20,5 @@ export enum ResourceName {
     Etsy = "Etsy",
     MikroErp = "MikroErp",
     KolayBi = "KolayBi",
+    Nilvera = "Nilvera",
 }

@@ -75,6 +75,7 @@ IntegrationRouter.PLATFORM_TYPE_MAP = {
     [resourceName_1.ResourceName.Parasut]: integration_type_1.IntegrationType.Erp,
     [resourceName_1.ResourceName.MikroErp]: integration_type_1.IntegrationType.Erp,
     [resourceName_1.ResourceName.KolayBi]: integration_type_1.IntegrationType.Erp,
+    [resourceName_1.ResourceName.Nilvera]: integration_type_1.IntegrationType.Erp,
     [resourceName_1.ResourceName.Aras]: integration_type_1.IntegrationType.Cargo,
     [resourceName_1.ResourceName.Yurtici]: integration_type_1.IntegrationType.Cargo,
     [resourceName_1.ResourceName.HepsiJet]: integration_type_1.IntegrationType.Cargo,
