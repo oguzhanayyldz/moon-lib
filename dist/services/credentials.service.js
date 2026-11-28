@@ -94,16 +94,19 @@ class CredentialsService {
         });
         // 3. Integration type'a göre parse
         const isUpdatedSettings = integrationType === integration_type_1.IntegrationType.MarketPlace || integrationType === integration_type_1.IntegrationType.Ecommerce;
+        // UC-2595: ERP de stok/fiyat KAYNAĞI olabilir; çekme ayarları (yalnız bunlar) ERP için de bu
+        // entegrasyonun kaynağına süzülür. Gönderim kapıları/sipariş/ürün ayarları ERP'ye uygulanmaz.
+        const isFetchSource = isUpdatedSettings || integrationType === integration_type_1.IntegrationType.Erp;
         // MARKETPLACE/ECOMMERCE: Product update settings
         if (isUpdatedSettings && merged.productUpdate && typeof merged.productUpdate === 'string') {
             merged.productUpdate = this.safeJsonParse(merged.productUpdate);
         }
         // MARKETPLACE/ECOMMERCE: Price update settings
-        if (isUpdatedSettings && merged.price_update_settings) {
+        if (isFetchSource && merged.price_update_settings) {
             merged.price_update_settings = this.parsePriceUpdateSettings(merged.price_update_settings, integrationName, integrationId);
         }
         // MARKETPLACE/ECOMMERCE: Stock update settings
-        if (isUpdatedSettings && merged.stock_update_settings) {
+        if (isFetchSource && merged.stock_update_settings) {
             merged.stock_update_settings = this.parseStockUpdateSettings(merged.stock_update_settings, integrationName, integrationId);
         }
         // MARKETPLACE/ECOMMERCE: Stok/fiyat GÖNDERİM kapıları (her zaman doldurulur; varsayılan true)

@@ -42,6 +42,11 @@ export interface ProductErpIdUpdated {
     erpId: string;
     /** ERP sistem adı (Parasut, Logo, Netsis, etc.) */
     source: ResourceName;
+    /**
+     * UC-2595 (B3): erpId'nin AİT OLDUĞU ERP. Products bunu `erpIds[platform]` anahtarı yapar.
+     * Yoksa (eski yayıncılar) `source` kullanılır. Çoklu ERP'de "eksik ürün" kararı bu haritadan verilir.
+     */
+    platform?: ResourceName;
     /** Event oluşturulma zamanı */
     sourceTimestamp: Date;
 }

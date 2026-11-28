@@ -1,0 +1,290 @@
+import { ClientSession } from 'mongoose';
+import { Request } from 'express';
+/**
+ * Enhanced Optimistic Locking Utility
+ *
+ * Version conflict durumlarında işlemleri yeniden dener ve
+ * MongoDB Atlas Native Transactions ile entegrasyon sağlar.
+ *
+ * Özellikler:
+ * - Session-aware operasyonlar
+ * - Context-aware metodlar (Request object'ten session algılama)
+ * - Backward compatibility (mevcut API korunur)
+ * - Transaction middleware entegrasyonu
+ */
+export declare class OptimisticLockingUtil {
+    /**
+     *
+     *
+     * @static
+     * @template T
+     * @param {() => Promise<T>} operation
+     * @param {number} [maxRetries=3]
+     * @param {number} [backoffMs=100]
+     * @param {string} [operationName='operation']
+     * @return {*}  {Promise<T>}
+     * @memberof OptimisticLockingUtil
+     * @description retryWithOptimisticLocking<T>: Versiyon çakışmalarında işlemlerin tekrar denenmesini sağlayan ana fonksiyon. Şu özelliklere sahiptir:
+            - Üstel gecikme (exponential backoff) stratejisi kullanır
+            - Maksimum yeniden deneme sayısı parametrik olarak ayarlanabilir (varsayılan: 3)
+            - İlk gecikme süresi parametrik olarak ayarlanabilir (varsayılan: 100ms)
+            - Operasyon adı ile detaylı loglama yapar
+            - Session-aware ve transaction-safe operasyon desteği
+     */
+    static retryWithOptimisticLocking<T>(operation: () => Promise<T>, maxRetries?: number, backoffMs?: number, operationName?: string): Promise<T>;
+    /**
+    * Session-aware saveWithRetry: MongoDB dokümanını session ile kaydetme
+    *
+    * @static
+    * @template T
+    * @param {T} document - Kaydedilecek doküman
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @param {ClientSession} [session] - MongoDB session (transaction için)
+    * @param {(fresh: T) => void | Promise<void>} [reapply] - Sürüm çakışmasında değişikliği taze belgeye yeniden uygular
+    * @return {Promise<T>} Kaydedilen doküman (reapply ile yeniden denendiyse TAZE belge, `document` değil)
+    * @description Session-aware doküman kaydetme. Session varsa transaction içinde çalışır.
+    *
+    * SÜRÜM ÇAKIŞMASI (updateIfCurrentPlugin, base.schema): save `{ _id, version: <bellekteki> }` ile
+    * koşullanır ve bellekteki sürüm başarısız denemeler arasında DEĞİŞMEZ. Bayat bir belgeyi tekrar
+    * kaydetmek her seferinde aynı VersionError'u verir (TASK-MUEM4VTE4HLFW). Bu yüzden:
+    *   - `reapply` VERİLMEDİYSE sürüm hatası ilk denemede fırlatılır (boşuna tekrar + backoff yok).
+    *   - `reapply` VERİLDİYSE her tekrar denemede belge `_id` ile YENİDEN OKUNUR, `reapply(fresh)`
+    *     değişikliği taze değerler üzerinden yeniden hesaplar ve taze belge kaydedilir. Eşzamanlı
+    *     yazarın dokunduğu alanlar korunur. Çağıran dönüş değerini kullanmalıdır.
+    *   - SESSION: `session` parametresi yoksa belgenin bağlı olduğu session (`document.$session()`,
+    *     ör. `.session(s)` ile okunmuş belge) kullanılır; mongoose save de aynısını yapar
+    *     (model.js:290-293). Yeniden okuma ve taze belgenin kaydı bu session ile yapılır; aksi halde
+    *     transaction içindeki bir belge transaction DIŞINA yazılır ve abort onu geri almaz.
+    *   - Transaction içinde de yeniden okunur (aynı session ile): orada VersionError ancak snapshot
+    *     bellekteki belgeden YENİ bir sürüm içerdiğinde oluşur ve yeniden okuma o sürümü görür.
+    *     Snapshot'tan sonra gelen eşzamanlı commit ise WriteConflict'tir (sürüm hatası değildir),
+    *     ilk denemede fırlar ve transaction düzeyindeki yeniden deneme devralır.
+    */
+    static saveWithRetry<T extends {
+        save(options?: any): Promise<any>;
+        id?: string;
+    }>(document: T, operationName?: string, session?: ClientSession, reapply?: (fresh: T) => void | Promise<void>): Promise<T>;
+    /**
+     * saveWithRetry tekrar denemesi için belgeyi `_id` ile veritabanından yeniden okur.
+     * @private
+     */
+    private static reloadDocument;
+    /**
+    * Context-aware saveWithRetry: Request object'ten session algılama
+    *
+    * @static
+    * @template T
+    * @param {T} document - Kaydedilecek doküman
+    * @param {Request} [req] - Express Request object (session algılamak için)
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<T>} Kaydedilen doküman
+    * @description Request context'inden session'ı otomatik algılar ve transaction'da çalışır.
+    */
+    static saveWithContext<T extends {
+        save(options?: any): Promise<any>;
+        id?: string;
+    }>(document: T, req?: Request, operationName?: string): Promise<T>;
+    /**
+    * Session-aware updateWithRetry: MongoDB model güncelleme
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek alanlar
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @param {ClientSession} [session] - MongoDB session (transaction için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description Session-aware doküman güncelleme. Session varsa transaction içinde çalışır.
+    */
+    static updateWithRetry<T>(Model: any, id: string, updateFields: any, options?: any, operationName?: string, session?: ClientSession): Promise<T>;
+    /**
+     * Sürümü SORGUYLA ilerleten yazım (ör. `findOneAndUpdate(..., { $inc: { version: 1 } })`) için
+     * EntityVersionUpdated'ı AÇIKÇA yazar. Sorgu yazımlarında EVU kancası yoktur (base.schema yalnız
+     * post('save')'de üretir); util dışındaki ham sorgu yazımı sync'e bu yardımcıyla haber verir.
+     *
+     * - Sürüm: `options.version` verilmişse o, yoksa `doc.version` (post-image). `new: false` ile
+     *   dönen ön görüntüde çağıran yeni sürümü kendisi verir: `{ version: (pre.version ?? 0) + 1 }`.
+     *   `previousVersion = version - 1`.
+     * - `options.session`: Outbox satırı bu session ile yazılır (transaction abort'unda EVU da geri alınır).
+     * - Model sürüm izlemeli değilse sessizce `false` döner.
+     * - HATA FIRLATMAZ: yayın hatası loglanır ve `false` döner; yazımı geri almaz, farkı sync döngüsü yakalar.
+     *
+     * @returns Outbox'a EVU yazıldıysa true
+     */
+    static publishVersionEvent(Model: any, doc: any, options?: {
+        version?: number;
+        session?: ClientSession;
+        source?: string;
+    }): Promise<boolean>;
+    /**
+     * updateWithRetry için EntityVersionUpdated event publish eder
+     * @private
+     */
+    private static publishVersionEventForUpdate;
+    /**
+    * Context-aware updateWithRetry: Request object'ten session algılama
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek alanlar
+    * @param {Request} [req] - Express Request object (session algılamak için)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description Request context'inden session'ı otomatik algılar ve transaction'da çalışır.
+    */
+    static updateWithContext<T>(Model: any, id: string, updateFields: any, req?: Request, options?: any, operationName?: string): Promise<T>;
+    /**
+    * Metadata güncelleme - VERSION TRACKING OLMADAN
+    *
+    * Scheduler job'lar, istatistik güncellemeleri ve metadata-only operasyonlar için.
+    * Version increment yapmaz; `version` verilmedikçe EntityVersionUpdated yazmaz.
+    *
+    * Use Cases:
+    * - AutomationRule: lastRunAt, totalProcessed, totalSuccess, totalFailed
+    * - Scheduler metadata: lastExecutedAt, executionCount
+    * - Statistics: viewCount, downloadCount, accessCount
+    * - Timestamps: lastAccessedAt, lastSyncedAt
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları ($inc, $set, $unset)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @param {ClientSession} [session] - MongoDB session (transaction için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description
+    * EVU üretmez çünkü:
+    * - Metadata değişiklikleri anlamlı veri değişikliği değildir
+    * - Version increment gereksizdir
+    * (Mekanizma: findByIdAndUpdate bir sorgu yazımıdır; base.schema EVU'yu yalnız post('save')'de
+    * üretir, sorgu yazımları için kanca yoktur. "Bypass" edilen bir kanca yok — EVU'yu bu metod
+    * aşağıda yalnız `version` verildiğinde açıkça yazar.)
+    *
+    * NOT: updateFields içinde version set edilmişse (FOREIGN entity sync gibi),
+    * EntityVersionUpdated event publish eder — sync servisi haberdar olur.
+    *
+    * Retry mekanizması ile güvenli güncelleme sağlar:
+    * - Exponential backoff stratejisi
+    * - Maksimum 5 deneme
+    * - Session/transaction desteği
+    */
+    static updateMetadataWithRetry<T>(Model: any, id: string, updateFields: any, options?: any, operationName?: string, session?: ClientSession): Promise<T>;
+    /**
+    * Versiyon kilitli ATOMİK güncelleme — FOREIGN kopya yakınsaması için (issue #637)
+    *
+    * NEDEN VAR (canlıda kanıtlandı, 31/08/2026): FOREIGN kopya listener'ları
+    * versiyonu "oku → karşılaştır → yaz" ile denetliyordu. NATS aynı varlığa ait
+    * ardışık event'leri EŞZAMANLI teslim edebildiği için (base-listener'da
+    * maxInFlight sınırı yok, onMessage await'siz) iki event de eski değeri okuyor,
+    * ikisi de kontrolü geçiyor ve SON YAZAN kazanıyordu: depo sayımı sonrası
+    * kaynakta 0 (v=19) olan grup ürünü, dört kopya serviste 15 (v=18) kaldı ve
+    * pazaryerlerine OLMAYAN stok gitti.
+    *
+    * Bu metod kontrolü ve yazmayı TEK MongoDB belge işleminde birleştirir:
+    *
+    *     findOneAndUpdate({ _id, version: { $lt: N } }, { $set: {...) })
+    *
+    * MongoDB'nin tek-belge atomikliği altında ESKİ VERSİYON YENİYİ ASLA EZEMEZ —
+    * teslim sırasından, kilitten ve tekrar sayısından bağımsız, yapısal garanti.
+    *
+    * SONUÇ SÖZLEŞMESİ (çağıranın ack kararı buna dayanır):
+    *   - 'applied' → yazıldı; versiyon event'i yayınlandı → BAŞARI, ack
+    *   - 'stale'   → kopya zaten daha yeni; no-op → BAŞARI, ack
+    *                 (bayat event'i ack'lememek NATS'ta sonsuz yeniden teslim
+    *                  birikimi yaratır — bayatlık TERMİNALDİR, hata değildir)
+    *   - 'missing' → kayıt hiç yok → çağıran OLUŞTURMA yolunu dener
+    *
+    * NOT: soft-delete filtresi yalnız find/findOne'a enjekte edilir
+    * (base.schema.ts:410-432), findOneAndUpdate'e DEĞİL — silinmiş kopyaya gelen
+    * idempotent tekrar da doğru şekilde 'stale'/'applied' üretir.
+    * RETRY YOK: işlem tek ve atomik; geçici Mongo hatası fırlar ve listener'ın
+    * kendi retry/DLQ zinciri devralır.
+    */
+    static applyVersionedUpdate<T = any>(Model: any, id: string, version: number, updateFields: Record<string, any>, operationName?: string): Promise<{
+        outcome: 'applied' | 'stale' | 'missing';
+        doc: T | null;
+    }>;
+    /**
+    * Context-aware updateMetadataWithRetry: Request object'ten session algılama
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {string} id - Doküman ID'si
+    * @param {any} updateFields - Güncellenecek metadata alanları
+    * @param {Request} [req] - Express Request object (session algılamak için)
+    * @param {any} [options={}] - MongoDB update seçenekleri
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<T>} Güncellenen doküman
+    * @description Request context'inden session'ı otomatik algılar ve metadata güncelleme yapar.
+    */
+    static updateMetadataWithContext<T>(Model: any, id: string, updateFields: any, req?: Request, options?: any, operationName?: string): Promise<T>;
+    /**
+    * Bulk operations with session support
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {any[]} operations - Bulk operations array
+    * @param {ClientSession} [session] - MongoDB session (transaction için)
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<any>} Bulk operation result
+    * @description Bulk operations for better performance with session support.
+    */
+    static bulkWithRetry<T>(Model: any, operations: any[], session?: ClientSession, operationName?: string): Promise<any>;
+    /**
+    * Context-aware bulk operations
+    *
+    * @static
+    * @template T
+    * @param {any} Model - Mongoose model
+    * @param {any[]} operations - Bulk operations array
+    * @param {Request} [req] - Express Request object (session algılamak için)
+    * @param {string} [operationName] - İşlem adı (loglama için)
+    * @return {Promise<any>} Bulk operation result
+    */
+    static bulkWithContext<T>(Model: any, operations: any[], req?: Request, operationName?: string): Promise<any>;
+    /**
+    * Session detection utility
+    *
+    * @static
+    * @param {Request} [req] - Express Request object
+    * @return {ClientSession | undefined} Detected session or undefined
+    * @description Helper method to detect if a session is available in request context.
+    */
+    static getSessionFromRequest(req?: Request): ClientSession | undefined;
+    /**
+    * Check if operation is running in transaction context
+    *
+    * @static
+    * @param {Request} [req] - Express Request object
+    * @return {boolean} True if in transaction context
+    */
+    static isInTransaction(req?: Request): boolean;
+    /**
+    * Get operation statistics
+    *
+    * @static
+    * @param {Request} [req] - Express Request object
+    * @return {object} Statistics object
+    */
+    static getStats(req?: Request): {
+        hasSession: boolean;
+        inTransaction: boolean;
+        sessionId: ClientSession['id'] | null;
+        features: {
+            sessionAware: boolean;
+            contextAware: boolean;
+            bulkOperations: boolean;
+            optimisticLocking: boolean;
+            transactionSupport: boolean;
+        };
+    };
+}

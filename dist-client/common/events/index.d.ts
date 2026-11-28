@@ -11,6 +11,7 @@ export * from './product-updated-event';
 export * from './product-stock-created-event';
 export * from './product-stock-updated-event';
 export * from './product-price-integration-updated-event';
+export * from './product-price-integration-fetched-event';
 export * from './stock-created-event';
 export * from './stock-updated-event';
 export * from './order-created-event';

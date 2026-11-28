@@ -113,8 +113,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             creationDate: Date;
             updatedOn: Date;
             deleted?: boolean | undefined;
-            deletionDate?: Date | undefined;
             uuid?: string | undefined;
+            deletionDate?: Date | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
@@ -127,8 +127,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
             creationDate: Date;
             updatedOn: Date;
             deleted?: boolean | undefined;
-            deletionDate?: Date | undefined;
             uuid?: string | undefined;
+            deletionDate?: Date | undefined;
             uniqueCode?: string | undefined;
             isTemporary?: boolean | undefined;
             deletedBy?: {
@@ -145,8 +145,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     creationDate: Date;
     updatedOn: Date;
     deleted?: boolean | undefined;
-    deletionDate?: Date | undefined;
     uuid?: string | undefined;
+    deletionDate?: Date | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
@@ -159,8 +159,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     creationDate: Date;
     updatedOn: Date;
     deleted?: boolean | undefined;
-    deletionDate?: Date | undefined;
     uuid?: string | undefined;
+    deletionDate?: Date | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {
@@ -173,8 +173,8 @@ export declare function createBaseSchema(schemaDefinition?: mongoose.SchemaDefin
     creationDate: Date;
     updatedOn: Date;
     deleted?: boolean | undefined;
-    deletionDate?: Date | undefined;
     uuid?: string | undefined;
+    deletionDate?: Date | undefined;
     uniqueCode?: string | undefined;
     isTemporary?: boolean | undefined;
     deletedBy?: {

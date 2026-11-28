@@ -1,0 +1,252 @@
+import { Counter, Histogram, Gauge, Registry } from 'prom-client';
+/**
+ * Centralized Event Processing Metrics
+ *
+ * Provides Prometheus format metrics for NATS event processing.
+ * Tracks event processing duration, counts, retries, DLQ messages, and circuit breaker states.
+ *
+ * @example
+ * ```typescript
+ * // Record event processing duration
+ * EventMetrics.eventProcessingDuration.observe(
+ *   { service: 'inventory', event_type: 'product-created', queue_group: 'inventory-service', status: 'success' },
+ *   0.5 // 500ms
+ * );
+ *
+ * // Increment event processing counter
+ * EventMetrics.eventProcessingTotal.inc({
+ *   service: 'inventory',
+ *   event_type: 'product-created',
+ *   queue_group: 'inventory-service',
+ *   status: 'success'
+ * });
+ *
+ * // Get all metrics in Prometheus format
+ * const metrics = await EventMetrics.getRegistry().metrics();
+ * ```
+ */
+export declare class EventMetrics {
+    private static registry;
+    /**
+     * Event işlem süresi (Histogram)
+     *
+     * Tracks how long it takes to process an event from receipt to completion.
+     * Includes labels: service, event_type, queue_group, status
+     * Buckets: 10ms -> 120s (UC-967: toplu işlemler için 30/60/120)
+     */
+    static readonly eventProcessingDuration: Histogram<"status" | "service" | "event_type" | "queue_group">;
+    /**
+     * Toplam event sayısı (Counter)
+     *
+     * Counts total number of events processed, categorized by status (success/error).
+     * Includes labels: service, event_type, queue_group, status
+     */
+    static readonly eventProcessingTotal: Counter<"status" | "service" | "event_type" | "queue_group">;
+    /**
+     * Retry sayısı (Counter)
+     *
+     * Tracks how many times events are retried before success or DLQ.
+     * Includes labels: service, event_type, retry_reason, retry_count
+     */
+    static readonly eventRetryTotal: Counter<"service" | "event_type" | "retry_reason" | "retry_count">;
+    /**
+     * DLQ'ya gönderilen event'ler (Counter)
+     *
+     * Counts events sent to Dead Letter Queue after max retries exceeded.
+     * Includes labels: service, event_type, failure_reason
+     */
+    static readonly eventDlqTotal: Counter<"service" | "event_type" | "failure_reason">;
+    /**
+     * DLQ kaydı yazılamayan event'ler (Counter)
+     *
+     * Counts events whose dead-letter record could not be written after max retries (issue #648).
+     * reason=invalid: the record fails schema validation; the message is acked without a record.
+     * reason=unavailable: the write failed (e.g. Mongo not ready); the message is not acked and NATS redelivers it.
+     * Includes labels: service, event_type, reason
+     */
+    static readonly eventDlqWriteErrorTotal: Counter<"service" | "event_type" | "reason">;
+    /**
+     * Duplicate key (E11000) sonuçları (Counter)
+     *
+     * Counts RetryableListener duplicate key outcomes (UC-1020).
+     * outcome=acked: the message was acked without NATS retry (after duplicateKeyRetries in-process reruns, 0 by default);
+     * if the handler is not idempotent the rest of the event's work is not written.
+     * outcome=resolved: an in-process rerun succeeded, i.e. the E11000 was a race, not a real duplicate.
+     * Includes labels: service, event_type, queue_group, outcome
+     */
+    static readonly eventDuplicateKeyTotal: Counter<"service" | "event_type" | "queue_group" | "outcome">;
+    /**
+     * Kalıcı (deterministik) hatalar (Counter) — UC-1043
+     *
+     * outcome: failed_fast (fail-fast açık: ilk denemede 'failed' DLQ kaydı + ack), shadow (fail-fast kapalı: eski
+     * yeniden deneme yolu sürer, yalnız sayılır), recovered (shadow sayılan olay sonraki teslimde BAŞARILI oldu —
+     * yanlış pozitif: fail-fast açık olsaydı bu olay kaybolurdu).
+     * Includes labels: service, event_type, queue_group, outcome
+     */
+    static readonly eventPermanentErrorTotal: Counter<"service" | "event_type" | "queue_group" | "outcome">;
+    /**
+     * Takılı iş sayacı (Counter) — UC-1183
+     *
+     * reason=max_lock_hold: kilit yenilemesi maxLockHoldMs'i aştığı için durduruldu.
+     * reason=redelivery: aynı mesaj kilit sahibi hâlâ işlerken N kez yeniden teslim edildi (olay başına bir kez sayılır).
+     * Includes labels: listener, reason
+     */
+    static readonly retryableListenerStuckTotal: Counter<"reason" | "listener">;
+    /**
+     * DLQ oynatmaları (Counter)
+     *
+     * Counts targeted dead-letter replays (issue #648 DLQ-H) by result:
+     * processed (record completed), failed (one attempt of the budget used), busy (no attempt used, retried a minute later):
+     * the event was locked, or the replay exceeded the 10 minute limit and its handler still runs in the background.
+     * Both busy cases share the label; only the processor's warning log tells a timeout apart.
+     * Includes labels: service, event_type, queue_group, result
+     */
+    static readonly eventDlqReplayTotal: Counter<"service" | "event_type" | "queue_group" | "result">;
+    /**
+     * Circuit breaker durumu (Gauge)
+     *
+     * Tracks circuit breaker state per service and listener.
+     * Values: 0=CLOSED, 1=OPEN, 2=HALF_OPEN
+     * Includes labels: service, circuit_breaker_name
+     */
+    static readonly circuitBreakerState: Gauge<"service" | "circuit_breaker_name">;
+    /**
+     * Yayınlanan sürüm olayı sayısı (Counter) — UC-984
+     *
+     * EventPublisherJob toplu sürüm yayınında NATS onayı alınan her olay için artar. sync tarafındaki
+     * sync_version_updates_total ile karşılaştırılır: üretilen = sync'e ulaşan.
+     * Labels: service (yayıncı servis)
+     */
+    static readonly outboxVersionEventsPublishedTotal: Counter<"service">;
+    /**
+     * Birleştirilen sürüm olayı (Counter) — UC-984 madde 8
+     *
+     * stage=write: yeni satır açılmadı, bekleyen satır güncellendi (writeVersionEventToOutbox).
+     * stage=send: aynı partide aynı varlığın daha yüksek sürümü gönderildi, satır 'superseded' oldu.
+     * Birleştirme oranı = coalesced / (coalesced + published). Kayıp DEĞİLDİR: en son sürüm yine gider.
+     * Labels: service, stage
+     */
+    static readonly versionEventsCoalescedTotal: Counter<"service" | "stage">;
+    /**
+     * Yayın anında birleştirilen olay (Counter) — UC-1135
+     *
+     * OUTBOX_COALESCE_SUBJECTS bayrağıyla açılan birleştirmede aynı partide daha yüksek sürümü yayınlanan ve
+     * 'superseded' olan satır sayısı. Kayıp DEĞİLDİR: en son sürüm yayınlanır.
+     * Labels: service, event_type
+     */
+    static readonly outboxEventsCoalescedTotal: Counter<"service" | "event_type">;
+    /**
+     * Redis iletim kirası tutulan varlık sayısı (Gauge) — UC-984 madde 9
+     *
+     * Bu pod'un şu an yayınlamakta olduğu (kirasını tuttuğu) varlık sayısı; parti bitince 0'a döner.
+     * Labels: service
+     */
+    static readonly versionEventsInflight: Gauge<"service">;
+    /**
+     * Süresi dolmuş iletim kirası (Counter) — UC-984 madde 9
+     *
+     * Yayın bittiğinde kira artık bu pod'un değil: kira süresi (VERSION_EVENT_LEASE_MS) yayından kısa kalmış.
+     * Kayıp değildir (Mongo kaydı yine işaretlenir); sürekli artıyorsa kira süresini büyüt.
+     * Labels: service
+     */
+    static readonly versionEventsLeaseExpiredTotal: Counter<"service">;
+    /**
+     * Önlenen çift gönderim (Counter) — UC-984 madde 9
+     *
+     * reason=inflight: varlık o an başka bir partide iletimde, satır pending'e geri bırakıldı (sonraki turda gider).
+     * reason=delivered: satırın sürümü sync'e zaten gönderilmiş sürümden büyük değil, 'superseded' oldu.
+     * Labels: service, reason
+     */
+    static readonly versionEventsDuplicatePreventedTotal: Counter<"service" | "reason">;
+    /**
+     * Redis'e ulaşılamayan parti (Counter) — UC-984 madde 9
+     *
+     * Kira alınamadı/bırakılamadı; gönderim yalnız Mongo claim'iyle sürdü (olay kaybı yok, çift gönderim olabilir).
+     * Labels: service
+     */
+    static readonly versionEventsLeaseUnavailableTotal: Counter<"service">;
+    /**
+     * Outbox'a yazılamayan sürüm olayı (Counter) — UC-984
+     *
+     * base şemanın post-save kancası Outbox kaydını ayrı yazar; yazım hata verirse olay kaybolur.
+     * Bu sayaç sıfırdan büyükse sync'teki sürüm o varlık için bir sonraki kayda kadar geride kalır.
+     * Labels: service, entity_type
+     */
+    static readonly versionEventWriteErrorsTotal: Counter<"service" | "entity_type">;
+    /**
+     * Outbox kaydı sayısı (Gauge) — UC-1211. outbox_records{service,status}: pending/processing/failed, sürüm olayları
+     * (entity:version-updated) HARİÇ; onlar outbox_version_records'ta. Önceden yalnız orders ve inventory kendi yerel
+     * gauge'larıyla yayınlıyordu; EventPublisherJob'lu her servis artık buradan yayınlar (EventPublishFailureRate,
+     * OutboxPendingEvents* alarmları tüm servisleri görür).
+     */
+    static readonly outboxRecords: Gauge<"status" | "service">;
+    /**
+     * Outbox durumu (Gauge) — UC-984. Değerler her scrape'te EventPublisherJob'un verdiği toplayıcıdan okunur;
+     * toplayıcı yoksa (yayıncısı olmayan servis) seri yazılmaz.
+     *
+     * outbox_version_records{service,status}: pending/processing/failed sürüm olayı sayısı
+     * outbox_version_oldest_pending_age_seconds{service}: en eski yayınlanmamış sürüm olayının yaşı
+     * outbox_unrecovered_records{service,reason}: kendiliğinden kurtulmayacak kayıtlar (tüm olay türleri) —
+     *   processing_stuck: processing'te kalmış ve otomatik kurtarma süresini aşmış
+     *   failed_final: deneme hakkı bitmiş ya da yeniden deneme zamanı olmayan failed kayıt
+     */
+    static readonly outboxVersionRecords: Gauge<"status" | "service">;
+    static readonly outboxVersionOldestPendingAge: Gauge<"service">;
+    static readonly outboxUnrecoveredRecords: Gauge<"service" | "reason">;
+    private static outboxCollector;
+    private static pendingSnapshot;
+    private static readonly SNAPSHOT_TTL_MS;
+    /** EventPublisherJob kendi outbox'ının toplayıcısını kaydeder (süreçte bir yayıncı: sonuncusu geçerlidir). */
+    static setOutboxCollector(service: string, collect: () => Promise<OutboxMetricsSnapshot>): void;
+    private static readOutboxSnapshot;
+    /**
+     * Returns the Prometheus registry containing all event metrics
+     *
+     * Used by metrics endpoints in each microservice to export metrics.
+     *
+     * @returns Registry - Prometheus registry
+     *
+     * @example
+     * ```typescript
+     * // In metrics endpoint
+     * router.get('/api/service/metrics', async (req, res) => {
+     *   const metrics = await EventMetrics.getRegistry().metrics();
+     *   res.set('Content-Type', register.contentType);
+     *   res.send(metrics);
+     * });
+     * ```
+     */
+    static getRegistry(): Registry;
+    /**
+     * Clears all metric values and resets the registry
+     *
+     * Primarily used for testing to ensure clean state between tests.
+     * Should NOT be used in production code.
+     *
+     * @example
+     * ```typescript
+     * // In test setup
+     * beforeEach(() => {
+     *   EventMetrics.reset();
+     * });
+     * ```
+     */
+    static reset(): void;
+}
+/** EventPublisherJob'un outbox toplayıcısının döndürdüğü anlık durum (UC-984). */
+export interface OutboxMetricsSnapshot {
+    /** Sürüm olayları hariç kayıtlar (UC-1211) */
+    records: {
+        pending: number;
+        processing: number;
+        failed: number;
+    };
+    versionRecords: {
+        pending: number;
+        processing: number;
+        failed: number;
+    };
+    versionOldestPendingAgeSeconds: number;
+    stuckProcessing: number;
+    failedFinal: number;
+}

@@ -1,0 +1,45 @@
+import { ErpCatalogItem } from "../interfaces/erp-catalog.interface";
+import { ProductStockIntegrationUpdated } from "../interfaces/product-stock-integration-updated.interface";
+import { ProductPriceIntegrationFetchedItem } from "../events/product-price-integration-fetched-event";
+import { ResourceName } from "../types/resourceName";
+/**
+ * UC-2595 — ERP katalog kalemini stok/fiyat olayı satırına çeviren SAF yardımcılar.
+ * Ağ, veritabanı ya da saat kullanmaz; her ERP eşleyicisi için aynı kural geçerlidir.
+ */
+/** Stok olayı için hedef (kullanıcının `stock_update_settings.sources[]` kaydından). */
+export interface ErpStockTarget {
+    warehouseId: string;
+    shelfId?: string | null;
+    /** ERP tarafındaki depo; null/boş = tüm depoların toplamı. */
+    sourceLocationId?: string | null;
+}
+/** 2 ondalığa yuvarlar (kayan nokta kaymasına karşı EPSILON eklenir: 1.005 → 1.01). */
+export declare function roundMoney(value: number): number;
+/**
+ * B5 — barkod boşsa SKU'ya düşer.
+ * inventory `$or: [{barcode}, {sku}]` ile eşler; boş barkod barkodu olmayan RASTGELE bir ürüne eşleşebilirdi.
+ */
+export declare function resolveErpBarcode(item: Pick<ErpCatalogItem, 'barcode' | 'sku'>): string;
+/**
+ * B6 — satış fiyatını ürünün KENDİ KDV oranıyla KDV dahile çevirir.
+ * - Fiyat yok/geçersiz/≤0 → null (yazılmaz).
+ * - KDV dahil → yalnız yuvarlanır.
+ * - KDV hariç + oran yok/geçersiz → null: oran bilinmeden yazmak fiyatı %KDV kadar düşük gösterirdi.
+ */
+export declare function toVatIncludedPrice(price: number | null | undefined, vatIncluded: boolean, vatRate?: number | null): number | null;
+/**
+ * Bir kaynak hedefi için stok miktarı.
+ * - `sourceLocationId` seçiliyse yalnız o deponun miktarı; ERP o depoyu vermiyorsa null (yazılmaz — 0 yazmak stoğu silerdi).
+ * - Seçili değilse `stock`; o da yoksa depo kırılımının toplamı.
+ * - ERP'de negatif stok (fazla satış) 0'a çekilir.
+ */
+export declare function resolveErpStockQuantity(item: Pick<ErpCatalogItem, 'stock' | 'stockByLocation'>, sourceLocationId?: string | null): number | null;
+/** Bir sayfanın kalemlerini, bir stok hedefi için `ProductStockIntegrationUpdated` satırlarına çevirir. */
+export declare function buildErpStockRows(items: ErpCatalogItem[], target: ErpStockTarget): ProductStockIntegrationUpdated[];
+/** Bir sayfanın kalemlerini HAM fiyat satırlarına çevirir (KDV dahil; kural/kur integration'da). */
+export declare function buildErpPriceRows(items: ErpCatalogItem[], platform: ResourceName): ProductPriceIntegrationFetchedItem[];
+/** Elle tek ürün çekmede (`params.sku/barcode`) kalem süzgeci; süzgeç yoksa hepsi geçer. */
+export declare function matchesErpQuery(item: Pick<ErpCatalogItem, 'sku' | 'barcode'>, query?: {
+    sku?: string;
+    barcode?: string;
+}): boolean;
