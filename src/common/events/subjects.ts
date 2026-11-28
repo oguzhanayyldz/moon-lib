@@ -29,6 +29,8 @@ export enum Subjects {
     DeleteProductImages = 'cdn:delete-product-images',
     DeleteProductImagesCompleted = 'cdn:delete-product-images-completed',
     ProductPriceIntegrationUpdated = "product:price:integration:updated",
+    // UC-2595: ERP fiyatı sayfa sayfa (asenkron) — integration kuralları uygulayıp ProductPriceIntegrationUpdated yayınlar
+    ProductPriceIntegrationFetched = "product:price:integration:fetched",
     ProductPriceUpdated = "product:price:updated",
     ProductStockIntegrationUpdated = "product:stock:integration:updated",
     ProductImageIntegrationUpdated = "product:image:integration:updated",

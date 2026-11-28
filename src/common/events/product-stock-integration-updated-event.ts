@@ -1,5 +1,6 @@
 import { Subjects } from "./subjects";
 import { ResourceName } from "../types/resourceName";
+import { IntegrationType } from "../types/integration-type";
 import { ProductStockIntegrationUpdated, StockUpdateSettings } from '../interfaces/product-stock-integration-updated.interface';
 
 export interface ProductStockIntegrationUpdatedEvent {
@@ -9,6 +10,11 @@ export interface ProductStockIntegrationUpdatedEvent {
         userId: string;
         data: ProductStockIntegrationUpdated[];
         source?: ResourceName;
+        /**
+         * UC-2595: kaynağın entegrasyon tipi. `Erp` ise inventory açık, faturası ERP'ye geçmemiş sipariş
+         * miktarını çekilen stoktan düşer (K-574503 A). Yoksa (pazaryeri/e-ticaret, eski olaylar) düşüm yapılmaz.
+         */
+        sourceType?: IntegrationType;
         updateConfiguration?: StockUpdateSettings;
         timestamp?: Date;
     }

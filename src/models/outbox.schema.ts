@@ -28,6 +28,7 @@ import {
     DeleteProductImagesEvent,
     DeleteProductImagesCompletedEvent,
     ProductPriceIntegrationUpdatedEvent,
+    ProductPriceIntegrationFetchedEvent,
     ProductPriceUpdatedEvent,
     ProductCostUpdatedEvent,
     OrderProductCostAssignedEvent,
@@ -86,6 +87,7 @@ interface EventPayloadMap {
     [Subjects.ProductUpdated]: ProductUpdatedEvent['data'];
     [Subjects.ProductIntegrationCreated]: ProductIntegrationCreatedEvent['data'];
     [Subjects.ProductPriceIntegrationUpdated]: ProductPriceIntegrationUpdatedEvent['data'];
+    [Subjects.ProductPriceIntegrationFetched]: ProductPriceIntegrationFetchedEvent['data'];
     [Subjects.ProductStockIntegrationUpdated]: ProductStockIntegrationUpdatedEvent['data'];
     [Subjects.ProductImageIntegrationUpdated]: ProductImageIntegrationUpdatedEvent['data'];
     [Subjects.ProductPriceUpdated]: ProductPriceUpdatedEvent['data'];
@@ -284,6 +286,7 @@ export function getEventPriority(eventType: string): number {
         
         // Priority 4: Integration Data
         [Subjects.ProductPriceIntegrationUpdated]: 4,
+        [Subjects.ProductPriceIntegrationFetched]: 4,
         [Subjects.ProductStockIntegrationUpdated]: 4,
         [Subjects.ProductImageIntegrationUpdated]: 4,
         [Subjects.ProductIntegrationCreated]: 4,
