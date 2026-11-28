@@ -1,0 +1,196 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getEventPriority = getEventPriority;
+exports.extractUserIdFromPayload = extractUserIdFromPayload;
+exports.createOutboxModel = createOutboxModel;
+const mongoose_1 = __importDefault(require("mongoose"));
+const base_schema_1 = require("./base/base.schema");
+const logger_service_1 = require("../services/logger.service");
+const commandCredentials_util_1 = require("../utils/commandCredentials.util");
+const common_1 = require("../common");
+// Schema tanımı
+const outboxSchemaDefination = {
+    eventType: { type: String, required: true },
+    payload: { type: mongoose_1.default.Schema.Types.Mixed, required: true },
+    environment: {
+        type: String,
+        required: true,
+        default: () => process.env.NODE_ENV || 'production',
+        enum: ['production', 'development', 'test'],
+        index: true
+    },
+    status: {
+        type: String,
+        required: true,
+        default: 'pending',
+        // superseded (UC-984): yalnız entity:version-updated — aynı partide aynı varlığın daha yüksek sürümü
+        // gönderildi. Kayıp değildir; yayıncı, kurtarma ve kayıp alarmları bu durumu almaz.
+        enum: ['pending', 'processing', 'published', 'completed', 'failed', 'superseded']
+    },
+    retryCount: { type: Number, default: 0 },
+    lastAttempt: Date,
+    nextAttemptAt: Date,
+    error: {
+        type: String
+    },
+    lastError: { type: String },
+    lastErrorAt: { type: Date },
+    result: {
+        type: mongoose_1.default.Schema.Types.Mixed
+    },
+    processedAt: {
+        type: Date
+    },
+    processingStartedAt: {
+        type: Date
+    },
+    supersededBy: { type: String },
+    coalescedCount: { type: Number },
+    priority: {
+        type: Number,
+        min: 1,
+        max: 5,
+        index: true
+        // NOT: Default yok - pre-save hook'ta hesaplanacak
+    },
+    userId: {
+        type: String,
+        index: true
+        // NOT: Default yok - pre-save hook'ta hesaplanacak
+    }
+};
+const outboxSchema = (0, base_schema_1.createBaseSchema)(outboxSchemaDefination);
+// Event tipine göre öncelik belirleme
+function getEventPriority(eventType) {
+    var _a;
+    const PRIORITY_MAP = {
+        // Priority 1: Core (User) + Delete (silme EN ÖNCELİKLİ!)
+        [common_1.Subjects.UserCreated]: 1,
+        [common_1.Subjects.UserUpdated]: 1,
+        [common_1.Subjects.UserConfigUpdated]: 1,
+        [common_1.Subjects.EntityDeleted]: 1, // Silme işlemi en öncelikli - önce sil, sonra yenisini oluştur
+        // Priority 2: Primary Entity (Create/Update)
+        [common_1.Subjects.ProductCreated]: 2,
+        [common_1.Subjects.ProductUpdated]: 2,
+        [common_1.Subjects.OrderCreated]: 2,
+        [common_1.Subjects.OrderUpdated]: 2,
+        [common_1.Subjects.IntegrationCreated]: 2,
+        [common_1.Subjects.IntegrationUpdated]: 2,
+        // Priority 3: Secondary Entity
+        // CombinationCreated/Updated kaldırıldı (issue #507)
+        [common_1.Subjects.StockCreated]: 3,
+        [common_1.Subjects.StockUpdated]: 3,
+        [common_1.Subjects.CategoryCreated]: 3,
+        [common_1.Subjects.CategoryUpdated]: 3,
+        [common_1.Subjects.BrandCreated]: 3,
+        [common_1.Subjects.BrandUpdated]: 3,
+        [common_1.Subjects.ProductStockCreated]: 3,
+        [common_1.Subjects.ProductStockUpdated]: 3,
+        // Priority 4: Integration Data
+        [common_1.Subjects.ProductPriceIntegrationUpdated]: 4,
+        [common_1.Subjects.ProductStockIntegrationUpdated]: 4,
+        [common_1.Subjects.ProductImageIntegrationUpdated]: 4,
+        [common_1.Subjects.ProductIntegrationCreated]: 4,
+        [common_1.Subjects.ProductIntegrationSynced]: 4,
+        [common_1.Subjects.OrderIntegrationCreated]: 4,
+        [common_1.Subjects.ProductPriceUpdated]: 4,
+        [common_1.Subjects.CatalogMappingCreated]: 4,
+        [common_1.Subjects.CatalogMappingUpdated]: 4,
+        // Priority 5: Sync/Notification
+        [common_1.Subjects.EntityVersionUpdated]: 5,
+        [common_1.Subjects.EntityVersionBulkUpdated]: 5,
+        [common_1.Subjects.NotificationCreated]: 5,
+        [common_1.Subjects.SyncRequested]: 5,
+        // Priority 2: Subscription (ana entity)
+        [common_1.Subjects.SubscriptionUpdated]: 2,
+        [common_1.Subjects.SubscriptionPaymentCompleted]: 2,
+        [common_1.Subjects.SubscriptionPaymentFailed]: 2,
+        [common_1.Subjects.PriceProcessingCompleted]: 1,
+        // Priority 2: Auth failure — integration deactivation kritik (issue #521)
+        [common_1.Subjects.IntegrationAuthFailureExceeded]: 2,
+        // Priority 1: Depo sayimi kilidi (issue #637)
+        // Kilit yayilimi gecikirse tuketici servisler sayim sirasinda siparis ceker
+        // ve stok degisir — sayim sonucu bozulur. Silme kadar oncelikli.
+        [common_1.Subjects.StockCountStarted]: 1,
+        [common_1.Subjects.StockCountFinished]: 1,
+    };
+    return (_a = PRIORITY_MAP[eventType]) !== null && _a !== void 0 ? _a : 3;
+}
+// Payload'dan userId çıkarma
+function extractUserIdFromPayload(payload) {
+    var _a, _b, _c, _d, _e, _f;
+    // 1. Direkt userId
+    if (payload.userId)
+        return payload.userId;
+    // 2. Direkt user
+    if (payload.user)
+        return payload.user;
+    // 3. list[0].user (ProductCreated, CombinationCreated)
+    if ((_b = (_a = payload.list) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.user)
+        return payload.list[0].user;
+    // 4. data içinde (EntityDeleted vb.)
+    if ((_c = payload.data) === null || _c === void 0 ? void 0 : _c.userId)
+        return payload.data.userId;
+    if ((_d = payload.data) === null || _d === void 0 ? void 0 : _d.user)
+        return payload.data.user;
+    // 5. items içinde
+    if ((_f = (_e = payload.items) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.userId)
+        return payload.items[0].userId;
+    // Bulunamazsa _system_ (en yüksek öncelikli)
+    return '_system_';
+}
+// Pre-save hook: priority, userId hesapla
+outboxSchema.pre('save', function (next) {
+    const doc = this;
+    if (this.isNew) {
+        // Priority'yi eventType'a göre hesapla (her zaman yeniden hesapla)
+        doc.priority = getEventPriority(doc.eventType);
+        // userId'yi payload'dan çıkar (her zaman yeniden hesapla)
+        doc.userId = extractUserIdFromPayload(doc.payload);
+        // UC-1408: integration:command kaydında düz credential / tam User belgesi 180 gün durmasın
+        if (doc.eventType === common_1.Subjects.IntegrationCommand) {
+            doc.payload = (0, commandCredentials_util_1.sealIntegrationCommandData)(doc.payload);
+        }
+        logger_service_1.logger.debug(`Outbox created: eventType=${doc.eventType}, priority=${doc.priority}, userId=${doc.userId}`);
+    }
+    next();
+});
+// UC-1408: insertMany save kancasını atlar; integration:command toplu yazılırsa da mühürle
+outboxSchema.pre('insertMany', function (next, docs) {
+    if (Array.isArray(docs)) {
+        for (const d of docs) {
+            if (d && d.eventType === common_1.Subjects.IntegrationCommand && d.payload) {
+                d.payload = (0, commandCredentials_util_1.sealIntegrationCommandData)(d.payload);
+            }
+        }
+    }
+    next();
+});
+// Compound index for optimal query performance with priority
+// _system_ users get processed first, then by priority within each user
+outboxSchema.index({ status: 1, environment: 1, userId: 1, priority: 1, creationDate: 1 });
+outboxSchema.index({ status: 1, environment: 1, retryCount: 1, creationDate: 1 });
+// Issue #553: Outbox slow query optimizasyonu için compound index'ler
+// Stuck processing detection (eventPublisher.job:458, deadLetterProcessor.job:91/210)
+outboxSchema.index({ status: 1, processingStartedAt: 1 });
+// Failed events count (eventPublisher.job:480)
+outboxSchema.index({ status: 1, retryCount: 1 });
+// Distinct userId coverage (eventPublisher.job:235)
+outboxSchema.index({ status: 1, environment: 1, retryCount: 1, userId: 1, eventType: 1 });
+// Issue #648 K-1: bekleme süresi dolan failed kayıtları yeniden kuyruğa alma (eventPublisher.job monitorFailedEvents).
+// nextAttemptAt yalnız yeniden denenecek kayıtlarda bulunur; alanı olmayan eski failed kayıtlar aralık taramasına girmez.
+outboxSchema.index({ status: 1, environment: 1, nextAttemptAt: 1 });
+// UC-984: sürüm olayı birleştirme araması (writeVersionEventToOutbox). Yalnız bekleyen sürüm olaylarını kapsar, küçük kalır.
+// Tekil DEĞİL: geri alımda (processing/failed → pending) aynı varlığın ikinci pending satırı olabilir, gönderimde toplanır.
+outboxSchema.index({ 'payload.entityId': 1, 'payload.entityType': 1 }, { name: 'version_event_coalesce', partialFilterExpression: { status: 'pending', eventType: common_1.Subjects.EntityVersionUpdated } });
+function createOutboxModel(connection) {
+    try {
+        return connection.model('Outbox');
+    }
+    catch (_a) {
+        return connection.model('Outbox', outboxSchema);
+    }
+}

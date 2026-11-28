@@ -13,3 +13,4 @@ export * from './api-client.interface';
 export * from './entity-deletion.interface';
 export * from './batch-deletion.interface';
 export * from './external-location.interface';
+export * from './erp-catalog.interface';

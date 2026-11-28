@@ -222,6 +222,9 @@ export class CredentialsService {
 
         // 3. Integration type'a göre parse
         const isUpdatedSettings = integrationType === IntegrationType.MarketPlace || integrationType === IntegrationType.Ecommerce;
+        // UC-2595: ERP de stok/fiyat KAYNAĞI olabilir; çekme ayarları (yalnız bunlar) ERP için de bu
+        // entegrasyonun kaynağına süzülür. Gönderim kapıları/sipariş/ürün ayarları ERP'ye uygulanmaz.
+        const isFetchSource = isUpdatedSettings || integrationType === IntegrationType.Erp;
 
         // MARKETPLACE/ECOMMERCE: Product update settings
         if (isUpdatedSettings && merged.productUpdate && typeof merged.productUpdate === 'string') {
@@ -229,7 +232,7 @@ export class CredentialsService {
         }
 
         // MARKETPLACE/ECOMMERCE: Price update settings
-        if (isUpdatedSettings && merged.price_update_settings) {
+        if (isFetchSource && merged.price_update_settings) {
             merged.price_update_settings = this.parsePriceUpdateSettings(
                 merged.price_update_settings,
                 integrationName,
@@ -238,7 +241,7 @@ export class CredentialsService {
         }
 
         // MARKETPLACE/ECOMMERCE: Stock update settings
-        if (isUpdatedSettings && merged.stock_update_settings) {
+        if (isFetchSource && merged.stock_update_settings) {
             merged.stock_update_settings = this.parseStockUpdateSettings(
                 merged.stock_update_settings,
                 integrationName,
