@@ -37,7 +37,7 @@ function toVatIncludedPrice(price, vatIncluded, vatRate) {
 }
 /**
  * Bir kaynak hedefi için stok miktarı.
- * - `sourceLocationId` seçiliyse yalnız o deponun miktarı; ERP o depoyu vermiyorsa null (yazılmaz — 0 yazmak stoğu silerdi).
+ * - `sourceLocationId` seçiliyse yalnız o deponun miktarı; ERP o depoyu vermiyorsa 0 (ikas/Shopify kalıbı: sıfır stoklu depo kalemini listelemeyen ERP'de eski stok kalmasın).
  * - Seçili değilse `stock`; o da yoksa depo kırılımının toplamı.
  * - ERP'de negatif stok ATLANIR (null) — ikas/Shopify kalıbı (`quantity < 0` → satır yazılmaz).
  */
@@ -46,7 +46,7 @@ function resolveErpStockQuantity(item, sourceLocationId) {
     let quantity;
     if (!isBlank(sourceLocationId)) {
         const location = (_a = item.stockByLocation) === null || _a === void 0 ? void 0 : _a.find(l => String(l.locationId) === String(sourceLocationId));
-        quantity = location ? location.quantity : null;
+        quantity = location ? location.quantity : 0;
     }
     else if (typeof item.stock === 'number') {
         quantity = item.stock;

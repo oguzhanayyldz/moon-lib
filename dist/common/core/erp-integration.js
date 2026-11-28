@@ -8,12 +8,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ErpIntegration = void 0;
-const mongoose_1 = __importDefault(require("mongoose"));
 const uuid_1 = require("uuid");
 const integration_type_1 = require("../types/integration-type");
 const base_integration_1 = require("./base-integration");
@@ -178,10 +174,22 @@ class ErpIntegration extends base_integration_1.BaseIntegration {
             return undefined;
         return Object.assign(Object.assign({}, (params.sku ? { sku: params.sku } : {})), (params.barcode ? { barcode: params.barcode } : {}));
     }
-    /** Olayı servisin Outbox'ına yazar (testte taklit edilebilir). */
+    /**
+     * UC-2619F (Y1) — servis startup'ında çağrılır: Outbox'a SERVİSİN kendi mongoose bağlantısıyla yazılır.
+     * moon-lib'in kendi `mongoose` örneği (dev imajında ayrı node_modules) bağlanmamış olabilir; bu yüzden
+     * `AuthFailureTracker.initialize` / `EventPublisherJob(…, connection)` kalıbıyla bağlantı dışarıdan verilir.
+     */
+    static initializeOutbox(connection) {
+        ErpIntegration.outboxConnection = connection;
+    }
+    /** Olayı servisin Outbox'ına, enjekte edilen bağlantıyla yazar (testte taklit edilebilir). Bağlantı yoksa AÇIK hata verir. */
     writeOutboxEvent(eventType, payload) {
         return __awaiter(this, void 0, void 0, function* () {
-            const Outbox = (0, outbox_schema_1.createOutboxModel)(mongoose_1.default.connection);
+            const connection = ErpIntegration.outboxConnection;
+            if (!connection) {
+                throw new Error('ErpIntegration.initializeOutbox(mongoose.connection) çağrılmadı: ERP stok olayı Outbox\'a yazılamaz');
+            }
+            const Outbox = (0, outbox_schema_1.createOutboxModel)(connection);
             const outbox = Outbox.build({ eventType, payload, status: 'pending' });
             yield optimisticLocking_util_1.OptimisticLockingUtil.saveWithRetry(outbox);
         });

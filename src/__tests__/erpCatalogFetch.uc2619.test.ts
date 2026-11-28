@@ -20,7 +20,7 @@ import { UNSUPPORTED_COMMAND_RESPONSE } from '../common/constants/integration-co
 import { CredentialsService } from '../services/credentials.service';
 
 const item = (over: Partial<ErpCatalogItem> = {}): ErpCatalogItem => ({
-    erpId: 'e1', sku: 'SKU-1', barcode: '869000', stock: 5, salePrice: 100, salePriceVatIncluded: true, vatRate: 20, currency: 'TRY', ...over
+    erpId: 'e1', sku: 'SKU-1', barcode: '869000', stock: 5, salePrice: 100, salePriceVatIncluded: true, vatRate: 20, ...over
 });
 
 describe('erp-catalog.util — B5 barkod yedeği', () => {
@@ -61,10 +61,13 @@ describe('erp-catalog.util — B6 KDV dönüşümü (ürünün kendi oranı)', (
 });
 
 describe('erp-catalog.util — stok miktarı', () => {
-    it('depo seçiliyse yalnız o depo; ERP o depoyu vermiyorsa null (0 yazılmaz)', () => {
+    it('depo seçiliyse yalnız o depo; ERP o depoyu vermiyorsa 0 (ikas/Shopify kalıbı)', () => {
         const i = item({ stock: 9, stockByLocation: [{ locationId: 'D1', quantity: 3 }, { locationId: 'D2', quantity: 6 }] });
         expect(resolveErpStockQuantity(i, 'D2')).toBe(6);
-        expect(resolveErpStockQuantity(i, 'D9')).toBeNull();
+        expect(resolveErpStockQuantity(i, 'D9')).toBe(0);
+        expect(resolveErpStockQuantity(i, 'D1')).toBe(3);
+        // depo seçili değil → toplam stok
+        expect(resolveErpStockQuantity(i, null)).toBe(9);
     });
     it('depo seçili değilse toplam stok; yoksa kırılım toplamı', () => {
         expect(resolveErpStockQuantity(item({ stock: 9 }), null)).toBe(9);
@@ -92,7 +95,7 @@ describe('erp-catalog.util — satır üretimi', () => {
     });
     it('fiyat satırı: KDV dahile çevrilir, fiyatsız kalem atlanır', () => {
         const rows = buildErpPriceRows([
-            item({ sku: 'A', barcode: null, salePrice: 50, salePriceVatIncluded: false, vatRate: 20, currency: 'usd' }),
+            item({ sku: 'A', barcode: null, salePrice: 50, salePriceVatIncluded: false, vatRate: 20 }),
             item({ sku: 'B', salePrice: null })
         ], ResourceName.KolayBi);
         expect(rows).toEqual([{ sku: 'A', barcode: 'A', price: 60, source: ResourceName.KolayBi, integrationName: ResourceName.KolayBi }]);
@@ -246,7 +249,7 @@ describe('ErpIntegration.fetchStocks — sayfa sayfa ProductStockIntegrationUpda
 });
 
 describe('ErpIntegration.fetchStocks — kalıp sapması yok', () => {
-    it('çok hedefte sayfa başına HEDEF SAYISI kadar olay (kaynak başına), her olay kendi satırlarıyla; ürün yalnız ikincil hedefte varsa yalnız o olay', async () => {
+    it('çok hedefte sayfa başına HEDEF SAYISI kadar olay (kaynak başına); ürün seçili depoda yoksa o hedefe 0 yazılır (satır atlanmaz)', async () => {
         const erp = new FakeErp();
         erp.setCredentials(baseCredentials([
             { integrationId: 'erp-1', enabled: true, warehouseId: 'A', sourceLocationId: 'D1' },
@@ -254,9 +257,9 @@ describe('ErpIntegration.fetchStocks — kalıp sapması yok', () => {
         ]));
         erp.pages = [{ items: [item({ stockByLocation: [{ locationId: 'D2', quantity: 20 }] })] }];
         const result: any = await erp.fetchStocks();
-        expect(erp.written).toHaveLength(1);
-        expect(erp.written[0].payload.data.map((r: any) => [r.warehouseId, r.quantity])).toEqual([['B', 20]]);
-        expect(result.data).toEqual({ pages: 1, rows: 1, events: 1 });
+        expect(erp.written).toHaveLength(2);
+        expect(erp.written.map(w => w.payload.data.map((r: any) => [r.warehouseId, r.quantity]))).toEqual([[['A', 0]], [['B', 20]]]);
+        expect(result.data).toEqual({ pages: 1, rows: 2, events: 2 });
     });
 
     it('olay yükünde pazaryeri olayında olmayan alan YOK (sourceType, bayrak, processId)', async () => {

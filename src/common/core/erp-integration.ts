@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import type mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import { IntegrationType } from "../types/integration-type";
 import { BaseIntegration } from "./base-integration";
@@ -241,9 +241,24 @@ export abstract class ErpIntegration extends BaseIntegration {
         return { ...(params.sku ? { sku: params.sku } : {}), ...(params.barcode ? { barcode: params.barcode } : {}) };
     }
 
-    /** Olayı servisin Outbox'ına yazar (testte taklit edilebilir). */
+    /**
+     * UC-2619F (Y1) — servis startup'ında çağrılır: Outbox'a SERVİSİN kendi mongoose bağlantısıyla yazılır.
+     * moon-lib'in kendi `mongoose` örneği (dev imajında ayrı node_modules) bağlanmamış olabilir; bu yüzden
+     * `AuthFailureTracker.initialize` / `EventPublisherJob(…, connection)` kalıbıyla bağlantı dışarıdan verilir.
+     */
+    static initializeOutbox(connection: mongoose.Connection): void {
+        ErpIntegration.outboxConnection = connection;
+    }
+
+    private static outboxConnection?: mongoose.Connection;
+
+    /** Olayı servisin Outbox'ına, enjekte edilen bağlantıyla yazar (testte taklit edilebilir). Bağlantı yoksa AÇIK hata verir. */
     protected async writeOutboxEvent(eventType: Subjects, payload: any): Promise<void> {
-        const Outbox = createOutboxModel(mongoose.connection);
+        const connection = ErpIntegration.outboxConnection;
+        if (!connection) {
+            throw new Error('ErpIntegration.initializeOutbox(mongoose.connection) çağrılmadı: ERP stok olayı Outbox\'a yazılamaz');
+        }
+        const Outbox = createOutboxModel(connection);
         const outbox = Outbox.build({ eventType, payload, status: 'pending' } as any);
         await OptimisticLockingUtil.saveWithRetry(outbox);
     }

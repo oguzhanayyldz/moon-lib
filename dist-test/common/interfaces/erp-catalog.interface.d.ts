@@ -1,4 +1,3 @@
-import { CurrencyCode } from "../types/currency-code";
 /**
  * UC-2595 — ERP katalog sözleşmesi (stok/fiyat ÇEKME ortak temeli).
  *
@@ -30,8 +29,6 @@ export interface ErpCatalogItem {
     salePriceVatIncluded: boolean;
     /** KDV oranı (%), ör. 20. Ürünün KENDİ oranı. */
     vatRate?: number | null;
-    /** Satış para birimi (TRL gibi takma adlar eşleyicide TRY'ye çevrilmeli). */
-    currency?: CurrencyCode | string | null;
 }
 /** Sayfa imleci: ERP'ye göre sayfa numarası ya da opak bir dize. */
 export type ErpCatalogCursor = string | number;

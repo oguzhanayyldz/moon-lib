@@ -1,3 +1,4 @@
+import type mongoose from "mongoose";
 import { BaseIntegration } from "./base-integration";
 import { ResourceName } from "../types/resourceName";
 import { Subjects } from "../events/subjects";
@@ -117,7 +118,14 @@ export declare abstract class ErpIntegration extends BaseIntegration {
     protected resolveStockTargets(): ErpStockTarget[];
     protected resolvePlatform(): ResourceName;
     private toQuery;
-    /** Olayı servisin Outbox'ına yazar (testte taklit edilebilir). */
+    /**
+     * UC-2619F (Y1) — servis startup'ında çağrılır: Outbox'a SERVİSİN kendi mongoose bağlantısıyla yazılır.
+     * moon-lib'in kendi `mongoose` örneği (dev imajında ayrı node_modules) bağlanmamış olabilir; bu yüzden
+     * `AuthFailureTracker.initialize` / `EventPublisherJob(…, connection)` kalıbıyla bağlantı dışarıdan verilir.
+     */
+    static initializeOutbox(connection: mongoose.Connection): void;
+    private static outboxConnection?;
+    /** Olayı servisin Outbox'ına, enjekte edilen bağlantıyla yazar (testte taklit edilebilir). Bağlantı yoksa AÇIK hata verir. */
     protected writeOutboxEvent(eventType: Subjects, payload: any): Promise<void>;
 }
 //# sourceMappingURL=erp-integration.d.ts.map

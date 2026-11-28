@@ -29,7 +29,7 @@ export declare function resolveErpBarcode(item: Pick<ErpCatalogItem, 'barcode' |
 export declare function toVatIncludedPrice(price: number | null | undefined, vatIncluded: boolean, vatRate?: number | null): number | null;
 /**
  * Bir kaynak hedefi için stok miktarı.
- * - `sourceLocationId` seçiliyse yalnız o deponun miktarı; ERP o depoyu vermiyorsa null (yazılmaz — 0 yazmak stoğu silerdi).
+ * - `sourceLocationId` seçiliyse yalnız o deponun miktarı; ERP o depoyu vermiyorsa 0 (ikas/Shopify kalıbı: sıfır stoklu depo kalemini listelemeyen ERP'de eski stok kalmasın).
  * - Seçili değilse `stock`; o da yoksa depo kırılımının toplamı.
  * - ERP'de negatif stok ATLANIR (null) — ikas/Shopify kalıbı (`quantity < 0` → satır yazılmaz).
  */
