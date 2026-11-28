@@ -18,6 +18,8 @@ import { IntegrationType } from '../common/types/integration-type';
 import { ResourceName } from '../common/types/resourceName';
 import { UNSUPPORTED_COMMAND_RESPONSE } from '../common/constants/integration-commands';
 import { CredentialsService } from '../services/credentials.service';
+import { EventPublisherJob } from '../jobs/eventPublisher.job';
+import { createFakeStan, createOutboxStore } from '../test/fakes/eventDeliveryHarness';
 
 const item = (over: Partial<ErpCatalogItem> = {}): ErpCatalogItem => ({
     erpId: 'e1', sku: 'SKU-1', barcode: '869000', stock: 5, salePrice: 100, salePriceVatIncluded: true, vatRate: 20, currency: 'TRY', ...over
@@ -310,5 +312,18 @@ describe('CredentialsService — ERP stok/fiyat kaynak ayarı da bu entegrasyona
         const parsed: any = CredentialsService.mergeAndParse(settings, {}, 'erp-1', 'KolayBi', IntegrationType.Erp);
         expect(parsed.stockPushEnabled).toBeUndefined();
         expect(parsed.pricePushEnabled).toBeUndefined();
+    });
+});
+
+describe('EventPublisherJob — ProductPriceIntegrationFetched Outbox kaydı NATS\'a yayınlanır', () => {
+    it('yeni olay tipi bilinir, konu ve yükteki sayfa requestId korunur', async () => {
+        const nats = createFakeStan();
+        const job: any = new EventPublisherJob(nats.client, createOutboxStore().connection);
+        const payload = { requestId: 'proc-1:KolayBi:p1', processId: 'proc-1', userId: 'u1', source: ResourceName.KolayBi, pageIndex: 1, isLastPage: true, data: [], timestamp: new Date() };
+        await job.publishEvent({ id: 'outbox-1', eventType: Subjects.ProductPriceIntegrationFetched, payload });
+        expect(nats.publish).toHaveBeenCalledTimes(1);
+        const [subject, body] = (nats.publish as jest.Mock).mock.calls[0];
+        expect(subject).toBe('product:price:integration:fetched');
+        expect(JSON.parse(body).requestId).toBe('proc-1:KolayBi:p1');
     });
 });

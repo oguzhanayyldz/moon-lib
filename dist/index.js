@@ -156,6 +156,7 @@ __exportStar(require("./events/publishers/userSessionsRevoked.publisher"), expor
 __exportStar(require("./events/publishers/stockCountStarted.publisher"), exports);
 __exportStar(require("./events/publishers/stockCountFinished.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceIntegrationUpdated.publisher"), exports);
+__exportStar(require("./events/publishers/productPriceIntegrationFetched.publisher"), exports);
 __exportStar(require("./events/publishers/productPriceUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/productCostUpdated.publisher"), exports);
 __exportStar(require("./events/publishers/orderProductCostAssigned.publisher"), exports);

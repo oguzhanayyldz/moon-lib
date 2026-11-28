@@ -25,6 +25,7 @@ import { DeleteProductImagesPublisher } from '../events/publishers/deleteProduct
 import { ImportImagesFromUrlsPublisher } from '../events/publishers/importImagesFromUrlsPublisher.publisher';
 import { ImportImagesFromUrlsCompletedPublisher } from '../events/publishers/importImagesFromUrlsCompletedPublisher.publisher';
 import { ProductPriceIntegrationUpdatedPublisher } from '../events/publishers/productPriceIntegrationUpdated.publisher';
+import { ProductPriceIntegrationFetchedPublisher } from '../events/publishers/productPriceIntegrationFetched.publisher';
 import { ProductPriceUpdatedPublisher } from '../events/publishers/productPriceUpdated.publisher';
 import { ProductCostUpdatedPublisher } from '../events/publishers/productCostUpdated.publisher';
 import { OrderProductCostAssignedPublisher } from '../events/publishers/orderProductCostAssigned.publisher';
@@ -1196,6 +1197,11 @@ export class EventPublisherJob {
             case Subjects.ProductPriceIntegrationUpdated:
                 await new ProductPriceIntegrationUpdatedPublisher(this.natsClient)
                     .publish({ requestId: event.id, ...event.payload });
+                    break;
+            case Subjects.ProductPriceIntegrationFetched:
+                // requestId yükte sayfa başına benzersiz (<processId>:<platform>:p<N>): dinleyici idempotans anahtarı
+                await new ProductPriceIntegrationFetchedPublisher(this.natsClient)
+                    .publish(event.payload);
                     break;
             case Subjects.ProductPriceUpdated:
                 await new ProductPriceUpdatedPublisher(this.natsClient)

@@ -1,0 +1,6 @@
+import { Publisher, Subjects, ProductPriceIntegrationFetchedEvent } from '../../common';
+/** UC-2595 (B4): ERP fiyat sayfası (ham, KDV dahil) → integration `ProductPriceIntegrationFetchedListener`. */
+export declare class ProductPriceIntegrationFetchedPublisher extends Publisher<ProductPriceIntegrationFetchedEvent> {
+    subject: Subjects.ProductPriceIntegrationFetched;
+}
+//# sourceMappingURL=productPriceIntegrationFetched.publisher.d.ts.map

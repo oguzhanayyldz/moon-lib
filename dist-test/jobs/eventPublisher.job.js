@@ -29,6 +29,7 @@ const deleteProductImagesPublisher_publisher_1 = require("../events/publishers/d
 const importImagesFromUrlsPublisher_publisher_1 = require("../events/publishers/importImagesFromUrlsPublisher.publisher");
 const importImagesFromUrlsCompletedPublisher_publisher_1 = require("../events/publishers/importImagesFromUrlsCompletedPublisher.publisher");
 const productPriceIntegrationUpdated_publisher_1 = require("../events/publishers/productPriceIntegrationUpdated.publisher");
+const productPriceIntegrationFetched_publisher_1 = require("../events/publishers/productPriceIntegrationFetched.publisher");
 const productPriceUpdated_publisher_1 = require("../events/publishers/productPriceUpdated.publisher");
 const productCostUpdated_publisher_1 = require("../events/publishers/productCostUpdated.publisher");
 const orderProductCostAssigned_publisher_1 = require("../events/publishers/orderProductCostAssigned.publisher");
@@ -1020,6 +1021,11 @@ class EventPublisherJob {
             case common_1.Subjects.ProductPriceIntegrationUpdated:
                 await new productPriceIntegrationUpdated_publisher_1.ProductPriceIntegrationUpdatedPublisher(this.natsClient)
                     .publish(Object.assign({ requestId: event.id }, event.payload));
+                break;
+            case common_1.Subjects.ProductPriceIntegrationFetched:
+                // requestId yükte sayfa başına benzersiz (<processId>:<platform>:p<N>): dinleyici idempotans anahtarı
+                await new productPriceIntegrationFetched_publisher_1.ProductPriceIntegrationFetchedPublisher(this.natsClient)
+                    .publish(event.payload);
                 break;
             case common_1.Subjects.ProductPriceUpdated:
                 await new productPriceUpdated_publisher_1.ProductPriceUpdatedPublisher(this.natsClient)

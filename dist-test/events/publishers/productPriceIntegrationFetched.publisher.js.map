@@ -1,0 +1,1 @@
+{"version":3,"file":"productPriceIntegrationFetched.publisher.js","sourceRoot":"","sources":["../../../src/events/publishers/productPriceIntegrationFetched.publisher.ts"],"names":[],"mappings":";;;AAAA,yCAAwF;AAExF,+GAA+G;AAC/G,MAAa,uCAAwC,SAAQ,kBAA8C;IAA3G;;QACI,YAAO,GAA4C,iBAAQ,CAAC,8BAA8B,CAAC;IAC/F,CAAC;CAAA;AAFD,0FAEC"}

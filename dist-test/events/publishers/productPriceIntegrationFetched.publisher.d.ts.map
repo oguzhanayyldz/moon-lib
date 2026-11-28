@@ -1,0 +1,1 @@
+{"version":3,"file":"productPriceIntegrationFetched.publisher.d.ts","sourceRoot":"","sources":["../../../src/events/publishers/productPriceIntegrationFetched.publisher.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAE,QAAQ,EAAE,mCAAmC,EAAE,MAAM,cAAc,CAAC;AAExF,+GAA+G;AAC/G,qBAAa,uCAAwC,SAAQ,SAAS,CAAC,mCAAmC,CAAC;IACvG,OAAO,EAAE,QAAQ,CAAC,8BAA8B,CAA2C;CAC9F"}
