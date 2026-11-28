@@ -16,11 +16,9 @@ export interface ProductStockIntegrationUpdatedEvent {
          */
         sourceType?: IntegrationType;
         /**
-         * UC-2595F ORTA-3: aynı ERP birden çok depoya yazıyorsa her hedef için ayrı olay gider; açık sipariş
-         * adedi toplamda YALNIZ BİR kez düşülsün diye ilk (birincil) hedef dışındaki olaylar `true` taşır
-         * ve inventory bu olaylarda düşüm yapmaz.
+         * UC-2595F ORTA-3b: `sourceType: Erp` olayında `data` satırları hedef SIRASIYLA (birincil önce) gelir.
+         * inventory açık sipariş adedini ürün başına toplamda bir kez, bu sıraya göre satırlara dağıtır.
          */
-        skipOpenOrderDeduction?: boolean;
         updateConfiguration?: StockUpdateSettings;
         timestamp?: Date;
     }

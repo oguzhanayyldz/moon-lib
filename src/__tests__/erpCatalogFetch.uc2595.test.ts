@@ -182,7 +182,8 @@ describe('ErpIntegration.fetchStocks — sayfa sayfa ProductStockIntegrationUpda
         ]));
         erp.pages = [{ items: [item({ stockByLocation: [{ locationId: 'D1', quantity: 1 }, { locationId: 'D2', quantity: 8 }] })] }];
         await erp.fetchStocks();
-        expect(erp.written.map(w => [w.payload.data[0].warehouseId, w.payload.data[0].quantity])).toEqual([['W1', 1], ['W2', 8]]);
+        expect(erp.written).toHaveLength(1);
+        expect(erp.written[0].payload.data.map((r: any) => [r.warehouseId, r.quantity])).toEqual([['W1', 1], ['W2', 8]]);
     });
 
     it('pasif kaynak, deposuz kaynak ve BAŞKA entegrasyonun kaynağı alınmaz; JSON metin ayar da okunur', async () => {
@@ -245,24 +246,35 @@ describe('ErpIntegration.fetchStocks — sayfa sayfa ProductStockIntegrationUpda
 });
 
 describe('UC-2595F — düzeltme turu (moon-lib)', () => {
-    it('ORTA-3: çok hedefte yalnız İLK hedef olayı düşüme açık; sonrakiler skipOpenOrderDeduction taşır', async () => {
+    it('ORTA-3b: çok hedefte sayfa başına TEK olay; satırlar hedef sırasıyla (A sonra B), bayrak yok', async () => {
         const erp = new FakeErp();
         erp.setCredentials(baseCredentials([
             { integrationId: 'erp-1', enabled: true, warehouseId: 'A', sourceLocationId: 'D1' },
             { integrationId: 'erp-1', enabled: true, warehouseId: 'B', sourceLocationId: 'D2' }
         ]));
         erp.pages = [{ items: [item({ stockByLocation: [{ locationId: 'D1', quantity: 9 }, { locationId: 'D2', quantity: 9 }] })] }];
-        await erp.fetchStocks();
-        const flags = erp.written.map(w => [w.payload.data[0].warehouseId, w.payload.skipOpenOrderDeduction]);
-        expect(flags).toEqual([['A', undefined], ['B', true]]);
+        const result: any = await erp.fetchStocks();
+        expect(erp.written).toHaveLength(1);
+        expect(erp.written[0].payload.data.map((r: any) => [r.warehouseId, r.quantity])).toEqual([['A', 9], ['B', 9]]);
+        expect(erp.written[0].payload).not.toHaveProperty('skipOpenOrderDeduction');
+        expect(result.data).toEqual({ pages: 1, rows: 2, events: 1 });
     });
 
-    it('ORTA-3: tek hedefte bayrak yok', async () => {
+    it('ORTA-3b: ürün yalnız ikincil hedefte varsa yalnız o satır gider; tek hedefte de tek olay', async () => {
         const erp = new FakeErp();
-        erp.setCredentials(baseCredentials());
-        erp.pages = [{ items: [item()] }];
+        erp.setCredentials(baseCredentials([
+            { integrationId: 'erp-1', enabled: true, warehouseId: 'A', sourceLocationId: 'D1' },
+            { integrationId: 'erp-1', enabled: true, warehouseId: 'B', sourceLocationId: 'D2' }
+        ]));
+        erp.pages = [{ items: [item({ stockByLocation: [{ locationId: 'D2', quantity: 20 }] })] }];
         await erp.fetchStocks();
-        expect(erp.written[0].payload.skipOpenOrderDeduction).toBeUndefined();
+        expect(erp.written[0].payload.data.map((r: any) => [r.warehouseId, r.quantity])).toEqual([['B', 20]]);
+
+        const single = new FakeErp();
+        single.setCredentials(baseCredentials());
+        single.pages = [{ items: [item()] }];
+        await single.fetchStocks();
+        expect(single.written).toHaveLength(1);
     });
 
     it('DÜŞÜK-1: son sayfa süzgeçten sonra boş kalsa da isLastPage:true olayı yayınlanır (boş kalem listesi)', async () => {

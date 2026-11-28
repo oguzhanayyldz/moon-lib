@@ -68,18 +68,22 @@ class ErpIntegration extends base_integration_1.BaseIntegration {
             let rows = 0;
             let events = 0;
             const pages = yield this.walkCatalog(query, (items) => __awaiter(this, void 0, void 0, function* () {
-                // ORTA-3: açık sipariş adedi toplamda bir kez düşülür → yalnız ilk (birincil) hedef düşer.
-                let primaryTargetPending = true;
-                for (const target of targets) {
-                    const stockRows = (0, erp_catalog_util_1.buildErpStockRows)(items, target);
-                    if (stockRows.length === 0)
-                        continue;
-                    const skipOpenOrderDeduction = !primaryTargetPending;
-                    primaryTargetPending = false;
-                    yield this.writeOutboxEvent(subjects_1.Subjects.ProductStockIntegrationUpdated, Object.assign(Object.assign({ requestId: (0, uuid_1.v4)(), userId: this.credentials.user, data: stockRows, source: platform, sourceType: integration_type_1.IntegrationType.Erp }, (skipOpenOrderDeduction ? { skipOpenOrderDeduction: true } : {})), { timestamp: new Date() }));
-                    rows += stockRows.length;
-                    events++;
-                }
+                // ORTA-3b: sayfa başına TEK olay; bütün hedeflerin satırları hedef sırasıyla (birincil önce) gider.
+                // inventory açık sipariş adedini olay başına bir kez hesaplar ve ürünün satırlarına bu sırayla dağıtır
+                // (birincilde karşılanmayan kalan sıradaki hedeften düşer) → toplamda tam bir kez, hiçbir depo 0'ın altına inmez.
+                const stockRows = targets.flatMap(target => (0, erp_catalog_util_1.buildErpStockRows)(items, target));
+                if (stockRows.length === 0)
+                    return;
+                yield this.writeOutboxEvent(subjects_1.Subjects.ProductStockIntegrationUpdated, {
+                    requestId: (0, uuid_1.v4)(),
+                    userId: this.credentials.user,
+                    data: stockRows,
+                    source: platform,
+                    sourceType: integration_type_1.IntegrationType.Erp,
+                    timestamp: new Date()
+                });
+                rows += stockRows.length;
+                events++;
             }));
             logger_service_1.logger.info(`${this.constructor.name}: ERP stok çekme bitti`, { pages, rows, events, user: (_b = this.credentials) === null || _b === void 0 ? void 0 : _b.user });
             return { success: true, data: { pages, rows, events } };
