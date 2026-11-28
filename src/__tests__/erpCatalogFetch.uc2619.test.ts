@@ -73,8 +73,11 @@ describe('erp-catalog.util — stok miktarı', () => {
         expect(resolveErpStockQuantity(item({ stock: 9 }), null)).toBe(9);
         expect(resolveErpStockQuantity(item({ stock: undefined, stockByLocation: [{ locationId: 'a', quantity: 2 }, { locationId: 'b', quantity: 3 }] }), '')).toBe(5);
     });
-    it('negatif stok ATLANIR (ikas kalıbı: null), stok yoksa null', () => {
-        expect(resolveErpStockQuantity(item({ stock: -4 }))).toBeNull();
+    it('UC-2628: negatif stok OLDUĞU GİBİ döner (0\'a kırpma inventory\'de), stok yoksa/geçersizse null', () => {
+        expect(resolveErpStockQuantity(item({ stock: -4 }))).toBe(-4);
+        expect(resolveErpStockQuantity(item({ stockByLocation: [{ locationId: 'D1', quantity: -3 }] }), 'D1')).toBe(-3);
+        expect(resolveErpStockQuantity(item({ stock: NaN }))).toBeNull();
+        expect(resolveErpStockQuantity(item({ stock: Infinity }))).toBeNull();
         expect(resolveErpStockQuantity(item({ stock: 0 }))).toBe(0);
         expect(resolveErpStockQuantity(item({ stock: null }))).toBeNull();
     });
@@ -159,7 +162,7 @@ const baseCredentials = (stockSources: any[] = [{ integrationId: 'erp-1', enable
 });
 
 describe('ErpIntegration.fetchStocks — sayfa sayfa ProductStockIntegrationUpdated (ikas deseni)', () => {
-    it('her sayfa ayrı Outbox olayı; kaynak platform, barkod yedeği, eksi stok satırı atlanır', async () => {
+    it('her sayfa ayrı Outbox olayı; kaynak platform, barkod yedeği, eksi stok satırı OLDUĞU GİBİ iletilir (UC-2628)', async () => {
         const erp = new FakeErp();
         erp.setCredentials(baseCredentials());
         erp.pages = [
@@ -167,13 +170,16 @@ describe('ErpIntegration.fetchStocks — sayfa sayfa ProductStockIntegrationUpda
             { items: [item({ sku: 'B', barcode: '777', stock: 4 }), item({ sku: 'NEG', stock: -2 })], next: null }
         ];
         const result: any = await erp.fetchStocks();
-        expect(result).toEqual({ success: true, data: { pages: 2, rows: 2, events: 2 } });
+        expect(result).toEqual({ success: true, data: { pages: 2, rows: 3, events: 2 } });
         expect(erp.calls).toEqual([undefined, 1]);
         expect(erp.written.map(w => w.eventType)).toEqual([Subjects.ProductStockIntegrationUpdated, Subjects.ProductStockIntegrationUpdated]);
         const [first, second] = erp.written.map(w => w.payload);
         expect(first).not.toHaveProperty('sourceType');
         expect(first).toMatchObject({ userId: 'user-1', source: ResourceName.KolayBi, data: [{ sku: 'A', barcode: 'A', quantity: 3, warehouseId: 'W1', shelfId: 'S1' }] });
-        expect(second.data).toEqual([{ sku: 'B', barcode: '777', quantity: 4, warehouseId: 'W1', shelfId: 'S1' }]);
+        expect(second.data).toEqual([
+            { sku: 'B', barcode: '777', quantity: 4, warehouseId: 'W1', shelfId: 'S1' },
+            { sku: 'NEG', barcode: '869000', quantity: -2, warehouseId: 'W1', shelfId: 'S1' }
+        ]);
         expect(first.requestId).not.toBe(second.requestId);
     });
 
