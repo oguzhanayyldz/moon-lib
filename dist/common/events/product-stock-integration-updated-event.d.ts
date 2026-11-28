@@ -14,6 +14,12 @@ export interface ProductStockIntegrationUpdatedEvent {
          * miktarını çekilen stoktan düşer (K-574503 A). Yoksa (pazaryeri/e-ticaret, eski olaylar) düşüm yapılmaz.
          */
         sourceType?: IntegrationType;
+        /**
+         * UC-2595F ORTA-3: aynı ERP birden çok depoya yazıyorsa her hedef için ayrı olay gider; açık sipariş
+         * adedi toplamda YALNIZ BİR kez düşülsün diye ilk (birincil) hedef dışındaki olaylar `true` taşır
+         * ve inventory bu olaylarda düşüm yapmaz.
+         */
+        skipOpenOrderDeduction?: boolean;
         updateConfiguration?: StockUpdateSettings;
         timestamp?: Date;
     };

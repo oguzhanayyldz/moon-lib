@@ -108,7 +108,7 @@ export declare abstract class ErpIntegration extends BaseIntegration {
     } | typeof UNSUPPORTED_COMMAND_RESPONSE>;
     /**
      * Kataloğu baştan sona dolaşır; her sayfa için `onPage` çağrılır. Dönüş: okunan sayfa sayısı.
-     * `next` aynı imleci tekrar ederse ya da `maxCatalogPages` aşılırsa durur (sonsuz döngü koruması).
+     * `next` daha önce görülmüş bir imleci tekrar ederse (art arda ya da A→B→A) ya da `maxCatalogPages` aşılırsa durur (sonsuz döngü koruması).
      */
     protected walkCatalog(query: ErpCatalogQuery | undefined, onPage: (items: ErpCatalogPage['items'], pageIndex: number, isLastPage: boolean, startedAt: Date) => Promise<void>): Promise<number>;
     /**

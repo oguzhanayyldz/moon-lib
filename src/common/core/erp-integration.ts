@@ -133,15 +133,20 @@ export abstract class ErpIntegration extends BaseIntegration {
         let events = 0;
 
         const pages = await this.walkCatalog(query, async (items) => {
+            // ORTA-3: açık sipariş adedi toplamda bir kez düşülür → yalnız ilk (birincil) hedef düşer.
+            let primaryTargetPending = true;
             for (const target of targets) {
                 const stockRows = buildErpStockRows(items, target);
                 if (stockRows.length === 0) continue;
+                const skipOpenOrderDeduction = !primaryTargetPending;
+                primaryTargetPending = false;
                 await this.writeOutboxEvent(Subjects.ProductStockIntegrationUpdated, {
                     requestId: uuidv4(),
                     userId: this.credentials.user,
                     data: stockRows,
                     source: platform,
                     sourceType: IntegrationType.Erp,
+                    ...(skipOpenOrderDeduction ? { skipOpenOrderDeduction: true } : {}),
                     timestamp: new Date()
                 });
                 rows += stockRows.length;
@@ -171,7 +176,9 @@ export abstract class ErpIntegration extends BaseIntegration {
 
         const pages = await this.walkCatalog(query, async (items, pageIndex, isLastPage, startedAt) => {
             const priceRows = buildErpPriceRows(items, platform);
-            if (priceRows.length === 0) return;
+            // DÜŞÜK-1: son sayfa süzgeçten sonra boş kalsa da `isLastPage:true` taşıyan olay gider
+            // (tüketicinin kilidi/tamamlanma sinyali buna bağlı); boş kalem listesi tüketicide tolere edilir.
+            if (priceRows.length === 0 && !isLastPage) return;
             await this.writeOutboxEvent(Subjects.ProductPriceIntegrationFetched, {
                 requestId: `${processId}:${platform}:p${pageIndex}`,
                 processId,
@@ -202,7 +209,7 @@ export abstract class ErpIntegration extends BaseIntegration {
 
     /**
      * Kataloğu baştan sona dolaşır; her sayfa için `onPage` çağrılır. Dönüş: okunan sayfa sayısı.
-     * `next` aynı imleci tekrar ederse ya da `maxCatalogPages` aşılırsa durur (sonsuz döngü koruması).
+     * `next` daha önce görülmüş bir imleci tekrar ederse (art arda ya da A→B→A) ya da `maxCatalogPages` aşılırsa durur (sonsuz döngü koruması).
      */
     protected async walkCatalog(
         query: ErpCatalogQuery | undefined,
@@ -210,13 +217,17 @@ export abstract class ErpIntegration extends BaseIntegration {
     ): Promise<number> {
         let cursor: ErpCatalogCursor | undefined = undefined;
         let pageIndex = 0;
+        // DÜŞÜK-2: yalnız art arda değil A→B→A döngüsünü de yakalamak için görülen tüm imleçler tutulur.
+        const seenCursors = new Set<string>();
         while (pageIndex < this.maxCatalogPages) {
             pageIndex++;
             const startedAt = new Date();
             const page: ErpCatalogPage = await this.listCatalogPage!(cursor, query);
             const items = (page?.items || []).filter(item => matchesErpQuery(item, query));
             const next = page?.next;
-            const isLastPage = next === undefined || next === null || next === '' || next === cursor;
+            const nextKey = next === undefined || next === null || next === '' ? null : JSON.stringify(next);
+            if (cursor !== undefined && cursor !== null) seenCursors.add(JSON.stringify(cursor));
+            const isLastPage = nextKey === null || next === cursor || seenCursors.has(nextKey);
             await onPage(items, pageIndex, isLastPage, startedAt);
             if (isLastPage) return pageIndex;
             cursor = next as ErpCatalogCursor;

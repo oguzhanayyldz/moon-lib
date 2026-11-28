@@ -244,6 +244,54 @@ describe('ErpIntegration.fetchStocks — sayfa sayfa ProductStockIntegrationUpda
     });
 });
 
+describe('UC-2595F — düzeltme turu (moon-lib)', () => {
+    it('ORTA-3: çok hedefte yalnız İLK hedef olayı düşüme açık; sonrakiler skipOpenOrderDeduction taşır', async () => {
+        const erp = new FakeErp();
+        erp.setCredentials(baseCredentials([
+            { integrationId: 'erp-1', enabled: true, warehouseId: 'A', sourceLocationId: 'D1' },
+            { integrationId: 'erp-1', enabled: true, warehouseId: 'B', sourceLocationId: 'D2' }
+        ]));
+        erp.pages = [{ items: [item({ stockByLocation: [{ locationId: 'D1', quantity: 9 }, { locationId: 'D2', quantity: 9 }] })] }];
+        await erp.fetchStocks();
+        const flags = erp.written.map(w => [w.payload.data[0].warehouseId, w.payload.skipOpenOrderDeduction]);
+        expect(flags).toEqual([['A', undefined], ['B', true]]);
+    });
+
+    it('ORTA-3: tek hedefte bayrak yok', async () => {
+        const erp = new FakeErp();
+        erp.setCredentials(baseCredentials());
+        erp.pages = [{ items: [item()] }];
+        await erp.fetchStocks();
+        expect(erp.written[0].payload.skipOpenOrderDeduction).toBeUndefined();
+    });
+
+    it('DÜŞÜK-1: son sayfa süzgeçten sonra boş kalsa da isLastPage:true olayı yayınlanır (boş kalem listesi)', async () => {
+        const erp = new FakeErp();
+        erp.setCredentials(baseCredentials());
+        erp.pages = [{ items: [item({ sku: 'A' })], next: 1 }, { items: [item({ sku: 'X' })], next: undefined }];
+        const result: any = await erp.fetchPrices({ processId: 'p9', sku: 'A' });
+        expect(erp.written.map(w => [w.payload.pageIndex, w.payload.isLastPage, w.payload.data.length])).toEqual([[1, false, 1], [2, true, 0]]);
+        expect(result.data.pages).toBe(2);
+    });
+
+    it('DÜŞÜK-1: son olmayan boş sayfa yine olay üretmez', async () => {
+        const erp = new FakeErp();
+        erp.setCredentials(baseCredentials());
+        erp.pages = [{ items: [], next: 1 }, { items: [item()] }];
+        await erp.fetchPrices({ processId: 'p8' });
+        expect(erp.written.map(w => w.payload.pageIndex)).toEqual([2]);
+    });
+
+    it('DÜŞÜK-2: A→B→A döngüsü görülen imleç kümesiyle kesilir (5000 sayfaya gitmez)', async () => {
+        const erp = new FakeErp();
+        erp.setCredentials(baseCredentials());
+        const seq: Record<string, string> = { start: 'A', A: 'B', B: 'A' };
+        (erp as any).listCatalogPage = async (cursor: any) => ({ items: [item()], next: seq[cursor ?? 'start'] });
+        const result: any = await erp.fetchStocks();
+        expect(result.data.pages).toBe(3);
+    });
+});
+
 describe('ErpIntegration.fetchPrices — B4 asenkron ProductPriceIntegrationFetched', () => {
     it('sayfa başına olay: requestId = processId:platform:pN, son sayfa işaretli, fiyat KDV dahil', async () => {
         const erp = new FakeErp();
